@@ -1400,7 +1400,7 @@ export const HrAndRbacModule: React.FC<{
     setEditRole(staff.role);
     setEditBranchId(staff.branchId);
     setEditStatus(staff.status);
-    setEditPin(staff.pin || String(Math.floor(100000 + Math.random() * 900000)));
+    setEditPin(staff.pin && staff.pin.length === 6 ? staff.pin : '');
     setEditBaseSalary(staff.baseSalaryKes ?? (staff.role === 'Admin' ? 180000 : staff.role === 'Accountant' ? 120000 : staff.role === 'Branch Manager' ? 95000 : 65000));
     setEditDeductions(staff.deductionsKes ?? 12500);
     setEditPenalties(staff.penaltiesKes ?? 0);
@@ -1466,7 +1466,7 @@ export const HrAndRbacModule: React.FC<{
       branchId: branch?.id || editingStaff.branchId,
       branchName: branch?.name || editingStaff.branchName,
       status: editStatus,
-      pin: effectiveAuth === 'pin' ? editPin : undefined,
+      pin: effectiveAuth === 'pin' ? (editPin.length === 6 ? editPin : editingStaff.pin) : undefined,
       baseSalaryKes: Number(editBaseSalary),
       deductionsKes: Number(editDeductions),
       penaltiesKes: Number(editPenalties),
@@ -1855,8 +1855,9 @@ export const HrAndRbacModule: React.FC<{
                           {s.authMethod === 'google' ? (
                             <span className="text-[#0A006E] font-bold">Google OAuth</span>
                           ) : (
-                            <span className="text-slate-900 font-bold bg-slate-100 px-2 py-1 rounded-lg">
-                              PIN: <span className="font-extrabold text-[#0A006E] tracking-wider">{s.pin}</span>
+                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              Encrypted PIN
                             </span>
                           )}
                         </td>
@@ -2522,7 +2523,8 @@ export const HrAndRbacModule: React.FC<{
                         pattern="\d{6}"
                         value={editPin}
                         onChange={(e) => setEditPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        className="w-48 h-12 px-3 bg-white border-2 border-[#0A006E] rounded-xl font-mono-tabular font-black text-xl tracking-widest text-[#0A006E] text-center"
+                        placeholder={editingStaff?.pin ? '•••••• (Encrypted)' : '6 Digits'}
+                        className="w-56 h-12 px-3 bg-white border-2 border-[#0A006E] rounded-xl font-mono-tabular font-black text-xl tracking-widest text-[#0A006E] text-center"
                       />
                       <button
                         type="button"

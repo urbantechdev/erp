@@ -161,30 +161,7 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
           </svg>
         </div>
 
-        {/* Top Row: Horizontally Scrollable Direct Module Bar */}
-        <div className="relative z-30 flex items-center gap-1.5 px-2.5 pt-1 pb-1.5 overflow-x-auto scrollbar-none border-b border-slate-100 bg-white">
-          {visibleNavItems.map((item) => {
-            const IconCmp = item.icon;
-            const isActive = activeModule === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleMobileSelect(item.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-montserrat font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${
-                  isActive
-                    ? 'bg-[#0A006E] text-[#FFDE00] shadow-sm ring-1 ring-[#FFDE00]'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <IconCmp className={`w-3.5 h-3.5 ${isActive ? 'text-[#FFDE00]' : 'text-[#0A006E]'}`} />
-                <span>{item.shortLabel}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Bottom 5-Slot Action Bar */}
+        {/* Mobile Ergonomic 5-Slot Action Bar */}
         <div className="relative z-30 grid grid-cols-5 h-16 items-center px-1">
           {/* Slot 1 */}
           {slot1Item && (

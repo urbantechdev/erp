@@ -8,7 +8,9 @@ interface LogDamageSpoilageModalProps {
   products: Product[];
   branches: Branch[];
   preselectedProduct?: Product | null;
-  onSaveIncident: (incident: DamageSpoilageIncident) => Promise<void>;
+  initialProduct?: Product | null;
+  onSaveIncident?: (incident: DamageSpoilageIncident) => Promise<void>;
+  onLogIncident?: (incident: DamageSpoilageIncident) => Promise<void>;
   onClose: () => void;
 }
 
@@ -35,11 +37,14 @@ export const LogDamageSpoilageModal: React.FC<LogDamageSpoilageModalProps> = ({
   products,
   branches,
   preselectedProduct = null,
+  initialProduct = null,
   onSaveIncident,
+  onLogIncident,
   onClose,
 }) => {
+  const effectiveProduct = preselectedProduct || initialProduct;
   const [incidentType, setIncidentType] = useState<'DAMAGED' | 'SPOILED'>('DAMAGED');
-  const [selectedProductId, setSelectedProductId] = useState<string>(preselectedProduct?.id || products[0]?.id || '');
+  const [selectedProductId, setSelectedProductId] = useState<string>(effectiveProduct?.id || products[0]?.id || '');
   const [quantityBottles, setQuantityBottles] = useState<number>(1);
   const [targetBranchId, setTargetBranchId] = useState<string>(currentUser.branchId || branches[0]?.id || '');
   const [customReason, setCustomReason] = useState<string>('');
@@ -94,7 +99,10 @@ export const LogDamageSpoilageModal: React.FC<LogDamageSpoilageModalProps> = ({
     };
 
     try {
-      await onSaveIncident(incident);
+      const saveFn = onSaveIncident || onLogIncident;
+      if (saveFn) {
+        await saveFn(incident);
+      }
       onClose();
     } finally {
       setIsSubmitting(false);

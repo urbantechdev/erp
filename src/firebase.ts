@@ -66,4 +66,20 @@ export async function testFirestoreConnection(): Promise<void> {
   }
 }
 
-export { signInWithPopup, signOut };
+const safeSignInWithPopup = async (authInstance = auth, provider = googleProvider) => {
+  try {
+    return await signInWithPopup(authInstance, provider);
+  } catch (error: any) {
+    const msg = String(error?.message || error || '');
+    if (
+      msg.includes('Pending promise was never set') ||
+      error?.code === 'auth/popup-closed-by-user' ||
+      error?.code === 'auth/cancelled-popup-request'
+    ) {
+      console.warn('[Firebase Auth] Handled popup cancellation:', msg);
+    }
+    throw error;
+  }
+};
+
+export { safeSignInWithPopup as signInWithPopup, signOut };

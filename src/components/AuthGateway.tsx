@@ -431,62 +431,122 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
         {screenView === 'boxes' && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 lg:gap-10 max-w-5xl mx-auto w-full items-center">
             {/* BOX 1: ADMIN (2x Square) */}
-            <div
-              onClick={() => {
-                setSelectedBox('Admin');
-                onGoogleLogin('Admin');
-              }}
-              className={`group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(10,0,110,0.5)] ${
-                selectedBox === 'Admin'
-                  ? 'bg-[#0A006E] text-white border-[#FFDE00] shadow-2xl ring-4 ring-[#FFDE00]/40'
-                  : 'bg-[#0A006E] text-white border-[#0A006E] hover:border-[#FFDE00]'
-              }`}
-            >
-              <div className="silent-scanner-beam" />
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-xl border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10">
-                <ShieldCheck className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+            <div className="flex flex-col items-center gap-2">
+              <div
+                onClick={() => {
+                  if (isSubmitting) return;
+                  setSelectedBox('Admin');
+                  onGoogleLogin('Admin');
+                }}
+                className={`w-full group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(10,0,110,0.5)] ${
+                  selectedBox === 'Admin'
+                    ? 'bg-[#0A006E] text-white border-[#FFDE00] shadow-2xl ring-4 ring-[#FFDE00]/40'
+                    : 'bg-[#0A006E] text-white border-[#0A006E] hover:border-[#FFDE00]'
+                } ${isSubmitting && selectedBox === 'Admin' ? 'opacity-80 pointer-events-none' : ''}`}
+              >
+                <div className="silent-scanner-beam" />
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-xl border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10">
+                  {isSubmitting && selectedBox === 'Admin' ? (
+                    <Loader2 className="w-12 h-12 sm:w-14 sm:h-14 animate-spin text-[#0A006E]" />
+                  ) : (
+                    <ShieldCheck className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+                  )}
+                </div>
+                <div className="relative z-10">
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-white">
+                    ADMIN
+                  </h2>
+                  <span className="text-[11px] font-montserrat font-bold text-[#FFDE00] block mt-1">
+                    Google Sign-In
+                  </span>
+                </div>
               </div>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-white relative z-10">
-                ADMIN
-              </h2>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedDepartment('Admin' as any);
+                  setScreenView('pin');
+                }}
+                className="text-xs font-montserrat font-bold text-[#0A006E] hover:text-blue-700 underline underline-offset-2 py-1 px-3 rounded-lg hover:bg-slate-200/60 transition-colors"
+              >
+                Sign in with Admin PIN
+              </button>
             </div>
 
             {/* BOX 2: ACCOUNTS (2x Square) */}
-            <div
-              onClick={() => {
-                setSelectedBox('Accountant');
-                onGoogleLogin('Accountant');
-              }}
-              className={`group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(255,222,0,0.6)] ${
-                selectedBox === 'Accountant'
-                  ? 'bg-[#FFDE00] text-[#0A006E] border-[#0A006E] shadow-2xl ring-4 ring-[#0A006E]/30'
-                  : 'bg-[#FFDE00] text-[#0A006E] border-amber-400 hover:border-[#0A006E]'
-              }`}
-            >
-              <div className="silent-scanner-beam-dark" />
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xl border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3 relative z-10">
-                <Calculator className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+            <div className="flex flex-col items-center gap-2">
+              <div
+                onClick={() => {
+                  if (isSubmitting) return;
+                  setSelectedBox('Accountant');
+                  onGoogleLogin('Accountant');
+                }}
+                className={`w-full group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(255,222,0,0.6)] ${
+                  selectedBox === 'Accountant'
+                    ? 'bg-[#FFDE00] text-[#0A006E] border-[#0A006E] shadow-2xl ring-4 ring-[#0A006E]/30'
+                    : 'bg-[#FFDE00] text-[#0A006E] border-amber-400 hover:border-[#0A006E]'
+                } ${isSubmitting && selectedBox === 'Accountant' ? 'opacity-80 pointer-events-none' : ''}`}
+              >
+                <div className="silent-scanner-beam-dark" />
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xl border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3 relative z-10">
+                  {isSubmitting && selectedBox === 'Accountant' ? (
+                    <Loader2 className="w-12 h-12 sm:w-14 sm:h-14 animate-spin text-[#FFDE00]" />
+                  ) : (
+                    <Calculator className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+                  )}
+                </div>
+                <div className="relative z-10">
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E]">
+                    ACCOUNTS
+                  </h2>
+                  <span className="text-[11px] font-montserrat font-bold text-[#0A006E]/80 block mt-1">
+                    Google Sign-In
+                  </span>
+                </div>
               </div>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E] relative z-10">
-                ACCOUNTS
-              </h2>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedDepartment('Accountant' as any);
+                  setScreenView('pin');
+                }}
+                className="text-xs font-montserrat font-bold text-[#0A006E] hover:text-blue-700 underline underline-offset-2 py-1 px-3 rounded-lg hover:bg-slate-200/60 transition-colors"
+              >
+                Sign in with Accounts PIN
+              </button>
             </div>
 
             {/* BOX 3: STAFFS (2x Square - Tapping switches on-screen to Departments) */}
-            <div
-              onClick={handleOpenStaffDepartments}
-              className={`group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(52,209,134,0.5)] ${
-                selectedBox === 'Staff'
-                  ? 'bg-[#F0F2F0] text-slate-900 border-[#34D186] shadow-2xl ring-4 ring-[#34D186]/35'
-                  : 'bg-[#F0F2F0] text-slate-900 border-slate-300 hover:border-[#0A006E] hover:bg-emerald-50/40'
-              }`}
-            >
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shadow-xl border-3 border-[#0A006E] shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10">
-                <KeyRound className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+            <div className="flex flex-col items-center gap-2">
+              <div
+                onClick={handleOpenStaffDepartments}
+                className={`w-full group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(52,209,134,0.5)] ${
+                  selectedBox === 'Staff'
+                    ? 'bg-[#F0F2F0] text-slate-900 border-[#34D186] shadow-2xl ring-4 ring-[#34D186]/35'
+                    : 'bg-[#F0F2F0] text-slate-900 border-slate-300 hover:border-[#0A006E] hover:bg-emerald-50/40'
+                }`}
+              >
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shadow-xl border-3 border-[#0A006E] shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10">
+                  <KeyRound className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+                </div>
+                <div className="relative z-10">
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E]">
+                    STAFFS
+                  </h2>
+                  <span className="text-[11px] font-montserrat font-bold text-[#0A006E]/80 block mt-1">
+                    Department PIN
+                  </span>
+                </div>
               </div>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E] relative z-10">
-                STAFFS
-              </h2>
+              <button
+                type="button"
+                onClick={handleOpenStaffDepartments}
+                className="text-xs font-montserrat font-bold text-[#0A006E] hover:text-blue-700 underline underline-offset-2 py-1 px-3 rounded-lg hover:bg-slate-200/60 transition-colors"
+              >
+                Choose Department & Branch
+              </button>
             </div>
           </div>
         )}
@@ -813,23 +873,6 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                           </span>
 
                           <div className="flex items-center gap-2">
-                            {user.pin && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedUser(user);
-                                  setScreenView('pin');
-                                  lastSubmittedPinRef.current = '';
-                                  setPinDigits(user.pin!);
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-[#0A006E] hover:bg-[#070050] text-white font-montserrat font-bold text-[10px] sm:text-[11px] flex items-center gap-1 shadow-xs cursor-pointer transition active:scale-95"
-                                title="Instant 1-Tap Login"
-                              >
-                                <Zap className="w-3 h-3 text-amber-300 fill-current" />
-                                <span>Fast Login</span>
-                              </button>
-                            )}
                             <span className="font-montserrat font-bold text-[#0A006E] group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-xs">
                               Enter PIN →
                             </span>
@@ -954,47 +997,6 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                   </div>
                 )}
 
-                {/* Fast 1-Tap Login Action (When Staff has a PIN or known default) */}
-                {selectedUser?.pin ? (
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      lastSubmittedPinRef.current = '';
-                      setPinDigits(selectedUser.pin!);
-                    }}
-                    className="w-full py-3 px-4 rounded-xl bg-[#0A006E] hover:bg-[#070050] active:scale-[0.99] text-white text-xs sm:text-sm font-montserrat font-bold flex items-center justify-center gap-2 transition shadow-xs cursor-pointer disabled:opacity-50"
-                  >
-                    <Zap className="w-4 h-4 text-amber-300 fill-current" />
-                    <span>Fast 1-Tap Login as {selectedUser.name.split(' ')[0]}</span>
-                  </button>
-                ) : selectedDepartment === 'Counter Cashier' ? (
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      lastSubmittedPinRef.current = '';
-                      setPinDigits('123456');
-                    }}
-                    className="w-full py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-montserrat font-semibold flex items-center justify-center gap-1.5 transition border border-slate-200 cursor-pointer disabled:opacity-50"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Fast Login: Cashier PIN 123456 (Tap to Unlock)</span>
-                  </button>
-                ) : selectedDepartment === 'Affiliate Sales Representative' ? (
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      lastSubmittedPinRef.current = '';
-                      setPinDigits('654321');
-                    }}
-                    className="w-full py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-montserrat font-semibold flex items-center justify-center gap-1.5 transition border border-slate-200 cursor-pointer disabled:opacity-50"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Fast Login: Sales Rep PIN 654321 (Tap to Unlock)</span>
-                  </button>
-                ) : null}
 
                 {/* 6-Digit PIN Indicators Display */}
                 <div

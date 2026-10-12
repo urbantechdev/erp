@@ -4,13 +4,15 @@ import { InventoryThresholdSettings } from '../types';
 
 interface StockThresholdsGovernanceModalProps {
   currentSettings: InventoryThresholdSettings;
-  onSaveSettings: (newSettings: InventoryThresholdSettings) => void;
+  onSaveSettings?: (newSettings: InventoryThresholdSettings) => void;
+  onSave?: (newSettings: InventoryThresholdSettings) => void;
   onClose: () => void;
 }
 
 export const StockThresholdsGovernanceModal: React.FC<StockThresholdsGovernanceModalProps> = ({
   currentSettings,
   onSaveSettings,
+  onSave,
   onClose,
 }) => {
   const [deadStockDays, setDeadStockDays] = useState<number>(currentSettings.defaultDeadStockDays);
@@ -23,13 +25,16 @@ export const StockThresholdsGovernanceModal: React.FC<StockThresholdsGovernanceM
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    onSaveSettings({
-      defaultDeadStockDays: Number(deadStockDays),
-      defaultExpiryWarningDays: Number(expiryWarningDays),
-      defaultMaxDamagePct: Number(maxDamagePct),
-      defaultMaxSpoilagePct: Number(maxSpoilagePct),
-      defaultMinSafetyStock: Number(minSafetyStock),
-    });
+    const saveFn = onSaveSettings || onSave;
+    if (saveFn) {
+      saveFn({
+        defaultDeadStockDays: Number(deadStockDays),
+        defaultExpiryWarningDays: Number(expiryWarningDays),
+        defaultMaxDamagePct: Number(maxDamagePct),
+        defaultMaxSpoilagePct: Number(maxSpoilagePct),
+        defaultMinSafetyStock: Number(minSafetyStock),
+      });
+    }
     setIsSubmitting(false);
     onClose();
   };

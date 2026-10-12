@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { GeoRegion } from './types';
+import { hashPin, isPinHashed } from './utils/security';
 
 export const NAIROBI_GEO_REGIONS: GeoRegion[] = [
   {
@@ -259,30 +260,35 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
       }
     }
 
-    // 6. Purge any non-feminiholdings Admin records and ensure feminiholdings@gmail.com is the sole Admin
+    // 6. Ensure authorized Admin records exist (zamodasports@gmail.com and feminiholdings@gmail.com)
     const allStaffSnap = await getDocs(collection(db, 'staff')).catch(() => null);
-    let feminiAdminFound = false;
+    const authorizedAdminEmails = ['zamodasports@gmail.com', 'feminiholdings@gmail.com'];
+    const foundAdminEmails = new Set<string>();
+
     if (allStaffSnap && !allStaffSnap.empty) {
       for (const staffDoc of allStaffSnap.docs) {
         const sdata = staffDoc.data();
         const sEmail = (sdata.email || '').toLowerCase().trim();
         if (sdata.role === 'Admin') {
-          if (sEmail !== 'feminiholdings@gmail.com') {
+          if (!authorizedAdminEmails.includes(sEmail)) {
             await deleteDoc(doc(db, 'staff', staffDoc.id)).catch(() => {});
           } else {
-            feminiAdminFound = true;
+            foundAdminEmails.add(sEmail);
           }
         }
       }
     }
 
-    if (!feminiAdminFound) {
-      await setDoc(doc(db, 'staff', 'staff-admin-feminiholdings'), {
-        id: 'staff-admin-feminiholdings',
-        name: 'Femini Holdings Executive Admin',
-        email: 'feminiholdings@gmail.com',
+    const defaultEncryptedPin = await hashPin('123456');
+
+    if (!foundAdminEmails.has('zamodasports@gmail.com')) {
+      await setDoc(doc(db, 'staff', 'staff-admin-zamodasports'), {
+        id: 'staff-admin-zamodasports',
+        name: 'Executive System Admin (Zamoda)',
+        email: 'zamodasports@gmail.com',
         role: 'Admin',
         authMethod: 'google',
+        pin: defaultEncryptedPin,
         branchId: targetHqId,
         branchName: 'HQ - Main Branch',
         status: 'Active',
@@ -290,6 +296,35 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
         createdByRole: 'Root',
         createdAt: new Date().toISOString(),
       }).catch(() => {});
+    }
+
+    if (!foundAdminEmails.has('feminiholdings@gmail.com')) {
+      await setDoc(doc(db, 'staff', 'staff-admin-feminiholdings'), {
+        id: 'staff-admin-feminiholdings',
+        name: 'Femini Holdings Executive Admin',
+        email: 'feminiholdings@gmail.com',
+        role: 'Admin',
+        authMethod: 'google',
+        pin: defaultEncryptedPin,
+        branchId: targetHqId,
+        branchName: 'HQ - Main Branch',
+        status: 'Active',
+        createdBy: 'System Root',
+        createdByRole: 'Root',
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
+    // 7. Transparently encrypt all legacy plaintext staff PINs in Firestore
+    const allStaffForPinMigration = await getDocs(collection(db, 'staff')).catch(() => null);
+    if (allStaffForPinMigration && !allStaffForPinMigration.empty) {
+      for (const sDoc of allStaffForPinMigration.docs) {
+        const sdata = sDoc.data();
+        if (sdata.pin && !isPinHashed(sdata.pin)) {
+          const encryptedPin = await hashPin(sdata.pin);
+          await updateDoc(doc(db, 'staff', sDoc.id), { pin: encryptedPin }).catch(() => {});
+        }
+      }
     }
   } catch {
     // Ignore if restricted or already purged

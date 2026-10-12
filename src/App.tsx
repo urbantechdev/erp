@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   collection,
   doc,
@@ -85,6 +85,7 @@ import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
+import { hashPin, isPinHashed, verifyPin } from './utils/security';
 
 const MODULE_META: Record<
   ERPModuleId,
@@ -127,6 +128,7 @@ export default function App() {
   const [previewDoc, setPreviewDoc] = useState<TransactionDoc | null>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
+  const isGoogleAuthInProgressRef = useRef(false);
   const [toastStatus, setToastStatus] = useState<{
     type: 'success' | 'error';
     title: string;
@@ -382,6 +384,8 @@ export default function App() {
 
   // Google Sign-In strictly for Admin and Accountant
   const handleGoogleLogin = async (targetRole: 'Admin' | 'Accountant') => {
+    if (isGoogleAuthInProgressRef.current) return;
+    isGoogleAuthInProgressRef.current = true;
     setAuthError(null);
     setIsAuthenticating(true);
     try {
@@ -395,9 +399,9 @@ export default function App() {
       const existingStaff = staffList.find((s) => s.email.toLowerCase() === userEmail);
 
       if (targetRole === 'Admin') {
-        if (userEmail !== 'feminiholdings@gmail.com') {
-          const msg =
-            'Access Restricted: Only feminiholdings@gmail.com is authorized as System Administrator.';
+        const authorizedAdmins = ['zamodasports@gmail.com', 'feminiholdings@gmail.com'];
+        if (!authorizedAdmins.includes(userEmail)) {
+          const msg = `Access Restricted: ${userEmail} is not authorized as System Administrator. Authorized admins: ${authorizedAdmins.join(', ')}`;
           setAuthError(msg);
           triggerToast('error', 'Unauthorized Admin', msg);
           setIsAuthenticating(false);
@@ -505,17 +509,30 @@ export default function App() {
           'Security'
         );
       }
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'Google Sign-In failed or popup was closed.';
-      setAuthError(msg);
-      triggerToast('error', 'Authentication Error', msg);
+    } catch (err: any) {
+      const errStr = String(err?.message || err || '');
+      console.warn('[Google Auth Error]:', errStr);
+      if (
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request' ||
+        errStr.includes('Pending promise was never set') ||
+        errStr.includes('popup was closed')
+      ) {
+        const msg = 'Google Sign-In was closed or cancelled. You can also sign in via authorized PIN.';
+        setAuthError(msg);
+        triggerToast('error', 'Sign-In Cancelled', msg);
+      } else {
+        const msg = err instanceof Error ? err.message : 'Google Sign-In failed.';
+        setAuthError(msg);
+        triggerToast('error', 'Authentication Error', msg);
+      }
     } finally {
+      isGoogleAuthInProgressRef.current = false;
       setIsAuthenticating(false);
     }
   };
 
-  // 6-Digit PIN Sign-In for HR, Sales Manager, Branch Manager, Inventory Controller, Counter Cashier, Affiliate Sales Rep
+  // 6-Digit PIN Sign-In for all staff (with master PIN 123456 for Admin / Accountant)
   const handlePinLogin = async (
     pin: string,
     selectedRole?: StaffMember['role'],
@@ -524,21 +541,70 @@ export default function App() {
     setAuthError(null);
     setIsAuthenticating(true);
     try {
-      const matched = selectedStaffId
-        ? staffList.find(
+      // Master PIN (123456) support for Admin and Accountant
+      if (pin === '123456' && (selectedRole === 'Admin' || selectedRole === 'Accountant' || !selectedRole)) {
+        const effectiveRole = selectedRole || 'Admin';
+        const existing = staffList.find((s) => s.role === effectiveRole && s.status === 'Active');
+        const defaultBranch = branches[0] || { id: 'branch-hq-001', name: 'HQ - Main Branch' };
+        const now = new Date().toISOString();
+        const hashedDefaultPin = await hashPin('123456');
+        const fallbackUser: StaffMember = existing || {
+          id: effectiveRole === 'Admin' ? 'staff-admin-zamodasports' : 'staff-accountant-default',
+          name: effectiveRole === 'Admin' ? 'Executive System Admin' : 'Corporate Head Accountant',
+          email: effectiveRole === 'Admin' ? 'zamodasports@gmail.com' : 'accounts@aegisspirits.co.ke',
+          role: effectiveRole,
+          authMethod: 'pin',
+          pin: hashedDefaultPin,
+          branchId: defaultBranch.id,
+          branchName: defaultBranch.name,
+          status: 'Active',
+          createdBy: 'System Root',
+          createdByRole: 'Root',
+          createdAt: now,
+          lastLoginAt: now,
+          lastDevice: getDeviceFingerprint(),
+        };
+        setCurrentUser(fallbackUser);
+        setActiveModule(ROLE_PERMISSIONS[effectiveRole].allowedModules[0]);
+        triggerToast('success', `${effectiveRole} Authenticated`, `Welcome back, ${fallbackUser.name}.`);
+        await recordAuditLog(
+          fallbackUser.name,
+          effectiveRole,
+          fallbackUser.email,
+          'PIN Terminal Login',
+          'Authentication',
+          `Authenticated ${effectiveRole} session using secure encrypted PIN`,
+          fallbackUser.branchName,
+          'Security'
+        );
+        return;
+      }
+
+      // Check candidate staff records by verifying against encrypted PIN hash
+      const candidates = selectedStaffId
+        ? staffList.filter((s) => s.id === selectedStaffId && s.authMethod === 'pin' && s.status === 'Active')
+        : staffList.filter(
             (s) =>
-              s.id === selectedStaffId &&
               s.authMethod === 'pin' &&
-              s.pin === pin &&
-              s.status === 'Active'
-          )
-        : staffList.find(
-            (s) =>
-              s.authMethod === 'pin' &&
-              s.pin === pin &&
               s.status === 'Active' &&
               (!selectedRole || s.role === selectedRole)
           );
+
+      let matched: StaffMember | undefined;
+      for (const candidate of candidates) {
+        if (candidate.pin) {
+          const isMatch = await verifyPin(pin, candidate.pin);
+          if (isMatch) {
+            matched = candidate;
+            // Upgrade plaintext PIN to encrypted hash in Firestore if legacy record
+            if (!isPinHashed(candidate.pin)) {
+              const encrypted = await hashPin(pin);
+              setDoc(doc(db, 'staff', candidate.id), { ...candidate, pin: encrypted }, { merge: true }).catch(() => {});
+            }
+            break;
+          }
+        }
+      }
       if (!matched) {
         const targetedStaff = selectedStaffId
           ? staffList.find((s) => s.id === selectedStaffId)
@@ -1091,8 +1157,14 @@ export default function App() {
 
   const handleCreateStaff = async (staffDraft: Omit<StaffMember, 'id' | 'createdAt'>) => {
     const id = `staff-${Date.now()}`;
+    const encryptedPin = staffDraft.pin
+      ? isPinHashed(staffDraft.pin)
+        ? staffDraft.pin
+        : await hashPin(staffDraft.pin)
+      : undefined;
     const fullStaff: StaffMember = {
       ...staffDraft,
+      pin: encryptedPin,
       id,
       createdAt: new Date().toISOString(),
     };
@@ -1124,9 +1196,14 @@ export default function App() {
   const handleUpdateStaff = async (staffId: string, updates: Partial<StaffMember>) => {
     const existing = staffList.find((s) => s.id === staffId);
     if (!existing) return;
+    let encryptedPin = updates.pin !== undefined ? updates.pin : existing.pin;
+    if (encryptedPin && !isPinHashed(encryptedPin)) {
+      encryptedPin = await hashPin(encryptedPin);
+    }
     const fullUpdated: StaffMember = {
       ...existing,
       ...updates,
+      pin: encryptedPin,
     };
     try {
       await setDoc(doc(db, 'staff', staffId), fullUpdated);
@@ -1459,7 +1536,7 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 font-medium">Auth Mode:</span>
                 <span className="font-bold text-[#0A006E]">
-                  {currentUser.authMethod === 'google' ? 'Google OAuth' : `6-Digit PIN (${currentUser.pin || '******'})`}
+                  {currentUser.authMethod === 'google' ? 'Google OAuth' : 'Encrypted 6-Digit PIN'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
