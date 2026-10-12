@@ -447,7 +447,7 @@ export const InventoryModule: React.FC<{
         p.countryOfOrigin || p.originCountry || 'Imported',
         Math.round(p.wholesalePriceKes ?? p.baseWholesalePrice ?? 0).toLocaleString(),
         Math.round(p.retailPriceKes ?? p.baseRetailPrice ?? 0).toLocaleString(),
-        p.totalBottles ?? 360,
+        p.totalBottles ?? 0,
       ]),
       'Vaairo_Bonded_Inventory_Report'
     );
@@ -470,7 +470,7 @@ export const InventoryModule: React.FC<{
         p.countryOfOrigin || p.originCountry || '',
         p.wholesalePriceKes ?? p.baseWholesalePrice ?? 0,
         p.retailPriceKes ?? p.baseRetailPrice ?? 0,
-        p.totalBottles ?? 360,
+        p.totalBottles ?? 0,
       ])
     );
   };

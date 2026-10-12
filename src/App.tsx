@@ -5,6 +5,7 @@ import {
   onSnapshot,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   orderBy,
   where,
@@ -26,6 +27,10 @@ import {
   Menu,
   X,
   Wine,
+  Globe,
+  User,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   db,
@@ -74,6 +79,8 @@ import {
 } from './components/ErpModulesPart2';
 import { DocumentPrintModal } from './components/DocumentPrintModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
+import { MobileSplashScreen } from './components/MobileSplashScreen';
+import { DesktopBottomNav } from './components/DesktopBottomNav';
 
 const MODULE_META: Record<
   ERPModuleId,
@@ -113,6 +120,7 @@ export default function App() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<TransactionDoc | null>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [showUserProfileModal, setShowUserProfileModal] = useState(false);
   const [toastStatus, setToastStatus] = useState<{
     type: 'success' | 'error';
     title: string;
@@ -374,6 +382,13 @@ export default function App() {
       }
 
       if (existingStaff) {
+        if (existingStaff.status !== 'Active') {
+          const msg = `Your staff account is currently ${existingStaff.status.toLowerCase()}. Access has been restricted by administration.`;
+          setAuthError(msg);
+          triggerToast('error', 'Account Not Active', msg);
+          setIsAuthenticating(false);
+          return;
+        }
         if (existingStaff.authMethod !== 'google') {
           const msg = `Role "${existingStaff.role}" is restricted to 6-Digit PIN authentication. Only Admin and Accountant use Google Login.`;
           setAuthError(msg);
@@ -456,31 +471,53 @@ export default function App() {
   };
 
   // 6-Digit PIN Sign-In for HR, Sales Manager, Branch Manager, Inventory Controller, Counter Cashier, Affiliate Sales Rep
-  const handlePinLogin = async (pin: string, selectedRole?: StaffMember['role']) => {
+  const handlePinLogin = async (
+    pin: string,
+    selectedRole?: StaffMember['role'],
+    selectedStaffId?: string
+  ) => {
     setAuthError(null);
     setIsAuthenticating(true);
     try {
-      const matched = staffList.find(
-        (s) =>
-          s.authMethod === 'pin' &&
-          s.pin === pin &&
-          s.status === 'Active' &&
-          (!selectedRole || s.role === selectedRole)
-      );
+      const matched = selectedStaffId
+        ? staffList.find(
+            (s) =>
+              s.id === selectedStaffId &&
+              s.authMethod === 'pin' &&
+              s.pin === pin &&
+              s.status === 'Active'
+          )
+        : staffList.find(
+            (s) =>
+              s.authMethod === 'pin' &&
+              s.pin === pin &&
+              s.status === 'Active' &&
+              (!selectedRole || s.role === selectedRole)
+          );
       if (!matched) {
-        const msg = selectedRole
-          ? `Invalid 6-Digit PIN for ${selectedRole} department, or no active ${selectedRole} provisioned yet.`
-          : 'Invalid 6-Digit PIN or no PIN staff provisioned yet. Sign in as Admin via Google to create HR first.';
+        const targetedStaff = selectedStaffId
+          ? staffList.find((s) => s.id === selectedStaffId)
+          : null;
+        let msg = '';
+        if (targetedStaff && targetedStaff.status !== 'Active') {
+          msg = `Staff account for ${targetedStaff.name} is currently ${targetedStaff.status.toLowerCase()}. Access has been revoked.`;
+        } else if (targetedStaff) {
+          msg = `Incorrect 6-digit PIN entered for ${targetedStaff.name} (${targetedStaff.role}). Please try again.`;
+        } else if (selectedRole) {
+          msg = `Invalid 6-Digit PIN for ${selectedRole} department, or no active ${selectedRole} provisioned yet.`;
+        } else {
+          msg = 'Invalid 6-Digit PIN or no PIN staff provisioned yet. Sign in as Admin via Google to create HR first.';
+        }
         setAuthError(msg);
-        triggerToast('error', 'Invalid 6-Digit PIN', msg);
+        triggerToast('error', 'Authentication Failed', msg);
         await recordAuditLog(
-          'Unknown Terminal User',
-          selectedRole || 'Unverified PIN',
-          `PINAttempt:${pin.slice(0, 2)}****`,
+          targetedStaff?.name || 'Unknown Terminal User',
+          targetedStaff?.role || selectedRole || 'Unverified PIN',
+          targetedStaff?.email || `PINAttempt:${pin.slice(0, 2)}****`,
           'Failed 6-Digit PIN Attempt',
           'Authentication',
-          `Rejected invalid 6-digit PIN entry for department ${selectedRole || 'All'}`,
-          'Terminal Gateway',
+          `Rejected invalid 6-digit PIN entry for ${targetedStaff ? `${targetedStaff.name} (${targetedStaff.role})` : selectedRole || 'All'}`,
+          targetedStaff?.branchName || 'Terminal Gateway',
           'Critical'
         );
         return;
@@ -869,10 +906,134 @@ export default function App() {
     }
   };
 
-  // If Customer Online Portal is opened directly from the login gateway
+  const handleUpdateStaff = async (staffId: string, updates: Partial<StaffMember>) => {
+    const existing = staffList.find((s) => s.id === staffId);
+    if (!existing) return;
+    const fullUpdated: StaffMember = {
+      ...existing,
+      ...updates,
+    };
+    try {
+      await setDoc(doc(db, 'staff', staffId), fullUpdated);
+      triggerToast(
+        'success',
+        'Staff Profile Updated',
+        `Successfully updated account for ${fullUpdated.name}.`
+      );
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Updated Staff: ${fullUpdated.name}`,
+          'HR & Role Provisioning',
+          `${currentUser.name} updated profile of ${fullUpdated.name} (${fullUpdated.role}, Branch: ${fullUpdated.branchName}, Status: ${fullUpdated.status})`,
+          currentUser.branchName,
+          'Security'
+        );
+      }
+    } catch (error) {
+      triggerToast('error', 'Update Failed', 'Could not save staff changes.');
+      handleFirestoreError(error, OperationType.WRITE, 'staff');
+    }
+  };
+
+  const handleSetStaffStatus = async (
+    staffId: string,
+    newStatus: 'Active' | 'Suspended' | 'Terminated'
+  ) => {
+    const existing = staffList.find((s) => s.id === staffId);
+    if (!existing) return;
+    if (existing.id === currentUser?.id && newStatus !== 'Active') {
+      triggerToast('error', 'Action Restricted', 'You cannot suspend or terminate your own active account.');
+      return;
+    }
+    const fullUpdated: StaffMember = {
+      ...existing,
+      status: newStatus,
+    };
+    try {
+      await setDoc(doc(db, 'staff', staffId), fullUpdated);
+      const verb = newStatus === 'Suspended' ? 'Suspended' : newStatus === 'Terminated' ? 'Terminated' : 'Re-activated';
+      triggerToast('success', `Staff ${verb}`, `${fullUpdated.name} account is now marked as ${newStatus}.`);
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Status Changed: ${newStatus}`,
+          'HR & Access Control',
+          `${currentUser.name} marked ${fullUpdated.name} (${fullUpdated.role}) as ${newStatus}`,
+          currentUser.branchName,
+          newStatus === 'Active' ? 'Info' : 'Security'
+        );
+      }
+    } catch (error) {
+      triggerToast('error', 'Status Update Error', 'Could not change staff status.');
+      handleFirestoreError(error, OperationType.WRITE, 'staff');
+    }
+  };
+
+  const handleDeleteStaff = async (staffId: string) => {
+    const existing = staffList.find((s) => s.id === staffId);
+    if (!existing) return;
+    if (existing.id === currentUser?.id) {
+      triggerToast('error', 'Action Restricted', 'You cannot delete your own active account.');
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'staff', staffId));
+      triggerToast(
+        'success',
+        'Staff Permanently Deleted',
+        `Permanently deleted staff record for ${existing.name}.`
+      );
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Permanent Staff Deletion: ${existing.name}`,
+          'HR & Access Control',
+          `${currentUser.name} permanently erased staff record for ${existing.name} (${existing.role}, ID: ${staffId})`,
+          currentUser.branchName,
+          'Security'
+        );
+      }
+    } catch (error) {
+      triggerToast('error', 'Delete Failed', 'Could not delete staff member.');
+      handleFirestoreError(error, OperationType.DELETE, 'staff');
+    }
+  };
+
+  const handleUpdatePartner = async (partnerId: string, updates: Partial<Partner>) => {
+    const existing = partners.find((p) => p.id === partnerId);
+    if (!existing) return;
+    const fullUpdated: Partner = { ...existing, ...updates };
+    try {
+      await setDoc(doc(db, 'partners', partnerId), fullUpdated);
+      triggerToast('success', 'Partner Updated', `Updated trade partner ${fullUpdated.companyName}.`);
+    } catch (error) {
+      triggerToast('error', 'Partner Update Failed', 'Unable to update partner record.');
+      handleFirestoreError(error, OperationType.WRITE, 'partners');
+    }
+  };
+
+  const handleDeletePartner = async (partnerId: string) => {
+    const existing = partners.find((p) => p.id === partnerId);
+    try {
+      await deleteDoc(doc(db, 'partners', partnerId));
+      triggerToast('success', 'Partner Deleted', `Permanently deleted partner ${existing?.companyName || partnerId}.`);
+    } catch (error) {
+      triggerToast('error', 'Partner Delete Failed', 'Unable to delete partner record.');
+      handleFirestoreError(error, OperationType.DELETE, 'partners');
+    }
+  };
+
   if (!currentUser && standaloneCustomerPortal) {
     return (
       <>
+        <MobileSplashScreen />
         <StatusFeedbackToast status={toastStatus} onDismiss={() => setToastStatus(null)} />
         <CustomerPortalView
           products={products}
@@ -888,10 +1049,10 @@ export default function App() {
     );
   }
 
-  // If not authenticated, render the Dual Auth Gateway (Google for Admin/Accountant, 6-Digit PIN for operational roles)
   if (!currentUser) {
     return (
       <>
+        <MobileSplashScreen />
         <StatusFeedbackToast status={toastStatus} onDismiss={() => setToastStatus(null)} />
         <AuthGateway
           staffList={staffList}
@@ -910,6 +1071,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
+      <MobileSplashScreen />
       <StatusFeedbackToast status={toastStatus} onDismiss={() => setToastStatus(null)} />
       {/* VAAIRO Signature Deep Navy Header (2x Height) with Curved Single-Wave Bottom Edge */}
       <header className="sticky top-0 z-30 pt-5 pb-12 px-4 sm:px-6 bg-[#0A006E] text-white flex items-center justify-between gap-8 relative overflow-hidden shadow-lg">
@@ -931,14 +1093,60 @@ export default function App() {
           </span>
         </a>
 
-        {/* Zone 3: Sign Out Action */}
-        <div className="flex items-center gap-2 shrink-0 relative z-10">
+        {/* Zone 3: Header Right Action Icons - ONLY Website for Client, User, and Lock Icons */}
+        <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0 relative z-10">
+          {/* 1. Website for client icon */}
           <button
-            onClick={handleLogout}
-            className="px-3.5 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] font-montserrat font-black text-xs rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer shadow-md"
+            type="button"
+            onClick={() =>
+              activeModule === 'customer_portal'
+                ? handleSelectModule('overview')
+                : handleSelectModule('customer_portal')
+            }
+            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-sm relative group ${
+              activeModule === 'customer_portal'
+                ? 'bg-[#FFDE00] text-[#0A006E] border-white shadow-md'
+                : 'bg-white/10 hover:bg-[#FFDE00] text-white hover:text-[#0A006E] border-white/20 hover:border-white'
+            }`}
+            title="Client Website / Customer Portal"
+            aria-label="Client Website / Customer Portal"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            Sign Out ({currentUser.role})
+            <Globe className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
+            <span className="absolute -bottom-9 right-0 hidden group-hover:block bg-slate-900 text-white text-[11px] font-montserrat font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-lg z-50 pointer-events-none">
+              Client Website
+            </span>
+          </button>
+
+          {/* 2. User icon */}
+          <button
+            type="button"
+            onClick={() => setShowUserProfileModal(!showUserProfileModal)}
+            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-sm relative group ${
+              showUserProfileModal
+                ? 'bg-[#FFDE00] text-[#0A006E] border-white shadow-md'
+                : 'bg-white/10 hover:bg-[#FFDE00] text-white hover:text-[#0A006E] border-white/20 hover:border-white'
+            }`}
+            title={`${currentUser.name} (${currentUser.role})`}
+            aria-label="User Profile"
+          >
+            <User className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
+            <span className="absolute -bottom-9 right-0 hidden group-hover:block bg-slate-900 text-white text-[11px] font-montserrat font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-lg z-50 pointer-events-none">
+              {currentUser.name} ({currentUser.role})
+            </span>
+          </button>
+
+          {/* 3. Lock icon */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white/10 hover:bg-rose-600 hover:text-white text-white border-2 border-white/20 hover:border-rose-400 transition-all cursor-pointer shadow-sm relative group"
+            title="Lock Terminal / Sign Out"
+            aria-label="Lock Terminal / Sign Out"
+          >
+            <Lock className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
+            <span className="absolute -bottom-9 right-0 hidden group-hover:block bg-slate-900 text-white text-[11px] font-montserrat font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-lg z-50 pointer-events-none">
+              Lock Terminal
+            </span>
           </button>
         </div>
 
@@ -960,6 +1168,90 @@ export default function App() {
           />
         </svg>
       </header>
+
+      {/* User Profile Flyout Modal triggered by Header User Icon */}
+      {showUserProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-end pt-20 sm:pt-24 pr-4 sm:pr-8 bg-slate-900/40 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-sm w-full p-5 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center font-montserrat font-black text-sm border-2 border-white shadow-sm">
+                  {currentUser.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h4 className="font-montserrat font-black text-slate-900 text-sm leading-tight">
+                    {currentUser.name}
+                  </h4>
+                  <span className="text-xs font-bold text-[#0A006E] font-montserrat">
+                    {currentUser.role}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUserProfileModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                aria-label="Close Profile"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Corporate Email:</span>
+                <span className="font-semibold text-slate-900 truncate max-w-[180px]">{currentUser.email}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Branch Depot:</span>
+                <span className="font-semibold text-slate-900 truncate max-w-[180px]">{currentUser.branchName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Auth Mode:</span>
+                <span className="font-bold text-[#0A006E]">
+                  {currentUser.authMethod === 'google' ? 'Google OAuth' : `6-Digit PIN (${currentUser.pin || '******'})`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Account Status:</span>
+                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40">
+                  {currentUser.status}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[11px] text-slate-500">
+                <span>Active Session Device:</span>
+                <span className="font-mono truncate max-w-[150px]">{currentUser.lastDevice || 'Terminal'}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              {allowedModules.includes('hr_rbac') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSelectModule('hr_rbac');
+                    setShowUserProfileModal(false);
+                  }}
+                  className="flex-1 py-2.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] font-montserrat font-black text-xs rounded-xl cursor-pointer shadow-xs transition-colors"
+                >
+                  Manage HR Staff
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUserProfileModal(false);
+                  handleLogout();
+                }}
+                className="flex-1 py-2.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 font-montserrat font-bold text-xs rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Lock Terminal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Workspace Body: VAAIRO Desktop Left Sidebar + Main Content Canvas */}
       <div className="flex-1 flex">
@@ -1027,7 +1319,7 @@ export default function App() {
         </aside>
 
         {/* Main Content Area (Vast White Background #FFFFFF with Bright Grey #F0F2F0 Blocks) */}
-        <main className="flex-1 bg-white p-4 sm:p-6 lg:p-8 pb-24 md:pb-10 overflow-y-auto max-w-7xl mx-auto w-full">
+        <main className="flex-1 bg-white p-4 sm:p-6 lg:p-8 pb-32 md:pb-16 overflow-y-auto max-w-7xl mx-auto w-full">
           {activeModule === 'overview' && (
             <OverviewModule
               currentUser={currentUser}
@@ -1103,6 +1395,8 @@ export default function App() {
               partners={partners}
               regions={regions}
               onCreatePartner={handleCreatePartner}
+              onUpdatePartner={handleUpdatePartner}
+              onDeletePartner={handleDeletePartner}
             />
           )}
 
@@ -1133,6 +1427,9 @@ export default function App() {
               staffList={staffList}
               branches={branches}
               onCreateStaff={handleCreateStaff}
+              onUpdateStaff={handleUpdateStaff}
+              onSetStaffStatus={handleSetStaffStatus}
+              onDeleteStaff={handleDeleteStaff}
             />
           )}
 
@@ -1152,85 +1449,14 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Native-App Bottom Tab Bar (<768px) with 44x44px+ ergonomic hitboxes */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 h-16 bg-[#0A006E] text-white border-t-2 border-[#FFDE00] grid grid-cols-5 items-center px-1">
-        {primaryMobileModules.map((modId) => {
-          const IconComp = MODULE_META[modId].icon;
-          const isActive = activeModule === modId;
-          return (
-            <button
-              key={modId}
-              onClick={() => handleSelectModule(modId)}
-              className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl transition-colors cursor-pointer ${
-                isActive ? 'text-[#FFDE00] font-black' : 'text-slate-200'
-              }`}
-            >
-              <IconComp className="w-5 h-5" />
-              <span className="text-[10px] font-montserrat font-bold tracking-tight mt-1 truncate max-w-[64px]">
-                {MODULE_META[modId].shortMobileLabel}
-              </span>
-            </button>
-          );
-        })}
-
-        <button
-          onClick={() => setMobileDrawerOpen(true)}
-          className="min-h-[48px] flex flex-col items-center justify-center text-slate-200 cursor-pointer"
-        >
-          <Menu className="w-5 h-5 text-[#FFDE00]" />
-          <span className="text-[10px] font-montserrat font-bold tracking-tight mt-1">All Modules</span>
-        </button>
-      </nav>
-
-      {/* Mobile Bottom Sheet Action Drawer for full module list */}
-      {mobileDrawerOpen && (
-        <div className="md:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end">
-          <div className="bg-white rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto space-y-4 border-t-3 border-[#FFDE00]">
-            <div className="w-10 h-1.5 bg-slate-300 rounded-full mx-auto" />
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div>
-                <div className="text-xs font-montserrat font-black text-[#0A006E]">
-                  {currentUser.role}
-                </div>
-                <div className="text-sm font-montserrat font-bold text-slate-900">
-                  {currentUser.name} · {currentUser.branchName}
-                </div>
-              </div>
-              <button
-                onClick={() => setMobileDrawerOpen(false)}
-                className="p-2 rounded-xl bg-slate-100 text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              {allowedModules.map((modId) => {
-                const IconComp = MODULE_META[modId].icon;
-                const isActive = activeModule === modId;
-                return (
-                  <button
-                    key={modId}
-                    onClick={() => handleSelectModule(modId)}
-                    className={`min-h-[48px] p-3 rounded-xl border text-left flex items-center gap-2.5 text-xs font-montserrat font-bold ${
-                      isActive
-                        ? 'bg-[#0A006E] text-[#FFDE00] border-[#0A006E]'
-                        : 'bg-[#F0F2F0] text-slate-800 border-slate-200'
-                    }`}
-                  >
-                    <IconComp
-                      className={`w-4 h-4 shrink-0 ${
-                        isActive ? 'text-[#FFDE00]' : 'text-[#0A006E]'
-                      }`}
-                    />
-                    <span className="truncate">{MODULE_META[modId].shortMobileLabel}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Universal Desktop Dock & Mobile Ergonomic Bottom Navigation with Wave Top Edge */}
+      <DesktopBottomNav
+        activeModule={activeModule}
+        onSelectModule={handleSelectModule}
+        allowedModules={allowedModules}
+        currentUser={currentUser}
+        onOpenCustomerPortal={() => handleSelectModule('customer_portal')}
+      />
 
       {/* Commercial Print & PDF Modal */}
       <DocumentPrintModal docData={previewDoc} onClose={() => setPreviewDoc(null)} />

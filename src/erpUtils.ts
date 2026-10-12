@@ -36,11 +36,7 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
   const cost = raw.warehouseCostKes ?? raw.baseLandedCost ?? Math.round(wholesale * 0.82);
   const totalBottles = raw.totalBottles ?? packSize * 30; // Default 30 cases distributed across branches
 
-  const defaultBranchStock = JSON.stringify({
-    'br-hq-metro': Math.floor(totalBottles * 0.55),
-    'br-suburb-north': Math.floor(totalBottles * 0.30),
-    'br-lower-valley': Math.max(0, totalBottles - Math.floor(totalBottles * 0.85)),
-  });
+  const defaultBranchStock = JSON.stringify({});
 
   return {
     ...raw,

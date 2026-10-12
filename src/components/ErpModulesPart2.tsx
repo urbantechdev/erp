@@ -5,6 +5,14 @@ import {
   Plus,
   Lock,
   CheckCircle2,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  PauseCircle,
+  PlayCircle,
+  XCircle,
+  X,
+  Users,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -33,8 +41,10 @@ export const PartnersOnboardingModule: React.FC<{
   partners: Partner[];
   regions: GeoRegion[];
   onCreatePartner: (p: Omit<Partner, 'id' | 'createdAt'>) => Promise<void>;
-}> = ({ partners, regions, onCreatePartner }) => {
-  const [partnerType, setPartnerType] = useState<Partner['partnerType']>('Retailer');
+  onUpdatePartner?: (partnerId: string, updates: Partial<Partner>) => Promise<void>;
+  onDeletePartner?: (partnerId: string) => Promise<void>;
+}> = ({ partners, regions, onCreatePartner, onUpdatePartner, onDeletePartner }) => {
+  const [partnerType, setPartnerType] = useState<Partner['partnerType']>('Supplier');
   const [companyName, setCompanyName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
   const [phone, setPhone] = useState('');
@@ -42,10 +52,29 @@ export const PartnersOnboardingModule: React.FC<{
   const [regionId, setRegionId] = useState(regions[0]?.id || '');
   const [liquorLicenseNo, setLiquorLicenseNo] = useState('');
   const [taxPin, setTaxPin] = useState('');
-  const [licenseExpiry, setLicenseExpiry] = useState('2027-12-31');
-  const [creditLimit, setCreditLimit] = useState<number>(1500000);
-  const [fleetCapacity, setFleetCapacity] = useState('12 Bonded Trucks (GPS-Tracked)');
+  const [licenseExpiry, setLicenseExpiry] = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [creditLimit, setCreditLimit] = useState<number>(0);
+  const [fleetCapacity, setFleetCapacity] = useState('');
   const [filterType, setFilterType] = useState<string>('All');
+
+  // Edit / Delete Partner Modals
+  const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
+  const [editCompanyName, setEditCompanyName] = useState('');
+  const [editContactPerson, setEditContactPerson] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editLicenseNo, setEditLicenseNo] = useState('');
+  const [editTaxPin, setEditTaxPin] = useState('');
+  const [editCreditLimit, setEditCreditLimit] = useState<number>(0);
+  const [editFleet, setEditFleet] = useState('');
+  const [editStatus, setEditStatus] = useState<'Verified' | 'Pending Review' | 'Expired'>('Verified');
+
+  const [deletingPartner, setDeletingPartner] = useState<Partner | null>(null);
+  const [isDeletingPartner, setIsDeletingPartner] = useState(false);
 
   const handleAddPartner = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,20 +85,67 @@ export const PartnersOnboardingModule: React.FC<{
       partnerType,
       code: `${prefix}-${Date.now().toString().slice(-4)}`,
       companyName: companyName.trim(),
-      contactPerson: contactPerson.trim() || 'Primary Compliance Contact',
-      phone: phone.trim() || '+254 700 019 283',
-      email: email.trim() || 'compliance@partner.co.ke',
-      regionId: reg?.id || 'reg-metro-core',
-      regionName: reg?.name || 'Metropolitan Zone',
+      contactPerson: contactPerson.trim() || 'General Contact',
+      phone: phone.trim(),
+      email: email.trim(),
+      regionId: reg?.id || '',
+      regionName: reg?.name || '',
       liquorLicenseNo: liquorLicenseNo.trim(),
-      taxPin: taxPin.trim() || 'PIN-VERIFIED',
+      taxPin: taxPin.trim(),
       licenseExpiry,
-      creditLimit: Number(creditLimit),
-      fleetCapacity: partnerType === 'Logistics' ? fleetCapacity : undefined,
+      creditLimit: Number(creditLimit) || 0,
+      fleetCapacity: partnerType === 'Logistics' ? (fleetCapacity.trim() || undefined) : undefined,
       complianceStatus: 'Verified',
     });
     setCompanyName('');
+    setContactPerson('');
+    setPhone('');
+    setEmail('');
     setLiquorLicenseNo('');
+    setTaxPin('');
+    setCreditLimit(0);
+    setFleetCapacity('');
+  };
+
+  const handleOpenEditPartner = (p: Partner) => {
+    setEditingPartner(p);
+    setEditCompanyName(p.companyName);
+    setEditContactPerson(p.contactPerson || '');
+    setEditPhone(p.phone || '');
+    setEditEmail(p.email || '');
+    setEditLicenseNo(p.liquorLicenseNo);
+    setEditTaxPin(p.taxPin || '');
+    setEditCreditLimit(p.creditLimit || 0);
+    setEditFleet(p.fleetCapacity || '');
+    setEditStatus(p.complianceStatus);
+  };
+
+  const handleSaveEditPartner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPartner || !onUpdatePartner) return;
+    await onUpdatePartner(editingPartner.id, {
+      companyName: editCompanyName.trim(),
+      contactPerson: editContactPerson.trim(),
+      phone: editPhone.trim(),
+      email: editEmail.trim(),
+      liquorLicenseNo: editLicenseNo.trim(),
+      taxPin: editTaxPin.trim(),
+      creditLimit: Number(editCreditLimit) || 0,
+      fleetCapacity: editingPartner.partnerType === 'Logistics' ? editFleet.trim() : undefined,
+      complianceStatus: editStatus,
+    });
+    setEditingPartner(null);
+  };
+
+  const handleConfirmDeletePartner = async () => {
+    if (!deletingPartner || !onDeletePartner) return;
+    setIsDeletingPartner(true);
+    try {
+      await onDeletePartner(deletingPartner.id);
+      setDeletingPartner(null);
+    } finally {
+      setIsDeletingPartner(false);
+    }
   };
 
   const filtered = useMemo(
@@ -301,30 +377,237 @@ export const PartnersOnboardingModule: React.FC<{
                 <th className="py-2.5 px-3 font-black">Liquor / Customs License</th>
                 <th className="py-2.5 px-3 font-black">Credit / Fleet</th>
                 <th className="py-2.5 px-3 font-black">Compliance</th>
+                <th className="py-2.5 px-3 font-black text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50">
-                  <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">{p.code}</td>
-                  <td className="py-2.5 px-3 font-montserrat font-bold text-slate-800">{p.partnerType}</td>
-                  <td className="py-2.5 px-3 font-semibold text-slate-900">
-                    {p.companyName} · <span className="text-slate-500 font-normal">{p.contactPerson}</span>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-500 font-medium">
+                    No trade partners onboarded in this category yet.
                   </td>
-                  <td className="py-2.5 px-3 text-slate-600">{p.regionName}</td>
-                  <td className="py-2.5 px-3 font-mono-tabular text-slate-700">
-                    {p.liquorLicenseNo} (Exp: {p.licenseExpiry})
-                  </td>
-                  <td className="py-2.5 px-3 font-mono-tabular">
-                    {p.partnerType === 'Logistics' ? p.fleetCapacity : formatKes(p.creditLimit)}
-                  </td>
-                  <td className="py-2.5 px-3 text-[#1E9E60] font-bold">{p.complianceStatus}</td>
                 </tr>
-              ))}
+              ) : (
+                filtered.map((p) => (
+                  <tr key={p.id} className="hover:bg-slate-50">
+                    <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">{p.code}</td>
+                    <td className="py-2.5 px-3 font-montserrat font-bold text-slate-800">{p.partnerType}</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-900">
+                      {p.companyName}
+                      {p.contactPerson && <span className="text-slate-500 font-normal"> · {p.contactPerson}</span>}
+                      {p.phone && <div className="text-[11px] text-slate-500 font-mono-tabular">{p.phone}</div>}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600">{p.regionName || '-'}</td>
+                    <td className="py-2.5 px-3 font-mono-tabular text-slate-700">
+                      {p.liquorLicenseNo} {p.licenseExpiry && <span className="text-slate-500 text-[11px]">(Exp: {p.licenseExpiry})</span>}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono-tabular">
+                      {p.partnerType === 'Logistics' ? p.fleetCapacity || '-' : formatKes(p.creditLimit)}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                        p.complianceStatus === 'Verified'
+                          ? 'bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40'
+                          : p.complianceStatus === 'Expired'
+                          ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                          : 'bg-amber-100 text-amber-800 border border-amber-300'
+                      }`}>
+                        {p.complianceStatus}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditPartner(p)}
+                          className="p-1.5 bg-slate-100 hover:bg-[#0A006E] hover:text-[#FFDE00] text-slate-700 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Partner"
+                          aria-label="Edit Partner"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingPartner(p)}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Partner"
+                          aria-label="Delete Partner"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Edit Partner Modal */}
+      {editingPartner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-montserrat font-black text-[#0A006E]">
+                Edit {editingPartner.partnerType}: {editingPartner.code}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingPartner(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEditPartner} className="space-y-3.5 text-xs">
+              <div>
+                <label className="font-montserrat font-bold text-slate-700">Company Name *</label>
+                <input
+                  required
+                  type="text"
+                  value={editCompanyName}
+                  onChange={(e) => setEditCompanyName(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Contact Person</label>
+                  <input
+                    type="text"
+                    value={editContactPerson}
+                    onChange={(e) => setEditContactPerson(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Phone</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Email</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">License No</label>
+                  <input
+                    type="text"
+                    value={editLicenseNo}
+                    onChange={(e) => setEditLicenseNo(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-mono-tabular"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Compliance Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as Partner['complianceStatus'])}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-montserrat font-bold"
+                  >
+                    <option value="Verified">Verified</option>
+                    <option value="Pending Review">Pending Review</option>
+                    <option value="Expired">Expired</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">
+                    {editingPartner.partnerType === 'Logistics' ? 'Fleet Capacity' : 'Credit Limit (KES)'}
+                  </label>
+                  {editingPartner.partnerType === 'Logistics' ? (
+                    <input
+                      type="text"
+                      value={editFleet}
+                      onChange={(e) => setEditFleet(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      value={editCreditLimit}
+                      onChange={(e) => setEditCreditLimit(Number(e.target.value))}
+                      className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-mono-tabular"
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingPartner(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-montserrat font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl font-montserrat font-black cursor-pointer shadow-md"
+                >
+                  Save Partner Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Partner Confirmation Modal */}
+      {deletingPartner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border-2 border-rose-600 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-montserrat font-black text-slate-900">
+                Delete Trade Partner Permanently?
+              </h3>
+              <p className="text-xs text-slate-600">
+                Are you sure you want to delete this partner record? This action is permanent and cannot be undone.
+              </p>
+            </div>
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 space-y-1 text-xs">
+              <div className="font-montserrat font-bold text-slate-900">{deletingPartner.companyName}</div>
+              <div className="text-slate-600">Code: <span className="font-mono font-bold text-[#0A006E]">{deletingPartner.code}</span> · {deletingPartner.partnerType}</div>
+              <div className="text-slate-500">License: {deletingPartner.liquorLicenseNo}</div>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingPartner}
+                onClick={() => setDeletingPartner(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingPartner}
+                onClick={handleConfirmDeletePartner}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isDeletingPartner ? 'Deleting...' : 'Permanently Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -354,8 +637,10 @@ export const DocumentsAndCreditNotesModule: React.FC<{
   const [customerName, setCustomerName] = useState('');
   const [creditReason, setCreditReason] = useState('Breakage in Bonded Transit / Short-Landed Case');
   const [selectedProdId, setSelectedProdId] = useState(products[0]?.id || '');
-  const [creditBottles, setCreditBottles] = useState<number>(6);
-  const [creditUnitPrice, setCreditUnitPrice] = useState<number>(3850);
+  const [creditBottles, setCreditBottles] = useState<number>(1);
+  const [creditUnitPrice, setCreditUnitPrice] = useState<number>(
+    products[0]?.wholesalePriceKes || products[0]?.baseWholesalePrice || 0
+  );
 
   const visibleDocs = useMemo(() => {
     return filterDocType === 'All'
@@ -383,8 +668,8 @@ export const DocumentsAndCreditNotesModule: React.FC<{
       branchName: br.name,
       regionId: reg.id,
       regionName: reg.name,
-      customerName: customerName.trim() || 'Licensed Trade Account',
-      customerLicenseNo: 'CREDIT-ADJ-VERIFIED',
+      customerName: customerName.trim() || 'Direct Trade Account',
+      customerLicenseNo: '',
       itemsSummary: JSON.stringify([
         {
           productId: prod.id,
@@ -403,7 +688,7 @@ export const DocumentsAndCreditNotesModule: React.FC<{
       totalAmount,
       paymentMethod: 'Ledger Credit Offset',
       status: 'Credited',
-      relatedInvoiceNo: refInvoiceNo.trim() || 'INV-GENERAL',
+      relatedInvoiceNo: refInvoiceNo.trim() || '',
       creditReason,
       createdBy: currentUser.name,
       createdByRole: currentUser.role,
@@ -694,11 +979,15 @@ export const ComplianceModule: React.FC<{
   );
   const [skuRef, setSkuRef] = useState(products[0]?.sku || '');
   const [branchName, setBranchName] = useState(branches[0]?.name || '');
-  const [stampStart, setStampStart] = useState('EX-9950001');
-  const [stampEnd, setStampEnd] = useState('EX-9955000');
-  const [dutyPaid, setDutyPaid] = useState<number>(640000);
-  const [expiryDate, setExpiryDate] = useState('2027-10-30');
-  const [inspectorName, setInspectorName] = useState('KRA Customs & Excise Auditor K. Mutua');
+  const [stampStart, setStampStart] = useState('');
+  const [stampEnd, setStampEnd] = useState('');
+  const [dutyPaid, setDutyPaid] = useState<number>(0);
+  const [expiryDate, setExpiryDate] = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [inspectorName, setInspectorName] = useState('');
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -917,7 +1206,18 @@ export const HrAndRbacModule: React.FC<{
   staffList: StaffMember[];
   branches: Branch[];
   onCreateStaff: (newStaff: Omit<StaffMember, 'id' | 'createdAt'>) => Promise<void>;
-}> = ({ currentUser, staffList, branches, onCreateStaff }) => {
+  onUpdateStaff?: (staffId: string, updates: Partial<StaffMember>) => Promise<void>;
+  onSetStaffStatus?: (staffId: string, status: 'Active' | 'Suspended' | 'Terminated') => Promise<void>;
+  onDeleteStaff?: (staffId: string) => Promise<void>;
+}> = ({
+  currentUser,
+  staffList,
+  branches,
+  onCreateStaff,
+  onUpdateStaff,
+  onSetStaffStatus,
+  onDeleteStaff,
+}) => {
   const creatableRoles = ROLE_PERMISSIONS[currentUser.role].canCreateRoles;
 
   const [name, setName] = useState('');
@@ -933,10 +1233,43 @@ export const HrAndRbacModule: React.FC<{
   );
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  // Edit Staff Modal State
+  const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState<StaffRole>('HR');
+  const [editBranchId, setEditBranchId] = useState('');
+  const [editStatus, setEditStatus] = useState<'Active' | 'Suspended' | 'Terminated'>('Active');
+  const [editPin, setEditPin] = useState('');
+
+  // Delete Staff Modal State (Requirement 3: Prompt question if they are sure they want to delete because it is permanent)
+  const [deletingStaff, setDeletingStaff] = useState<StaffMember | null>(null);
+  const [isDeletingStaff, setIsDeletingStaff] = useState(false);
+
   const isGoogleRole = selectedRole === 'Admin' || selectedRole === 'Accountant';
 
   const handleRandomizePin = () => {
     setPin(String(Math.floor(100000 + Math.random() * 900000)));
+  };
+
+  const handleRandomizeEditPin = () => {
+    setEditPin(String(Math.floor(100000 + Math.random() * 900000)));
+  };
+
+  const canManageStaff = (staff: StaffMember): boolean => {
+    // Current user cannot delete or suspend self
+    if (staff.id === currentUser.id) return false;
+    if (currentUser.role === 'Admin') return true;
+    if (currentUser.role === 'HR') {
+      return staff.role !== 'Admin';
+    }
+    if (currentUser.role === 'Branch Manager') {
+      return (
+        staff.branchId === currentUser.branchId &&
+        (staff.role === 'Counter Cashier' || staff.role === 'Affiliate Sales Representative')
+      );
+    }
+    return false;
   };
 
   const handleProvisionStaff = async (e: React.FormEvent) => {
@@ -960,8 +1293,8 @@ export const HrAndRbacModule: React.FC<{
       role: effectiveRole,
       authMethod: effectiveAuthMethod,
       pin: effectiveAuthMethod === 'pin' ? pin : undefined,
-      branchId: assignedBranch?.id || 'br-hq-metro',
-      branchName: assignedBranch?.name || 'Main Branch (Head Office)',
+      branchId: assignedBranch?.id || '',
+      branchName: assignedBranch?.name || 'Main Branch',
       status: 'Active',
       createdBy: currentUser.name,
       createdByRole: currentUser.role,
@@ -977,22 +1310,81 @@ export const HrAndRbacModule: React.FC<{
     handleRandomizePin();
   };
 
+  const handleOpenEdit = (staff: StaffMember) => {
+    setEditingStaff(staff);
+    setEditName(staff.name);
+    setEditEmail(staff.email);
+    setEditRole(staff.role);
+    setEditBranchId(staff.branchId);
+    setEditStatus(staff.status);
+    setEditPin(staff.pin || String(Math.floor(100000 + Math.random() * 900000)));
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff || !onUpdateStaff) return;
+    const branch = branches.find((b) => b.id === editBranchId) || branches[0];
+    const effectiveAuth = editRole === 'Admin' || editRole === 'Accountant' ? 'google' : 'pin';
+
+    await onUpdateStaff(editingStaff.id, {
+      name: editName.trim(),
+      email: editEmail.trim().toLowerCase(),
+      role: editRole,
+      authMethod: effectiveAuth,
+      branchId: branch?.id || editingStaff.branchId,
+      branchName: branch?.name || editingStaff.branchName,
+      status: editStatus,
+      pin: effectiveAuth === 'pin' ? editPin : undefined,
+    });
+
+    setFeedback(`Updated staff account for ${editName.trim()} successfully.`);
+    setEditingStaff(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingStaff || !onDeleteStaff) return;
+    setIsDeletingStaff(true);
+    try {
+      await onDeleteStaff(deletingStaff.id);
+      setFeedback(`Permanently deleted staff member ${deletingStaff.name}.`);
+      setDeletingStaff(null);
+    } finally {
+      setIsDeletingStaff(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-[#FFDE00] hover-card-lift border-2 border-[#0A006E] rounded-2xl p-5 relative overflow-hidden">
         <div className="silent-scanner-beam-dark" />
         <div className="relative z-10">
           <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-            Strict Hierarchical Role Provisioning & Access Control
+            Strict Hierarchical Role Provisioning & Staff Governance
           </span>
           <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
-            HR & Organizational Role Onboarding Chain
+            HR & Organizational Staff Directory & Access Control
           </h2>
           <p className="text-xs font-medium text-slate-900 mt-0.5">
-            Enforcing production governance: <strong>Admin</strong> creates <strong>HR</strong> → <strong>HR</strong> creates <strong>Accountant, Sales Manager, Branch Manager, Inventory Controller, Cashier, Affiliate Rep</strong> → <strong>Branch Manager</strong> creates branch-scoped <strong>Counter Cashiers & Affiliate Sales Representatives</strong>.
+            Enforce role onboarding, edit details, suspend/terminate access, or permanently remove staff records with full audit logging.
           </p>
         </div>
       </div>
+
+      {feedback && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 border-2 border-[#34D186] text-xs text-emerald-950 font-montserrat font-bold flex items-center justify-between gap-3 animate-success-pop shadow-md">
+          <div className="flex items-center gap-3">
+            <AnimatedSuccessTickIcon size="sm" />
+            <span>{feedback}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeedback(null)}
+            className="p-1 hover:bg-emerald-100 rounded-lg text-emerald-800 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {creatableRoles.length === 0 ? (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900">
@@ -1001,7 +1393,7 @@ export const HrAndRbacModule: React.FC<{
       ) : (
         <form
           onSubmit={handleProvisionStaff}
-          className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
+          className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs"
         >
           <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <h3 className="text-sm font-montserrat font-black text-[#0A006E] flex items-center gap-2">
@@ -1012,13 +1404,6 @@ export const HrAndRbacModule: React.FC<{
               Allowed Roles: <strong>{creatableRoles.join(', ')}</strong>
             </span>
           </div>
-
-          {feedback && (
-            <div className="p-3.5 rounded-2xl bg-emerald-50 border-2 border-[#34D186] text-xs text-emerald-950 font-montserrat font-bold flex items-center gap-3 animate-success-pop shadow-md">
-              <AnimatedSuccessTickIcon size="sm" />
-              <span>{feedback}</span>
-            </div>
-          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
             <div>
@@ -1081,9 +1466,9 @@ export const HrAndRbacModule: React.FC<{
             {!isGoogleRole ? (
               <div className="sm:col-span-2">
                 <label className="font-montserrat font-bold text-slate-700">
-                  Assigned 6-Digit Authentication PIN (Required for non-Admin/Accountant)
+                  Assigned 6-Digit Authentication PIN (Enlarged Digits)
                 </label>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-3 mt-1.5">
                   <input
                     required
                     type="text"
@@ -1091,14 +1476,14 @@ export const HrAndRbacModule: React.FC<{
                     pattern="\d{6}"
                     value={pin}
                     onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="w-44 px-3 py-2 bg-white border-2 border-[#0A006E] rounded-xl font-mono-tabular font-bold text-sm tracking-widest text-[#0A006E]"
+                    className="w-52 h-13 px-4 bg-white border-2 border-[#0A006E] rounded-2xl font-mono-tabular font-black text-2xl tracking-widest text-[#0A006E] shadow-xs text-center"
                   />
                   <button
                     type="button"
                     onClick={handleRandomizePin}
-                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-montserrat font-bold hover:bg-slate-50 cursor-pointer"
+                    className="px-4 py-3 bg-white hover:bg-[#FFDE00] border border-slate-300 hover:border-[#0A006E] rounded-xl text-xs font-montserrat font-bold text-[#0A006E] cursor-pointer transition-colors"
                   >
-                    Generate New 6-Digit PIN
+                    Generate New PIN
                   </button>
                 </div>
               </div>
@@ -1112,7 +1497,7 @@ export const HrAndRbacModule: React.FC<{
 
           <button
             type="submit"
-            className="px-5 py-2.5 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
+            className="px-5 py-2.5 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
             <UserPlus className="w-4 h-4" />
             Create Staff Account & Activate Role Permissions
@@ -1120,7 +1505,7 @@ export const HrAndRbacModule: React.FC<{
         </form>
       )}
 
-      {/* Active Staff Directory */}
+      {/* Organization Staff Directory Table */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
@@ -1131,16 +1516,16 @@ export const HrAndRbacModule: React.FC<{
               exportReportToPDF(
                 'HR Staff & Role-Based Access Directory',
                 `Exported by ${currentUser.name}`,
-                ['Name', 'Email', 'Role', 'Auth Method', 'Branch', 'Created By', 'Last Login', 'Device'],
+                ['Name', 'Email', 'Role', 'Status', 'Auth Method', 'Branch', 'Created By', 'Last Login'],
                 staffList.map((s) => [
                   s.name,
                   s.email,
                   s.role,
+                  s.status,
                   s.authMethod === 'google' ? 'Google OAuth' : `6-Digit PIN (${s.pin || '******'})`,
                   s.branchName,
                   `${s.createdBy} (${s.createdByRole})`,
                   s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString() : 'Never',
-                  s.lastDevice || 'N/A',
                 ]),
                 'Vaairo_HR_Staff_Directory'
               )
@@ -1156,44 +1541,336 @@ export const HrAndRbacModule: React.FC<{
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
-                <th className="py-2.5 px-3 font-black">Staff Name</th>
-                <th className="py-2.5 px-3 font-black">Role</th>
-                <th className="py-2.5 px-3 font-black">Auth Mode & Credential</th>
+                <th className="py-2.5 px-3 font-black">Staff Name & Email</th>
+                <th className="py-2.5 px-3 font-black">Role & Status</th>
+                <th className="py-2.5 px-3 font-black">Auth Mode & PIN</th>
                 <th className="py-2.5 px-3 font-black">Assigned Branch</th>
                 <th className="py-2.5 px-3 font-black">Provisioned By</th>
-                <th className="py-2.5 px-3 font-black">Last Login & Device</th>
+                <th className="py-2.5 px-3 font-black">Last Login</th>
+                <th className="py-2.5 px-3 font-black text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {staffList.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50">
-                  <td className="py-2.5 px-3 font-semibold text-slate-900">
-                    {s.name} · <span className="text-slate-500 font-normal">{s.email}</span>
-                  </td>
-                  <td className="py-2.5 px-3 font-montserrat font-black text-[#0A006E]">{s.role}</td>
-                  <td className="py-2.5 px-3 font-mono-tabular">
-                    {s.authMethod === 'google' ? (
-                      <span className="text-[#0A006E] font-bold">Google OAuth</span>
-                    ) : (
-                      <span className="text-slate-900 font-bold">
-                        PIN: {s.pin}
+              {staffList.map((s) => {
+                const canManage = canManageStaff(s);
+                return (
+                  <tr key={s.id} className="hover:bg-slate-50">
+                    <td className="py-2.5 px-3 font-semibold text-slate-900">
+                      <div>{s.name}</div>
+                      <div className="text-slate-500 font-normal text-[11px]">{s.email}</div>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="font-montserrat font-black text-[#0A006E]">{s.role}</div>
+                      <span className={`inline-flex items-center px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold ${
+                        s.status === 'Active'
+                          ? 'bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40'
+                          : s.status === 'Suspended'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-rose-100 text-rose-800 border border-rose-300'
+                      }`}>
+                        {s.status}
                       </span>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-700">{s.branchName}</td>
-                  <td className="py-2.5 px-3 text-slate-600">
-                    {s.createdBy} ({s.createdByRole})
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-500 font-mono-tabular">
-                    {s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleTimeString() : 'Pending'} ·{' '}
-                    {s.lastDevice || 'No session yet'}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono-tabular">
+                      {s.authMethod === 'google' ? (
+                        <span className="text-[#0A006E] font-bold">Google OAuth</span>
+                      ) : (
+                        <span className="text-slate-900 font-bold bg-slate-100 px-2 py-1 rounded-lg">
+                          PIN: <span className="font-extrabold text-[#0A006E] tracking-wider">{s.pin}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-700">{s.branchName}</td>
+                    <td className="py-2.5 px-3 text-slate-600">
+                      {s.createdBy} ({s.createdByRole})
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500 font-mono-tabular">
+                      {s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleTimeString() : 'Pending'}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      {canManage ? (
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(s)}
+                            className="px-2 py-1 bg-slate-100 hover:bg-[#0A006E] hover:text-[#FFDE00] text-slate-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                            title="Edit Staff Member"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            Edit
+                          </button>
+
+                          {s.status === 'Active' && (
+                            <button
+                              type="button"
+                              onClick={() => onSetStaffStatus?.(s.id, 'Suspended')}
+                              className="px-2 py-1 bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                              title="Suspend Staff Access"
+                            >
+                              <PauseCircle className="w-3 h-3" />
+                              Suspend
+                            </button>
+                          )}
+
+                          {s.status === 'Suspended' && (
+                            <button
+                              type="button"
+                              onClick={() => onSetStaffStatus?.(s.id, 'Active')}
+                              className="px-2 py-1 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                              title="Reactivate Staff Account"
+                            >
+                              <PlayCircle className="w-3 h-3" />
+                              Activate
+                            </button>
+                          )}
+
+                          {s.status !== 'Terminated' && (
+                            <button
+                              type="button"
+                              onClick={() => onSetStaffStatus?.(s.id, 'Terminated')}
+                              className="px-2 py-1 bg-rose-50 hover:bg-rose-500 hover:text-white text-rose-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                              title="Terminate Staff Account"
+                            >
+                              <XCircle className="w-3 h-3" />
+                              Terminate
+                            </button>
+                          )}
+
+                          {s.status === 'Terminated' && (
+                            <button
+                              type="button"
+                              onClick={() => onSetStaffStatus?.(s.id, 'Active')}
+                              className="px-2 py-1 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                              title="Reactivate Terminated Staff"
+                            >
+                              <PlayCircle className="w-3 h-3" />
+                              Activate
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setDeletingStaff(s)}
+                            className="p-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 rounded-lg transition-colors cursor-pointer"
+                            title="Permanently Delete Staff"
+                            aria-label={`Permanently Delete ${s.name}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">
+                          {s.id === currentUser.id ? 'Current User' : 'Restricted'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Edit Staff Modal */}
+      {editingStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-montserrat font-black text-[#0A006E]">
+                Edit Staff Account: {editingStaff.name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingStaff(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Full Legal Name *</label>
+                  <input
+                    required
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Corporate Email *</label>
+                  <input
+                    required
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">ERP Role</label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value as StaffRole)}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-montserrat font-black text-[#0A006E]"
+                  >
+                    {creatableRoles.includes(editRole) ? (
+                      creatableRoles.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value={editRole}>{editRole}</option>
+                        {creatableRoles.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Account Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) =>
+                      setEditStatus(e.target.value as 'Active' | 'Suspended' | 'Terminated')
+                    }
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-montserrat font-bold"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Suspended">Suspended</option>
+                    <option value="Terminated">Terminated</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="font-montserrat font-bold text-slate-700">Assigned Branch</label>
+                  <select
+                    value={editBranchId}
+                    onChange={(e) => setEditBranchId(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.code} · {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {editRole !== 'Admin' && editRole !== 'Accountant' && (
+                  <div className="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-1.5">
+                    <label className="font-montserrat font-bold text-slate-700">
+                      Assigned 6-Digit PIN (Enlarged Digits)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        maxLength={6}
+                        pattern="\d{6}"
+                        value={editPin}
+                        onChange={(e) => setEditPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        className="w-48 h-12 px-3 bg-white border-2 border-[#0A006E] rounded-xl font-mono-tabular font-black text-xl tracking-widest text-[#0A006E] text-center"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRandomizeEditPin}
+                        className="px-3.5 py-2.5 bg-white hover:bg-[#FFDE00] border border-slate-300 rounded-xl font-montserrat font-bold text-xs text-[#0A006E] cursor-pointer"
+                      >
+                        Generate New PIN
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingStaff(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-montserrat font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl font-montserrat font-black cursor-pointer shadow-md"
+                >
+                  Save Staff Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Staff Permanent Confirmation Modal (Prompting Question per Requirement 3) */}
+      {deletingStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border-2 border-rose-600 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto border-2 border-rose-200 shadow-xs">
+              <AlertTriangle className="w-8 h-8 stroke-[2.5]" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <span className="text-[11px] font-montserrat font-black uppercase tracking-wider text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
+                Permanent Removal Notice
+              </span>
+              <h3 className="text-lg sm:text-xl font-montserrat font-black text-slate-900">
+                Are you sure you want to permanently delete this staff member?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                This action is <strong>permanent</strong> and cannot be undone. All login credentials, authentication PIN codes, and role assignments will be permanently eradicated.
+              </p>
+            </div>
+
+            <div className="bg-rose-50/80 border border-rose-200 rounded-2xl p-4 space-y-1.5 text-xs">
+              <div className="font-montserrat font-black text-slate-900 text-sm">{deletingStaff.name}</div>
+              <div className="text-slate-600">
+                Email: <span className="font-medium text-slate-800">{deletingStaff.email}</span>
+              </div>
+              <div className="flex items-center gap-2 pt-0.5">
+                <span className="font-montserrat font-black text-[#0A006E]">{deletingStaff.role}</span>
+                <span className="text-slate-400">·</span>
+                <span className="text-slate-600">{deletingStaff.branchName}</span>
+                <span className="text-slate-400">·</span>
+                <span className="font-mono text-slate-500 font-bold">{deletingStaff.status}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingStaff}
+                onClick={() => setDeletingStaff(null)}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition-colors"
+              >
+                Cancel / Keep Staff
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingStaff}
+                onClick={handleConfirmDelete}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                {isDeletingStaff ? 'Deleting...' : 'Permanently Delete Staff'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -186,7 +186,7 @@ export function getProductImageUrl(product: {
   name?: string;
   brand?: string;
   subCategory?: string;
-  category?: StockCategory;
+  category?: string;
 }): string {
   if (product.image && product.image.trim().length > 0) {
     return normalizeProductImageUrl(product.image);
@@ -386,7 +386,7 @@ export function generateStudioBottleSvgDataUri(product: {
   subCategory?: string;
   volumeMl?: number;
   alcoholPercentage?: number;
-  category?: StockCategory;
+  category?: string;
 }): string {
   const svgCacheKey = `${product.brand || ''}|${product.name || ''}|${product.subCategory || ''}|${product.volumeMl || ''}|${product.alcoholPercentage || ''}`;
   const cachedSvg = resolvedSvgDataUriCache.get(svgCacheKey);

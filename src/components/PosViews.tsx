@@ -472,7 +472,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
               );
               const branchStock = activeBranch
                 ? getBranchBottleStock(product, activeBranch.id)
-                : product.totalBottles ?? 360;
+                : product.totalBottles ?? 0;
 
               return (
                 <div
