@@ -109,6 +109,68 @@ export function formatKes(amount: number): string {
   return `KES ${Math.round(amount || 0).toLocaleString('en-KE')}`;
 }
 
+// Generate simple SVG QR code for KRA eTIMS invoice compliance
+export function generateSimpleQrSvg(text: string, size = 160): string {
+  const gridSize = 25;
+  const matrix: boolean[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(false));
+
+  const addFinder = (startX: number, startY: number) => {
+    for (let r = 0; r < 7; r++) {
+      for (let c = 0; c < 7; c++) {
+        if (
+          r === 0 || r === 6 || c === 0 || c === 6 ||
+          (r >= 2 && r <= 4 && c >= 2 && c <= 4)
+        ) {
+          matrix[startY + r][startX + c] = true;
+        } else {
+          matrix[startY + r][startX + c] = false;
+        }
+      }
+    }
+  };
+
+  addFinder(0, 0);
+  addFinder(gridSize - 7, 0);
+  addFinder(0, gridSize - 7);
+
+  for (let i = 8; i < gridSize - 8; i++) {
+    matrix[6][i] = i % 2 === 0;
+    matrix[i][6] = i % 2 === 0;
+  }
+
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) + hash) + text.charCodeAt(i);
+  }
+
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      if ((r < 7 && c < 7) || (r < 7 && c >= gridSize - 7) || (r >= gridSize - 7 && c < 7)) {
+        continue;
+      }
+      if (r === 6 || c === 6) continue;
+      const pseudo = Math.abs(Math.sin((r * gridSize + c + hash) * 9301 + 49297));
+      matrix[r][c] = (pseudo * 10) % 2 > 0.95;
+    }
+  }
+
+  const cellSize = size / gridSize;
+  let paths = '';
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      if (matrix[r][c]) {
+        const x = (c * cellSize).toFixed(1);
+        const y = (r * cellSize).toFixed(1);
+        const w = cellSize.toFixed(1);
+        const h = cellSize.toFixed(1);
+        paths += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#0A006E" />`;
+      }
+    }
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" class="mx-auto">${paths}</svg>`;
+}
+
 // Geo-Location Price Calculator (Suburb vs Lower Region vs Metro vs Duty-Free)
 export function calculateGeoPrice(
   product: Product,

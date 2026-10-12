@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   ShoppingCart,
   Search,
@@ -10,6 +10,19 @@ import {
   MapPin,
   Store,
   Briefcase,
+  Barcode,
+  Camera,
+  Bluetooth,
+  Volume2,
+  VolumeX,
+  Sparkles,
+  Coins,
+  CreditCard,
+  Smartphone,
+  Zap,
+  ScanLine,
+  X,
+  AlertCircle,
 } from 'lucide-react';
 import {
   Product,
@@ -26,6 +39,8 @@ import { calculateGeoPrice, formatKes } from '../erpUtils';
 import { NAIROBI_DRINKS_SUB_CATEGORIES } from '../data/nairobiDrinksCatalog';
 import { ProductImage } from './ProductImage';
 import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
+import { PhoneBarcodeScannerModal } from './PhoneBarcodeScannerModal';
+import { playPosBeep, triggerScanHaptic, isAudioMuted, toggleAudioMuted } from '../utils/audioBeep';
 
 interface PosViewsProps {
   mode: 'retail' | 'wholesale';
@@ -116,6 +131,195 @@ export const PosViews: React.FC<PosViewsProps> = ({
   );
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Barcode Scanner Integration (Phone, Desktop USB & Bluetooth Scanners)
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [isPhoneScannerOpen, setIsPhoneScannerOpen] = useState(false);
+  const [scanNotification, setScanNotification] = useState<{
+    type: 'success' | 'error' | 'case';
+    text: string;
+    productName?: string;
+    price?: number;
+    qtyInCart?: number;
+    timestamp: number;
+  } | null>(null);
+  const [soundMuted, setSoundMuted] = useState(() => isAudioMuted());
+  const [cashTendered, setCashTendered] = useState<number>(0);
+  const [lastScannedBarcode, setLastScannedBarcode] = useState<string>('');
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScanBarcode = useCallback(
+    (rawBarcode: string): { success: boolean; product?: Product; message?: string } => {
+      const code = rawBarcode.trim();
+      if (!code) return { success: false, message: 'Empty barcode' };
+      const digitsOnly = code.replace(/\D/g, '');
+
+      // 1. Exact match on barcode, caseBarcode or SKU
+      let matched = products.find(
+        (p) =>
+          (p.barcode && p.barcode.trim() === code) ||
+          (p.caseBarcode && p.caseBarcode.trim() === code) ||
+          (p.sku && p.sku.toLowerCase() === code.toLowerCase())
+      );
+
+      let isCaseScan = false;
+      if (matched && matched.caseBarcode && matched.caseBarcode.trim() === code) {
+        isCaseScan = true;
+      }
+
+      // 2. Normalized digit matching (EAN-13, UPC-A 12 vs 13 digits with leading zero, ITF-14)
+      if (!matched && digitsOnly) {
+        matched = products.find((p) => {
+          const pCase = p.caseBarcode ? p.caseBarcode.replace(/\D/g, '') : '';
+          const pBottle = p.barcode ? p.barcode.replace(/\D/g, '') : '';
+
+          if (pCase && (pCase === digitsOnly || pCase.endsWith(digitsOnly) || digitsOnly.endsWith(pCase))) {
+            isCaseScan = true;
+            return true;
+          }
+          if (pBottle) {
+            if (pBottle === digitsOnly) return true;
+            if (pBottle.padStart(13, '0') === digitsOnly.padStart(13, '0')) return true;
+          }
+          return false;
+        });
+      }
+
+      if (!matched) {
+        playPosBeep('error');
+        setScanNotification({
+          type: 'error',
+          text: `Barcode "${code}" not found in bonded product catalog`,
+          timestamp: Date.now(),
+        });
+        return { success: false, message: `Barcode "${code}" not found` };
+      }
+
+      const targetUnit: 'Bottle' | 'Case' = isCaseScan
+        ? 'Case'
+        : mode === 'wholesale'
+        ? 'Case'
+        : 'Bottle';
+
+      playPosBeep(isCaseScan ? 'case' : 'success');
+      triggerScanHaptic();
+      setLastScannedBarcode(code);
+
+      let updatedQty = 1;
+      setCart((prev) => {
+        const existingIdx = prev.findIndex(
+          (item) => item.product.id === matched!.id && item.unitMode === targetUnit
+        );
+        if (existingIdx >= 0) {
+          updatedQty = prev[existingIdx].quantityUnits + 1;
+          const updated = [...prev];
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            quantityUnits: updatedQty,
+          };
+          return updated;
+        }
+        return [...prev, { product: matched!, unitMode: targetUnit, quantityUnits: 1 }];
+      });
+
+      const geoPrice = calculateGeoPrice(
+        matched,
+        activeRegion,
+        mode === 'wholesale' ? 'wholesale' : 'retail'
+      );
+      const unitPrice = targetUnit === 'Case' ? geoPrice.casePrice : geoPrice.unitBottlePrice;
+
+      setScanNotification({
+        type: isCaseScan ? 'case' : 'success',
+        text: `Scanned & Added: ${matched.name}`,
+        productName: matched.name,
+        price: unitPrice,
+        qtyInCart: updatedQty,
+        timestamp: Date.now(),
+      });
+
+      setBarcodeInput('');
+      return { success: true, product: matched };
+    },
+    [products, mode, activeRegion]
+  );
+
+  // Global listener for Desktop USB & Bluetooth Handheld Barcode Scanners (HID Wedge mode)
+  useEffect(() => {
+    let keyBuffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const activeTag = activeEl?.tagName?.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea';
+      const isQuickScanInput = activeEl?.id === 'barcode-scanner-quick-input';
+
+      const now = Date.now();
+      const charInterval = now - lastKeyTime;
+      lastKeyTime = now;
+
+      if (e.key === 'Enter') {
+        if (isQuickScanInput && barcodeInput.trim()) {
+          e.preventDefault();
+          handleScanBarcode(barcodeInput);
+          return;
+        }
+
+        if (keyBuffer.length >= 3) {
+          e.preventDefault();
+          const code = keyBuffer;
+          keyBuffer = '';
+          handleScanBarcode(code);
+        } else {
+          keyBuffer = '';
+        }
+        return;
+      }
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (isInput && !isQuickScanInput) {
+          if (charInterval < 50) {
+            keyBuffer += e.key;
+          } else {
+            keyBuffer = '';
+          }
+        } else {
+          if (charInterval > 85 && !isQuickScanInput) {
+            keyBuffer = e.key;
+          } else {
+            keyBuffer += e.key;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleScanBarcode, barcodeInput]);
+
+  // Auto-dismiss scan notification banner after 4.5 seconds
+  useEffect(() => {
+    if (scanNotification) {
+      const timer = setTimeout(() => {
+        setScanNotification(null);
+      }, 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [scanNotification]);
+
+  // Pre-curated sample barcodes for instant 1-click test simulation
+  const sampleTestBarcodes = useMemo(() => {
+    return products
+      .filter((p) => Boolean(p.barcode))
+      .slice(0, 10)
+      .map((p) => ({
+        barcode: p.barcode!,
+        name: p.name,
+        sku: p.sku,
+        category: p.category,
+      }));
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -379,6 +583,187 @@ export const PosViews: React.FC<PosViewsProps> = ({
             </select>
           </div>
         </div>
+      </div>
+
+      {/* RETAIL CHECKOUT BARCODE SCANNER STATION (Phone Camera + Desktop USB + Bluetooth Scanners) */}
+      <div className="bg-white border-2 border-[#0A006E] rounded-3xl p-5 shadow-lg space-y-4 relative overflow-hidden">
+        <div className="silent-scanner-beam" />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3 relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-md shrink-0">
+              <Barcode className="w-7 h-7 stroke-[2.2]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-montserrat font-black text-base text-[#0A006E]">
+                  Retail Barcode Scanner Checkout Station
+                </h3>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Desktop & Bluetooth Scanners Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Scan with phone camera, desktop USB laser gun, or Bluetooth handheld barcode scanner — automatically adds to checkout.
+              </p>
+            </div>
+          </div>
+
+          {/* Scanner Controls & Modalities */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Phone Camera Scanner Launcher */}
+            <button
+              type="button"
+              onClick={() => setIsPhoneScannerOpen(true)}
+              className="px-4 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-2 cursor-pointer shadow-md transition hover:scale-[1.02]"
+            >
+              <Camera className="w-4 h-4 text-[#FFDE00]" />
+              Phone / Camera Scanner
+            </button>
+
+            {/* Sound Mute/Unmute Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = toggleAudioMuted();
+                setSoundMuted(next);
+              }}
+              className={`px-3 py-2 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer border transition ${
+                !soundMuted
+                  ? 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  : 'bg-rose-50 border-rose-200 text-rose-700'
+              }`}
+              title={soundMuted ? 'Unmute POS Chime' : 'Mute POS Chime'}
+            >
+              {soundMuted ? (
+                <>
+                  <VolumeX className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Beep Muted</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Beep ON</span>
+                </>
+              )}
+            </button>
+
+            {/* Auto-focus Gun Input */}
+            <button
+              type="button"
+              onClick={() => barcodeInputRef.current?.focus()}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition"
+              title="Click to focus input for barcode gun"
+            >
+              <Bluetooth className="w-3.5 h-3.5 text-[#0A006E]" />
+              <span>Focus Gun</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Barcode Quick-Scan Input Row */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center relative z-10">
+          <div className="md:col-span-8 relative">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none text-slate-400">
+              <ScanLine className="w-5 h-5 text-[#0A006E]" />
+            </div>
+            <input
+              ref={barcodeInputRef}
+              id="barcode-scanner-quick-input"
+              type="text"
+              value={barcodeInput}
+              onChange={(e) => setBarcodeInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleScanBarcode(barcodeInput);
+                }
+              }}
+              placeholder="Scan product barcode (Desktop USB gun, Bluetooth scanner, or type EAN-13 & press Enter)..."
+              className="w-full pl-12 pr-28 py-3 bg-slate-50 border-2 border-slate-200 focus:border-[#0A006E] focus:bg-white rounded-2xl text-xs sm:text-sm font-mono-tabular text-slate-900 transition focus:outline-none focus:ring-4 focus:ring-[#0A006E]/10"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {barcodeInput && (
+                <button
+                  type="button"
+                  onClick={() => setBarcodeInput('')}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleScanBarcode(barcodeInput)}
+                disabled={!barcodeInput.trim()}
+                className="px-3 py-1.5 bg-[#FFDE00] hover:bg-amber-400 disabled:opacity-40 text-[#0A006E] font-montserrat font-black text-xs rounded-xl cursor-pointer transition shadow-xs"
+              >
+                Scan Item
+              </button>
+            </div>
+          </div>
+
+          {/* Quick-Test Sample Barcode Selector */}
+          <div className="md:col-span-4">
+            <div className="relative">
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleScanBarcode(e.target.value);
+                    e.target.value = '';
+                  }
+                }}
+                defaultValue=""
+                className="w-full py-3 px-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl text-xs font-montserrat font-semibold text-slate-700 cursor-pointer focus:outline-none focus:border-[#0A006E]"
+              >
+                <option value="" disabled>
+                  ⚡ Test Sample Onboarded Barcodes...
+                </option>
+                {sampleTestBarcodes.map((item) => (
+                  <option key={item.barcode} value={item.barcode}>
+                    {item.name} ({item.barcode})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Scan Notification Toast Banner */}
+        {scanNotification && (
+          <div
+            className={`p-3.5 rounded-2xl border-2 flex items-center justify-between gap-3 text-xs font-montserrat font-bold shadow-md animate-fade-in relative z-10 ${
+              scanNotification.type === 'error'
+                ? 'bg-rose-50 border-rose-400 text-rose-950'
+                : 'bg-emerald-50 border-emerald-500 text-emerald-950'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              {scanNotification.type === 'error' ? (
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              )}
+              <div className="truncate">
+                <span>{scanNotification.text}</span>
+                {scanNotification.price && (
+                  <span className="ml-2 font-mono-tabular text-emerald-700">
+                    · {formatKes(scanNotification.price)}
+                    {scanNotification.qtyInCart && ` (Cart Qty: ${scanNotification.qtyInCart})`}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setScanNotification(null)}
+              className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main 2-Column POS Grid */}
@@ -645,21 +1030,99 @@ export const PosViews: React.FC<PosViewsProps> = ({
               </select>
             </div>
 
-            <div>
+            <div className="sm:col-span-2 space-y-2">
               <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                Payment / Settlement
+                Payment Method & Checkout Settlement
               </label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs text-slate-900"
-              >
-                <option value="M-Pesa Till / Instant Card">M-Pesa Till / Instant Card</option>
-                <option value="Cash Till Settlement">Cash Till Settlement</option>
-                <option value="Corporate Bank EFT / M-Pesa Paybill">Corporate Bank EFT / M-Pesa Paybill</option>
-                <option value="Distributor Credit Line">Distributor Credit Line</option>
-              </select>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {[
+                  { id: 'M-Pesa Till / Instant Card', label: 'M-Pesa / Card', icon: Smartphone },
+                  { id: 'Cash Till Settlement', label: 'Cash Till', icon: Coins },
+                  { id: 'Corporate Bank EFT / M-Pesa Paybill', label: 'Bank / Paybill', icon: CreditCard },
+                  { id: 'Distributor Credit Line', label: 'Credit Line', icon: Zap },
+                ].map((pm) => {
+                  const IconC = pm.icon;
+                  const isSel = paymentMethod === pm.id;
+                  return (
+                    <button
+                      key={pm.id}
+                      type="button"
+                      onClick={() => setPaymentMethod(pm.id)}
+                      className={`py-2 px-2.5 rounded-xl border text-[11px] font-montserrat font-bold flex items-center justify-center gap-1.5 cursor-pointer transition ${
+                        isSel
+                          ? 'bg-[#0A006E] text-white border-[#0A006E] shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <IconC className={`w-3.5 h-3.5 ${isSel ? 'text-[#FFDE00]' : 'text-slate-500'}`} />
+                      <span className="truncate">{pm.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Quick Cash Tendered & Change Calculator for Counter Cashiers */}
+            {paymentMethod === 'Cash Till Settlement' && (
+              <div className="sm:col-span-2 bg-amber-50/80 border border-amber-300 rounded-2xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-montserrat font-black text-amber-950">
+                  <span className="flex items-center gap-1.5">
+                    <Coins className="w-4 h-4 text-amber-600" />
+                    Cash Tendered & Change Due Calculator
+                  </span>
+                  <span className="font-mono-tabular text-[#0A006E]">
+                    Payable: <strong>{formatKes(grandTotal)}</strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Cash Tendered (KES)</label>
+                    <input
+                      type="number"
+                      value={cashTendered || ''}
+                      onChange={(e) => setCashTendered(Number(e.target.value))}
+                      placeholder={String(grandTotal)}
+                      className="w-full mt-1 px-3 py-2 bg-white border-2 border-amber-300 focus:border-[#0A006E] rounded-xl text-xs font-mono-tabular font-black text-slate-900 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Change Due (KES)</label>
+                    <div className="mt-1 px-3 py-2 bg-white border-2 border-amber-300 rounded-xl text-xs font-mono-tabular font-black flex items-center justify-between">
+                      <span className={cashTendered >= grandTotal ? 'text-emerald-700' : 'text-amber-700'}>
+                        {cashTendered >= grandTotal
+                          ? formatKes(cashTendered - grandTotal)
+                          : cashTendered > 0
+                          ? `Short ${formatKes(grandTotal - cashTendered)}`
+                          : 'KES 0'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Cash Bill Shortcuts */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  <span className="text-[10px] font-montserrat font-bold text-slate-500 mr-1">Quick Bills:</span>
+                  <button
+                    type="button"
+                    onClick={() => setCashTendered(grandTotal)}
+                    className="px-2.5 py-1 bg-white hover:bg-amber-100 border border-amber-300 text-[10px] font-montserrat font-bold text-amber-900 rounded-lg cursor-pointer transition shadow-2xs"
+                  >
+                    Exact Amount
+                  </button>
+                  {[1000, 2000, 3000, 5000, 10000, 20000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setCashTendered(amt)}
+                      className="px-2 py-1 bg-white hover:bg-amber-100 border border-amber-300 text-[10px] font-mono-tabular font-bold text-amber-900 rounded-lg cursor-pointer transition shadow-2xs"
+                    >
+                      {amt.toLocaleString()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {mode === 'wholesale' && (
               <div className="sm:col-span-2">
@@ -778,6 +1241,13 @@ export const PosViews: React.FC<PosViewsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Live Phone Camera Barcode Scanner Viewfinder Modal */}
+      <PhoneBarcodeScannerModal
+        isOpen={isPhoneScannerOpen}
+        onClose={() => setIsPhoneScannerOpen(false)}
+        onBarcodeScanned={handleScanBarcode}
+      />
     </div>
   );
 };

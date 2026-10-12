@@ -695,6 +695,88 @@ export default function App() {
     }
   };
 
+  const handleDeleteBranch = async (branchId: string) => {
+    const branchToDelete = branches.find((b) => b.id === branchId);
+    if (!branchToDelete) return;
+    if (branchToDelete.isMain || branchToDelete.code === 'BR-HQ-001') {
+      triggerToast('error', 'HQ Protected', 'HQ Main Branch cannot be deleted as it is the primary operating depot.');
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'branches', branchId));
+      triggerToast('success', 'Branch Decommissioned', `${branchToDelete.name} (${branchToDelete.code}) has been removed.`);
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Decommissioned Branch ${branchToDelete.code}`,
+          'Branches & Transfers',
+          `Removed branch ${branchToDelete.name}`,
+          branchToDelete.name,
+          'Info'
+        );
+      }
+    } catch (error) {
+      triggerToast('error', 'Branch Deletion Failed', 'Could not delete branch.');
+      handleFirestoreError(error, OperationType.WRITE, 'branches');
+    }
+  };
+
+  const handleSetMainBranch = async (branchId: string) => {
+    try {
+      for (const b of branches) {
+        await updateDoc(doc(db, 'branches', b.id), {
+          isMain: b.id === branchId,
+        });
+      }
+      triggerToast('success', 'Main Branch Updated', 'Selected branch is now designated as the MAIN Headquarters depot.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'branches');
+    }
+  };
+
+  const handleBatchCreateProducts = async (
+    newProducts: Omit<Product, 'id' | 'createdAt'>[]
+  ): Promise<number> => {
+    let successCount = 0;
+    try {
+      const now = Date.now();
+      for (let i = 0; i < newProducts.length; i++) {
+        const prod = newProducts[i];
+        const id = `prod-${now}-${i}`;
+        const fullProd: Product = {
+          ...prod,
+          id,
+          createdAt: new Date().toISOString(),
+        };
+        await setDoc(doc(db, 'products', id), fullProd);
+        successCount++;
+      }
+      triggerToast(
+        'success',
+        'CSV Batch Import Completed',
+        `Successfully imported ${successCount} products into bonded inventory.`
+      );
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Bulk Imported ${successCount} SKUs via CSV`,
+          'Inventory & Auto-SKU',
+          `Imported ${successCount} products with barcodes and prices via CSV file`,
+          currentUser.branchName,
+          'Info'
+        );
+      }
+    } catch (error) {
+      triggerToast('error', 'CSV Import Error', 'Some items could not be saved to database.');
+      handleFirestoreError(error, OperationType.WRITE, 'products');
+    }
+    return successCount;
+  };
+
   const handleCreateStockTransfer = async (
     trDraft: Omit<StockTransfer, 'id' | 'createdAt'>,
     updatedProd: { productId: string; newBranchStockJson: string }
@@ -1056,6 +1138,7 @@ export default function App() {
         <StatusFeedbackToast status={toastStatus} onDismiss={() => setToastStatus(null)} />
         <AuthGateway
           staffList={staffList}
+          branches={branches}
           onGoogleLogin={handleGoogleLogin}
           onPinLogin={handlePinLogin}
           onOpenCustomerPortal={() => setStandaloneCustomerPortal(true)}
@@ -1365,6 +1448,7 @@ export default function App() {
               products={products}
               branches={branches}
               onCreateProduct={handleCreateProduct}
+              onBatchCreateProducts={handleBatchCreateProducts}
             />
           )}
 
@@ -1377,6 +1461,8 @@ export default function App() {
               partners={partners}
               transfers={transfers}
               onCreateBranch={handleCreateBranch}
+              onDeleteBranch={handleDeleteBranch}
+              onSetMainBranch={handleSetMainBranch}
               onCreateStockTransfer={handleCreateStockTransfer}
             />
           )}

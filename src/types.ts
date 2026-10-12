@@ -54,6 +54,7 @@ export interface Branch {
   managerName: string;
   exciseBondLicense: string;
   status: 'Operational' | 'Audit Hold' | 'Closed';
+  isMain?: boolean;
   createdAt: string;
 }
 

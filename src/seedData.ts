@@ -3,6 +3,8 @@ import {
   deleteDoc,
   collection,
   getDocs,
+  setDoc,
+  updateDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -44,6 +46,79 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
           data.companyName?.toLowerCase().includes('sample');
         if (isMock) {
           await deleteDoc(doc(db, 'partners', partnerDoc.id)).catch(() => {});
+        }
+      }
+    }
+
+    // 4. Purge dummy branches and retain only genuine branches, with HQ as MAIN branch
+    const branchesSnapshot = await getDocs(collection(db, 'branches')).catch(() => null);
+    let hqFoundDocId: string | null = null;
+    const deletedBranchIds: string[] = [];
+
+    if (branchesSnapshot && !branchesSnapshot.empty) {
+      for (const branchDoc of branchesSnapshot.docs) {
+        const data = branchDoc.data();
+        const code = (data.code || '').toUpperCase().trim();
+        const name = (data.name || '').toLowerCase();
+
+        // Dummy branches specified by user:
+        // BR-LWR-003 Lower Basin Regional Depot
+        // BR-SUB-002 Northgate Suburban Distribution Hub
+        const isDummyBranch =
+          code === 'BR-LWR-003' ||
+          code === 'BR-SUB-002' ||
+          name.includes('lower basin') ||
+          name.includes('northgate suburban');
+
+        if (isDummyBranch) {
+          deletedBranchIds.push(branchDoc.id);
+          await deleteDoc(doc(db, 'branches', branchDoc.id)).catch(() => {});
+          continue;
+        }
+
+        // Check if this is the HQ branch
+        if (code === 'BR-HQ-001' || name.includes('central bonded') || name.includes('flagship') || name.includes('hq')) {
+          hqFoundDocId = branchDoc.id;
+          await updateDoc(doc(db, 'branches', branchDoc.id), {
+            code: 'BR-HQ-001',
+            name: 'HQ - Main Branch',
+            isMain: true,
+            status: 'Operational',
+          }).catch(() => {});
+        }
+      }
+    }
+
+    // If HQ branch was not found or collection had no HQ, create genuine HQ MAIN branch
+    const targetHqId = hqFoundDocId || 'br-hq-001';
+    if (!hqFoundDocId) {
+      await setDoc(doc(db, 'branches', targetHqId), {
+        id: targetHqId,
+        code: 'BR-HQ-001',
+        name: 'HQ - Main Branch',
+        isMain: true,
+        regionId: 'reg-metro-core',
+        regionName: 'Metropolitan CBD & High-Street Zone',
+        address: 'Metropolitan CBD & High-Street Zone',
+        managerName: 'Operations Director',
+        exciseBondLicense: 'KRA-BOND-2026-8841A',
+        status: 'Operational',
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
+    // 5. Reassign any staff whose branch was deleted to HQ - Main Branch
+    if (deletedBranchIds.length > 0) {
+      const staffSnapshot = await getDocs(collection(db, 'staff')).catch(() => null);
+      if (staffSnapshot && !staffSnapshot.empty) {
+        for (const staffDoc of staffSnapshot.docs) {
+          const sdata = staffDoc.data();
+          if (deletedBranchIds.includes(sdata.branchId)) {
+            await updateDoc(doc(db, 'staff', staffDoc.id), {
+              branchId: targetHqId,
+              branchName: 'HQ - Main Branch',
+            }).catch(() => {});
+          }
         }
       }
     }

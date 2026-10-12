@@ -17,12 +17,18 @@ import {
   Clock,
   Sparkles,
   Keyboard,
+  Lock,
+  Zap,
+  Loader2,
+  MapPin,
+  ChevronRight,
 } from 'lucide-react';
-import { StaffMember, StaffRole } from '../types';
+import { StaffMember, StaffRole, Branch } from '../types';
 import { AnimatedErrorPromptIcon } from './AnimatedFeedback';
 
 interface AuthGatewayProps {
   staffList: StaffMember[];
+  branches?: Branch[];
   onGoogleLogin: (targetRole: 'Admin' | 'Accountant') => Promise<void>;
   onPinLogin: (pin: string, selectedRole?: StaffRole, selectedStaffId?: string) => Promise<void>;
   onOpenCustomerPortal: () => void;
@@ -104,6 +110,7 @@ const STAFF_DEPARTMENTS: {
 
 export const AuthGateway: React.FC<AuthGatewayProps> = ({
   staffList,
+  branches = [],
   onGoogleLogin,
   onPinLogin,
   onOpenCustomerPortal,
@@ -111,12 +118,15 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
   isSubmitting,
 }) => {
   const [selectedBox, setSelectedBox] = useState<'Admin' | 'Accountant' | 'Staff'>('Admin');
-  const [screenView, setScreenView] = useState<'boxes' | 'departments' | 'users' | 'pin'>('boxes');
+  const [screenView, setScreenView] = useState<'boxes' | 'departments' | 'branches' | 'users' | 'pin'>('boxes');
   const [selectedDepartment, setSelectedDepartment] = useState<StaffRole | null>(null);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [selectedBranchName, setSelectedBranchName] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<StaffMember | null>(null);
   const [pinDigits, setPinDigits] = useState<string>('');
   const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
   const pinInputRef = useRef<HTMLInputElement>(null);
+  const lastSubmittedPinRef = useRef<string>('');
 
   // Auto-focus hidden input whenever entering the PIN screen
   useEffect(() => {
@@ -128,54 +138,93 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
       return () => clearTimeout(timer);
     } else {
       setIsInputFocused(false);
+      lastSubmittedPinRef.current = '';
     }
   }, [screenView]);
+
+  // Safely trigger verification in the effect phase (after render) once 6 digits are entered
+  useEffect(() => {
+    if (
+      screenView === 'pin' &&
+      pinDigits.length === 6 &&
+      !isSubmitting &&
+      lastSubmittedPinRef.current !== pinDigits
+    ) {
+      lastSubmittedPinRef.current = pinDigits;
+      onPinLogin(
+        pinDigits,
+        selectedDepartment || undefined,
+        selectedUser?.id || undefined
+      );
+    } else if (pinDigits.length < 6) {
+      lastSubmittedPinRef.current = '';
+    }
+  }, [screenView, pinDigits, isSubmitting, selectedDepartment, selectedUser, onPinLogin]);
 
   const handleOpenStaffDepartments = () => {
     setSelectedBox('Staff');
     setSelectedDepartment(null);
+    setSelectedBranchId(null);
+    setSelectedBranchName(null);
     setSelectedUser(null);
+    lastSubmittedPinRef.current = '';
     setPinDigits('');
     setScreenView('departments');
   };
 
   const handleSelectDepartment = (role: StaffRole) => {
     setSelectedDepartment(role);
+    setSelectedBranchId(null);
+    setSelectedBranchName(null);
     setSelectedUser(null);
+    lastSubmittedPinRef.current = '';
+    setPinDigits('');
+    setScreenView('branches');
+  };
+
+  const handleSelectBranch = (branchId: string, branchName: string) => {
+    setSelectedBranchId(branchId);
+    setSelectedBranchName(branchName);
+    setSelectedUser(null);
+    lastSubmittedPinRef.current = '';
     setPinDigits('');
     setScreenView('users');
   };
 
   const handleSelectUser = (user: StaffMember) => {
     setSelectedUser(user);
+    lastSubmittedPinRef.current = '';
     setPinDigits('');
     setScreenView('pin');
+    setTimeout(() => {
+      pinInputRef.current?.focus();
+      setIsInputFocused(true);
+    }, 50);
   };
 
   const handleBypassToPin = () => {
     setSelectedUser(null);
+    lastSubmittedPinRef.current = '';
     setPinDigits('');
     setScreenView('pin');
+    setTimeout(() => {
+      pinInputRef.current?.focus();
+      setIsInputFocused(true);
+    }, 50);
   };
 
   const handleDigitPress = (digit: string) => {
-    setPinDigits((prev) => {
-      if (prev.length < 6) {
-        const next = prev + digit;
-        if (next.length === 6) {
-          onPinLogin(next, selectedDepartment || undefined, selectedUser?.id || undefined);
-        }
-        return next;
-      }
-      return prev;
-    });
+    if (isSubmitting) return;
+    setPinDigits((prev) => (prev.length < 6 ? prev + digit : prev));
   };
 
   const handleBackspace = () => {
+    lastSubmittedPinRef.current = '';
     setPinDigits((prev) => prev.slice(0, -1));
   };
 
   const handleClear = () => {
+    lastSubmittedPinRef.current = '';
     setPinDigits('');
     pinInputRef.current?.focus();
   };
@@ -205,6 +254,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (pinDigits.length === 6 && !isSubmitting) {
+          lastSubmittedPinRef.current = pinDigits;
           onPinLogin(
             pinDigits,
             selectedDepartment || undefined,
@@ -220,13 +270,100 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
 
   const activeDeptMeta = STAFF_DEPARTMENTS.find((d) => d.role === selectedDepartment);
 
-  // Filter existing active staff members for the selected department
+  // List of branches available for selection in the chosen department
+  const departmentBranches = useMemo(() => {
+    const map = new Map<
+      string,
+      { id: string; name: string; regionName?: string; code?: string; isMain?: boolean; count: number }
+    >();
+
+    // 1. Add all operational genuine branches (excluding purged dummy branches)
+    branches.forEach((b) => {
+      const code = (b.code || '').toUpperCase();
+      const name = (b.name || '').toLowerCase();
+      const isDummy =
+        code === 'BR-LWR-003' ||
+        code === 'BR-SUB-002' ||
+        name.includes('lower basin') ||
+        name.includes('northgate suburban');
+
+      if (b.status !== 'Closed' && !isDummy) {
+        map.set(b.id, {
+          id: b.id,
+          name: b.name,
+          regionName: b.regionName,
+          code: b.code,
+          isMain: Boolean(b.isMain || code === 'BR-HQ-001' || name.includes('hq')),
+          count: 0,
+        });
+      }
+    });
+
+    // 2. Count staff in this department for each branch, and add any missing branches from staff records
+    staffList.forEach((s) => {
+      if (s.role === selectedDepartment && s.status === 'Active') {
+        const branchKey = s.branchId || s.branchName;
+        if (!branchKey) return;
+        const sBranchName = (s.branchName || '').toLowerCase();
+        if (
+          sBranchName.includes('lower basin') ||
+          sBranchName.includes('northgate suburban')
+        ) {
+          return; // Ignore dummy branch references on staff
+        }
+
+        if (map.has(s.branchId)) {
+          map.get(s.branchId)!.count += 1;
+        } else if (map.has(branchKey)) {
+          map.get(branchKey)!.count += 1;
+        } else {
+          map.set(branchKey, {
+            id: s.branchId || branchKey,
+            name: s.branchName || 'HQ - Main Branch',
+            regionName: undefined,
+            code: undefined,
+            isMain: false,
+            count: 1,
+          });
+        }
+      }
+    });
+
+    // Fallback if no branches registered yet
+    if (map.size === 0) {
+      map.set('br-hq-001', {
+        id: 'br-hq-001',
+        name: 'HQ - Main Branch',
+        regionName: 'Metropolitan CBD & High-Street Zone',
+        code: 'BR-HQ-001',
+        isMain: true,
+        count: 0,
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      // Keep HQ / Main branch at top, then sort by staff count
+      if (a.isMain && !b.isMain) return -1;
+      if (!a.isMain && b.isMain) return 1;
+      return b.count - a.count;
+    });
+  }, [branches, staffList, selectedDepartment]);
+
+  // Total active staff count in this department across all branches
+  const totalDepartmentStaffCount = useMemo(() => {
+    if (!selectedDepartment) return 0;
+    return staffList.filter((s) => s.role === selectedDepartment && s.status === 'Active').length;
+  }, [staffList, selectedDepartment]);
+
+  // Filter existing active staff members for the selected department AND selected branch
   const departmentUsers = useMemo(() => {
     if (!selectedDepartment) return [];
-    return staffList.filter(
-      (s) => s.role === selectedDepartment && s.status === 'Active'
-    );
-  }, [staffList, selectedDepartment]);
+    return staffList.filter((s) => {
+      if (s.role !== selectedDepartment || s.status !== 'Active') return false;
+      if (!selectedBranchId || selectedBranchId === 'all') return true;
+      return s.branchId === selectedBranchId || s.branchName === selectedBranchName;
+    });
+  }, [staffList, selectedDepartment, selectedBranchId, selectedBranchName]);
 
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
@@ -406,22 +543,22 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
           </div>
         )}
 
-        {/* VIEW 3: ON-SCREEN EXISTING USER SELECTION FOR CHOSEN DEPARTMENT */}
-        {screenView === 'users' && selectedDepartment && (
-          <div className="max-w-4xl mx-auto w-full space-y-6">
+        {/* VIEW 2.5: ON-SCREEN BRANCH SELECTION FOR CHOSEN DEPARTMENT */}
+        {screenView === 'branches' && selectedDepartment && (
+          <div className="max-w-5xl mx-auto w-full space-y-6">
             <div className="flex items-center justify-between border-b border-slate-200 pb-4">
               <button
                 type="button"
                 onClick={() => setScreenView('departments')}
-                className="px-4 py-2.5 rounded-2xl bg-[#F0F2F0] hover:bg-[#FFDE00] border-2 border-[#0A006E] text-[#0A006E] font-montserrat font-black text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
+                className="px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-100 border border-slate-200 text-[#0A006E] font-montserrat font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition shadow-xs"
               >
                 <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
                 Departments
               </button>
 
               <div className="text-center">
-                <span className="text-[10px] font-montserrat font-black text-slate-500 uppercase tracking-widest block">
-                  STAFF SELECTION
+                <span className="text-[10px] font-montserrat font-bold text-slate-500 uppercase tracking-widest block">
+                  STEP 2 OF 3 · SELECT BRANCH STATION
                 </span>
                 <h2 className="text-xl sm:text-2xl font-montserrat font-black italic text-[#0A006E]">
                   {activeDeptMeta?.title || selectedDepartment}
@@ -431,7 +568,155 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
               <button
                 type="button"
                 onClick={handleBypassToPin}
-                className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-[#0A006E] font-montserrat font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-[#0A006E] font-montserrat font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Direct PIN entry"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                Direct PIN
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <p className="text-xs font-montserrat font-semibold text-slate-600">
+                  Select your operational branch to view staff assigned to this station:
+                </p>
+                <span className="text-xs font-montserrat font-bold text-[#0A006E]">
+                  {totalDepartmentStaffCount} Active {selectedDepartment} Staff Systemwide
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* All Branches Option */}
+                <div
+                  onClick={() => handleSelectBranch('all', 'All Operational Branches')}
+                  className="group bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-[#0A006E] rounded-2xl p-5 flex flex-col justify-between gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md relative overflow-hidden"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-xl bg-[#0A006E] text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        <Users className="w-6 h-6 stroke-[2.2]" />
+                      </div>
+                      <div>
+                        <h4 className="font-montserrat font-bold text-slate-900 text-base group-hover:text-[#0A006E]">
+                          All Branches
+                        </h4>
+                        <span className="text-xs text-slate-500 font-medium">
+                          Roster across all stations
+                        </span>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#0A006E]/10 text-[#0A006E]">
+                      All
+                    </span>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-montserrat font-bold text-[#0A006E]">
+                    <span>{totalDepartmentStaffCount} Staff Total</span>
+                    <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                      View All →
+                    </span>
+                  </div>
+                </div>
+
+                {/* Individual Operational Branches */}
+                {departmentBranches.map((branch) => (
+                  <div
+                    key={branch.id}
+                    onClick={() => handleSelectBranch(branch.id, branch.name)}
+                    className="group bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#0A006E] rounded-2xl p-5 flex flex-col justify-between gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md relative overflow-hidden"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-12 h-12 rounded-xl bg-slate-100 group-hover:bg-[#0A006E] text-[#0A006E] group-hover:text-white flex items-center justify-center shrink-0 shadow-xs transition-colors">
+                          <Building2 className="w-6 h-6 stroke-[2.2]" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-montserrat font-bold text-slate-900 text-base truncate group-hover:text-[#0A006E]">
+                            {branch.name}
+                          </h4>
+                          <div className="flex items-center gap-1 text-xs text-slate-500 truncate mt-0.5">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{branch.regionName || branch.code || 'Active Station'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                        {branch.isMain && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-[#FFDE00] text-[#0A006E] border border-amber-300 shadow-2xs">
+                            <Building2 className="w-2.5 h-2.5" />
+                            HQ · MAIN BRANCH
+                          </span>
+                        )}
+                        {branch.count > 0 ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                            {branch.count} Staff
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 shrink-0">
+                            0 Staff
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-montserrat font-bold text-[#0A006E]">
+                      <span className="text-slate-500 font-mono text-[11px]">
+                        {branch.code || 'Branch'}
+                      </span>
+                      <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                        Select Branch →
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 3: ON-SCREEN EXISTING USER SELECTION FOR CHOSEN DEPARTMENT & BRANCH */}
+        {screenView === 'users' && selectedDepartment && (
+          <div className="max-w-4xl mx-auto w-full space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <button
+                type="button"
+                onClick={() => setScreenView('branches')}
+                className="px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-100 border border-slate-200 text-[#0A006E] font-montserrat font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition-colors shadow-xs"
+              >
+                <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+                Branches
+              </button>
+
+              <div className="text-center">
+                <span className="text-[10px] font-montserrat font-bold text-slate-500 uppercase tracking-widest block">
+                  STEP 3 OF 3 · SELECT YOUR NAME
+                </span>
+                <h2 className="text-xl sm:text-2xl font-montserrat font-black italic text-[#0A006E]">
+                  {activeDeptMeta?.title || selectedDepartment}
+                </h2>
+                {selectedBranchName && (
+                  <div className="mt-1 flex items-center justify-center gap-2">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-montserrat font-bold bg-[#0A006E]/10 text-[#0A006E]">
+                      <MapPin className="w-3 h-3 text-[#0A006E]" />
+                      <span>{selectedBranchName}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setScreenView('branches')}
+                      className="text-[11px] font-montserrat font-semibold text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                    >
+                      Change Branch
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleBypassToPin}
+                className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-[#0A006E] font-montserrat font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 title="Enter PIN without selecting a specific profile"
               >
                 <KeyRound className="w-3.5 h-3.5" />
@@ -440,43 +725,47 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
             </div>
 
             {departmentUsers.length === 0 ? (
-              <div className="bg-[#F0F2F0] border-2 border-slate-300 rounded-3xl p-8 sm:p-10 text-center space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center mx-auto shadow-md">
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 sm:p-10 text-center space-y-4 shadow-xs">
+                <div className="w-16 h-16 rounded-2xl bg-slate-200 text-slate-600 flex items-center justify-center mx-auto shadow-xs">
                   <Users className="w-8 h-8" />
                 </div>
                 <div className="max-w-md mx-auto space-y-1">
-                  <h3 className="text-lg font-montserrat font-black text-[#0A006E]">
-                    No Active {selectedDepartment} Staff Found
+                  <h3 className="text-lg font-montserrat font-black text-slate-900">
+                    No Active {selectedDepartment} Staff at this Branch
                   </h3>
                   <p className="text-xs text-slate-600">
-                    No active staff accounts have been provisioned for the{' '}
-                    <strong>{selectedDepartment}</strong> department yet.
-                  </p>
-                  <p className="text-[11px] text-slate-500 pt-2">
-                    Sign in as <strong>Admin</strong> via Google to create HR, then HR provisions staff in the HR & Role Provisioning module.
+                    No active staff accounts for <strong>{selectedDepartment}</strong> are currently provisioned under{' '}
+                    <strong>{selectedBranchName || 'this branch'}</strong>.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={handleBypassToPin}
-                    className="px-4 py-2.5 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md"
+                    onClick={() => setScreenView('branches')}
+                    className="px-4 py-2.5 bg-[#0A006E] text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer shadow-xs hover:bg-[#070050] transition"
                   >
-                    Enter 6-Digit PIN Directly
+                    Select Different Branch
                   </button>
                   <button
                     type="button"
-                    onClick={() => setScreenView('departments')}
-                    className="px-4 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer"
+                    onClick={() => handleSelectBranch('all', 'All Operational Branches')}
+                    className="px-4 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer hover:bg-slate-100 transition"
                   >
-                    Back to Departments
+                    View All Branches
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBypassToPin}
+                    className="px-4 py-2.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer hover:bg-slate-200 transition"
+                  >
+                    Enter PIN Directly
                   </button>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-xs font-montserrat font-bold text-slate-600">
-                  Select your name from the {departmentUsers.length} active staff member{departmentUsers.length === 1 ? '' : 's'} below to continue to the PIN terminal:
+                <p className="text-xs font-montserrat font-semibold text-slate-600">
+                  Select your name from the {departmentUsers.length} staff member{departmentUsers.length === 1 ? '' : 's'} at <strong>{selectedBranchName || 'this branch'}</strong>:
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -492,39 +781,59 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                       <div
                         key={user.id}
                         onClick={() => handleSelectUser(user)}
-                        className="group bg-[#F0F2F0] hover:bg-[#FFDE00]/25 border-2 border-slate-300 hover:border-[#0A006E] rounded-3xl p-5 flex flex-col justify-between gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative overflow-hidden"
+                        className="group bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#0A006E] rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md relative overflow-hidden"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-12 h-12 rounded-2xl bg-[#0A006E] text-[#FFDE00] font-montserrat font-black text-sm flex items-center justify-center shrink-0 border-2 border-white shadow-md group-hover:scale-105 transition-transform">
+                            <div className="w-11 h-11 rounded-xl bg-[#0A006E] text-white font-montserrat font-black text-sm flex items-center justify-center shrink-0 border border-slate-200 shadow-xs group-hover:scale-105 transition-transform">
                               {initials || 'ST'}
                             </div>
                             <div className="min-w-0">
-                              <h4 className="font-montserrat font-black text-slate-900 text-base truncate group-hover:text-[#0A006E]">
+                              <h4 className="font-montserrat font-bold text-slate-900 text-sm sm:text-base truncate group-hover:text-[#0A006E]">
                                 {user.name}
                               </h4>
-                              <div className="flex items-center gap-1 text-xs text-slate-600 truncate mt-0.5">
-                                <Building2 className="w-3.5 h-3.5 shrink-0 text-[#0A006E]" />
+                              <div className="flex items-center gap-1 text-xs text-slate-500 truncate mt-0.5">
+                                <Building2 className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                                 <span className="truncate">{user.branchName}</span>
                               </div>
                             </div>
                           </div>
 
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40 shrink-0">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                             Active
                           </span>
                         </div>
 
-                        <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 font-mono-tabular">
-                          <span className="flex items-center gap-1">
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-mono-tabular">
+                          <span className="flex items-center gap-1 text-slate-400">
                             <Clock className="w-3 h-3 text-slate-400" />
                             {user.lastLoginAt
                               ? new Date(user.lastLoginAt).toLocaleDateString()
                               : 'Ready'}
                           </span>
-                          <span className="font-montserrat font-black text-[#0A006E] group-hover:translate-x-1 transition-transform flex items-center gap-1">
-                            Enter PIN →
-                          </span>
+
+                          <div className="flex items-center gap-2">
+                            {user.pin && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedUser(user);
+                                  setScreenView('pin');
+                                  lastSubmittedPinRef.current = '';
+                                  setPinDigits(user.pin!);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-[#0A006E] hover:bg-[#070050] text-white font-montserrat font-bold text-[10px] sm:text-[11px] flex items-center gap-1 shadow-xs cursor-pointer transition active:scale-95"
+                                title="Instant 1-Tap Login"
+                              >
+                                <Zap className="w-3 h-3 text-amber-300 fill-current" />
+                                <span>Fast Login</span>
+                              </button>
+                            )}
+                            <span className="font-montserrat font-bold text-[#0A006E] group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-xs">
+                              Enter PIN →
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -535,13 +844,15 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
           </div>
         )}
 
-        {/* VIEW 4: ON-SCREEN 6-DIGIT PIN WINDOW (Imported from LIQOUR Design) */}
+        {/* VIEW 4: ENHANCED, SIMPLE & FAST PIN LOGIN WINDOW (WIDE LANDSCAPE LAYOUT) */}
         {screenView === 'pin' && (
-          <div className="max-w-md mx-auto w-full bg-[#F0F2F0] border-2 border-[#0A006E] rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-300 pb-4">
+          <div className="max-w-3xl lg:max-w-4xl mx-auto w-full bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+            {/* Top Navigation & Context */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <button
                 type="button"
                 onClick={() => {
+                  lastSubmittedPinRef.current = '';
                   setPinDigits('');
                   if (selectedDepartment) {
                     setScreenView('users');
@@ -549,54 +860,19 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                     setScreenView('departments');
                   }
                 }}
-                className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#FFDE00] border-2 border-[#0A006E] text-[#0A006E] font-montserrat font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-montserrat font-semibold text-xs flex items-center gap-2 cursor-pointer transition shadow-2xs"
               >
-                <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-                {selectedDepartment ? 'Staff List' : 'Departments'}
+                <ArrowLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>{selectedDepartment ? 'Back to Staff List' : 'Back to Departments'}</span>
               </button>
 
-              <div className="text-right">
-                <div className="text-[10px] font-montserrat font-black text-slate-500 uppercase tracking-wider">
-                  ENTER 6-DIGIT PIN
-                </div>
-                <h3 className="text-base sm:text-lg font-montserrat font-black italic text-[#0A006E]">
-                  {selectedUser ? selectedUser.name : activeDeptMeta?.title || selectedDepartment}
-                </h3>
+              <div className="flex items-center gap-2 text-xs font-montserrat font-bold text-slate-500">
+                <Lock className="w-4 h-4 text-[#0A006E]" />
+                <span className="uppercase tracking-wider">Staff PIN Terminal</span>
               </div>
             </div>
 
-            {/* Selected User Header Banner if a user was picked */}
-            {selectedUser && (
-              <div className="bg-white border-2 border-[#0A006E]/20 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-[#0A006E] text-[#FFDE00] font-montserrat font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
-                    <UserCheck className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-montserrat font-black text-[#0A006E] truncate">
-                      {selectedUser.name}
-                    </div>
-                    <div className="text-[11px] text-slate-600 truncate font-mono">
-                      {selectedUser.role} · {selectedUser.branchName}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedUser(null);
-                    setPinDigits('');
-                    setScreenView('users');
-                  }}
-                  className="px-2.5 py-1 text-[11px] font-montserrat font-bold text-[#0A006E] bg-slate-100 hover:bg-[#FFDE00] rounded-lg transition-colors cursor-pointer shrink-0"
-                >
-                  Switch
-                </button>
-              </div>
-            )}
-
-            {/* Hidden accessible input that captures mobile soft keyboard & desktop keyboard typing */}
+            {/* Hidden Input capturing physical keyboard & mobile soft keypad */}
             <input
               ref={pinInputRef}
               type="tel"
@@ -607,13 +883,6 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
               onChange={(e) => {
                 const cleaned = e.target.value.replace(/\D/g, '').slice(0, 6);
                 setPinDigits(cleaned);
-                if (cleaned.length === 6) {
-                  onPinLogin(
-                    cleaned,
-                    selectedDepartment || undefined,
-                    selectedUser?.id || undefined
-                  );
-                }
               }}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setIsInputFocused(false)}
@@ -621,149 +890,257 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
               aria-label="6-Digit Staff Security PIN Input"
             />
 
-            {/* Curved High-Visibility 6-Digit PIN Display Box (LIQOUR Terminal Spec) */}
-            <div
-              onClick={() => {
-                pinInputRef.current?.focus();
-                setIsInputFocused(true);
-              }}
-              className={`p-5 sm:p-6 rounded-[28px] bg-slate-900 border transition-all cursor-text space-y-3 shadow-inner ${
-                isInputFocused
-                  ? 'border-[#FFDE00] ring-4 ring-[#FFDE00]/30'
-                  : 'border-[#0A006E]/40'
-              }`}
-            >
-              <div className="flex items-center justify-between text-xs font-montserrat font-bold text-slate-300 px-1">
-                <span className="uppercase tracking-wider text-[#FFDE00] flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-[#FFDE00]" />
-                  Enter 6-Digit Security PIN
-                </span>
-                <span className="font-mono text-white text-xs">{pinDigits.length} / 6 Digits</span>
-              </div>
-
-              <div className="grid grid-cols-6 gap-2 sm:gap-3 py-1">
-                {[0, 1, 2, 3, 4, 5].map((idx) => {
-                  const filled = idx < pinDigits.length;
-                  const isCurrent = idx === pinDigits.length;
-                  return (
-                    <div
-                      key={idx}
-                      className={`h-16 sm:h-20 rounded-2xl flex items-center justify-center font-mono font-black border-2 transition-all select-none ${
-                        filled
-                          ? 'border-[#FFDE00] bg-[#FFDE00] text-[#0A006E] shadow-md scale-105'
-                          : isCurrent
-                          ? 'border-[#FFDE00] bg-white/15 text-white ring-4 ring-[#FFDE00]/40 scale-102'
-                          : 'border-slate-700 bg-slate-800 text-slate-500'
-                      }`}
-                    >
-                      {filled ? (
-                        <span className="text-3xl sm:text-4xl font-black text-[#0A006E] leading-none">
-                          ●
-                        </span>
-                      ) : isCurrent ? (
-                        <span className="w-2 h-7 sm:h-8 bg-[#FFDE00] animate-pulse rounded-full" />
-                      ) : (
-                        ''
-                      )}
+            {/* Landscape Wide Two-Column Presentation (Width is noticeably wider than height) */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8 items-start">
+              {/* Left Column (5 of 12 cols): Staff Profile, PIN Indicators & Fast Actions */}
+              <div className="md:col-span-5 space-y-4">
+                {/* Staff Profile Card */}
+                {selectedUser ? (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-12 h-12 rounded-xl bg-[#0A006E] text-white font-montserrat font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                        {selectedUser.name
+                          .split(' ')
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((n) => n[0].toUpperCase())
+                          .join('') || 'ST'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-montserrat font-bold text-slate-900 truncate flex items-center gap-2">
+                          <span>{selectedUser.name}</span>
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Active Account" />
+                        </div>
+                        <div className="text-xs text-slate-500 truncate mt-0.5 font-medium">
+                          {selectedUser.role} · {selectedUser.branchName}
+                        </div>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
 
-              {/* Keyboard typing active banner */}
-              <div className="flex items-center justify-between text-[11px] text-slate-400 font-montserrat font-semibold pt-1 border-t border-slate-800/80">
-                <span className="flex items-center gap-1.5 text-slate-300">
-                  <Keyboard className="w-3.5 h-3.5 text-[#FFDE00]" />
-                  <span>Physical Keyboard active (0–9)</span>
-                </span>
-                <span className="text-slate-400 font-mono">Press Enter to Unlock</span>
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedUser(null);
+                        lastSubmittedPinRef.current = '';
+                        setPinDigits('');
+                        setScreenView('users');
+                      }}
+                      className="px-2.5 py-1 text-xs font-montserrat font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      Switch
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-montserrat font-semibold text-slate-500 uppercase tracking-wide">
+                        Department Terminal
+                      </div>
+                      <div className="text-sm font-montserrat font-bold text-slate-900">
+                        {activeDeptMeta?.title || selectedDepartment || 'All Departments'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        lastSubmittedPinRef.current = '';
+                        setPinDigits('');
+                        setScreenView('departments');
+                      }}
+                      className="px-2.5 py-1 text-xs font-montserrat font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+                )}
 
-              {/* Quick Auto-Fill PIN Helpers for Authorized Department Access */}
-              {selectedDepartment === 'POS' && (
-                <div className="pt-1 text-center">
+                {/* Fast 1-Tap Login Action (When Staff has a PIN or known default) */}
+                {selectedUser?.pin ? (
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => {
+                      lastSubmittedPinRef.current = '';
+                      setPinDigits(selectedUser.pin!);
+                    }}
+                    className="w-full py-3 px-4 rounded-xl bg-[#0A006E] hover:bg-[#070050] active:scale-[0.99] text-white text-xs sm:text-sm font-montserrat font-bold flex items-center justify-center gap-2 transition shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <Zap className="w-4 h-4 text-amber-300 fill-current" />
+                    <span>Fast 1-Tap Login as {selectedUser.name.split(' ')[0]}</span>
+                  </button>
+                ) : selectedDepartment === 'Counter Cashier' ? (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      lastSubmittedPinRef.current = '';
                       setPinDigits('123456');
-                      onPinLogin('123456', selectedDepartment, selectedUser?.id);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFDE00]/20 hover:bg-[#FFDE00]/30 text-[#FFDE00] border border-[#FFDE00]/40 text-[11px] font-montserrat font-black cursor-pointer transition"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-montserrat font-semibold flex items-center justify-center gap-1.5 transition border border-slate-200 cursor-pointer disabled:opacity-50"
                   >
-                    <span>Counter Cashier PIN: 123456 (Tap to Auto-Fill)</span>
+                    <Zap className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Fast Login: Cashier PIN 123456 (Tap to Unlock)</span>
                   </button>
-                </div>
-              )}
-              {selectedDepartment === 'AFFILIATES' && (
-                <div className="pt-1 text-center">
+                ) : selectedDepartment === 'Affiliate Sales Representative' ? (
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => {
+                      lastSubmittedPinRef.current = '';
                       setPinDigits('654321');
-                      onPinLogin('654321', selectedDepartment, selectedUser?.id);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFDE00]/20 hover:bg-[#FFDE00]/30 text-[#FFDE00] border border-[#FFDE00]/40 text-[11px] font-montserrat font-black cursor-pointer transition"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-montserrat font-semibold flex items-center justify-center gap-1.5 transition border border-slate-200 cursor-pointer disabled:opacity-50"
                   >
-                    <span>Sales Rep PIN: 654321 (Tap to Auto-Fill)</span>
+                    <Zap className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Fast Login: Sales Rep PIN 654321 (Tap to Unlock)</span>
+                  </button>
+                ) : null}
+
+                {/* 6-Digit PIN Indicators Display */}
+                <div
+                  onClick={() => {
+                    pinInputRef.current?.focus();
+                    setIsInputFocused(true);
+                  }}
+                  className={`p-4 rounded-2xl bg-slate-50 border transition-all cursor-text space-y-3 ${
+                    isInputFocused
+                      ? 'border-[#0A006E] ring-2 ring-[#0A006E]/15'
+                      : 'border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs font-montserrat font-semibold text-slate-600 px-1">
+                    <span>Security PIN Status</span>
+                    <span className="font-mono text-slate-500">{pinDigits.length} / 6 Digits</span>
+                  </div>
+
+                  {/* 6 Clean Indicators: Uniform, Monochromatic Navy/Slate, No Mixed Rainbow Colors */}
+                  <div className="flex items-center justify-center gap-2.5 sm:gap-3 py-1.5">
+                    {[0, 1, 2, 3, 4, 5].map((idx) => {
+                      const filled = idx < pinDigits.length;
+                      const isCurrent = idx === pinDigits.length;
+                      return (
+                        <div
+                          key={idx}
+                          className={`w-10 h-12 sm:w-11 sm:h-13 rounded-xl flex items-center justify-center font-mono font-bold text-lg border transition-all select-none ${
+                            filled
+                              ? 'border-[#0A006E] bg-[#0A006E] text-white shadow-xs scale-102'
+                              : isCurrent
+                              ? 'border-[#0A006E] bg-white ring-2 ring-[#0A006E]/20 text-[#0A006E]'
+                              : 'border-slate-200 bg-white text-slate-300'
+                          }`}
+                        >
+                          {filled ? (
+                            <span className="w-3.5 h-3.5 rounded-full bg-white shadow-2xs" />
+                          ) : isCurrent ? (
+                            <span className="w-1.5 h-5 bg-[#0A006E] animate-pulse rounded-full" />
+                          ) : (
+                            <span className="w-2 h-2 rounded-full bg-slate-200" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 font-montserrat pt-1 border-t border-slate-200/80">
+                    <span className="flex items-center gap-1.5">
+                      <Keyboard className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Physical keyboard (0–9)</span>
+                    </span>
+                    <span className="text-slate-400 font-medium">Auto-submits on 6th digit</span>
+                  </div>
+                </div>
+
+                {/* Inline Authentication Error with Quick Clear */}
+                {authError && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 flex items-center justify-between gap-2 font-montserrat font-medium">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <AnimatedErrorPromptIcon size="sm" />
+                      <span className="truncate">{authError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClear}
+                      className="px-2 py-0.5 rounded text-[11px] font-bold text-red-700 hover:bg-red-100 underline cursor-pointer shrink-0"
+                    >
+                      Clear PIN
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column (7 of 12 cols): Keypad & Primary Unlock Button */}
+              <div className="md:col-span-7 space-y-4">
+                {/* Clean, Uniform Numeric Keypad (Single Slate Theme, No Jarring Red or Yellow) */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleDigitPress(digit)}
+                      className="py-3 sm:py-3.5 rounded-xl font-montserrat font-bold text-xl sm:text-2xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 border border-slate-200 transition active:scale-95 shadow-2xs flex items-center justify-center select-none cursor-pointer"
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className="py-3 sm:py-3.5 rounded-xl font-montserrat font-semibold text-xs sm:text-sm uppercase bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-600 border border-slate-200 transition active:scale-95 flex items-center justify-center select-none cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDigitPress('0')}
+                    className="py-3 sm:py-3.5 rounded-xl font-montserrat font-bold text-xl sm:text-2xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 border border-slate-200 transition active:scale-95 shadow-2xs flex items-center justify-center select-none cursor-pointer"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBackspace}
+                    className="py-3 sm:py-3.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-600 border border-slate-200 transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                    aria-label="Backspace"
+                  >
+                    <Delete className="w-5 h-5 stroke-[2.2]" />
                   </button>
                 </div>
-              )}
-            </div>
 
-            {/* Soft-Curved Numeric Keypad (Imported from LIQOUR Design) */}
-            <div className="grid grid-cols-3 gap-3">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                {/* Clean Primary Unlock Button (Unified Brand Navy) */}
                 <button
-                  key={digit}
                   type="button"
-                  onClick={() => handleDigitPress(digit)}
-                  className="py-4 sm:py-5 rounded-[22px] font-montserrat font-black text-2xl sm:text-3xl border transition active:scale-95 shadow-xs bg-slate-100/90 hover:bg-[#0A006E] text-slate-900 hover:text-[#FFDE00] border-slate-200/80 hover:border-[#0A006E] flex items-center justify-center select-none cursor-pointer"
+                  disabled={pinDigits.length !== 6 || isSubmitting}
+                  onClick={() => {
+                    if (pinDigits.length === 6 && !isSubmitting) {
+                      lastSubmittedPinRef.current = pinDigits;
+                      onPinLogin(
+                        pinDigits,
+                        selectedDepartment || undefined,
+                        selectedUser?.id || undefined
+                      );
+                    }
+                  }}
+                  className="w-full py-3.5 px-4 bg-[#0A006E] hover:bg-[#070050] disabled:opacity-40 text-white font-montserrat font-bold text-sm sm:text-base rounded-xl transition-all cursor-pointer shadow-md active:scale-98 flex items-center justify-center gap-2"
                 >
-                  {digit}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Verifying PIN...</span>
+                    </>
+                  ) : selectedUser ? (
+                    <>
+                      <Lock className="w-4 h-4 text-white" />
+                      <span>Unlock as {selectedUser.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4 text-white" />
+                      <span>Unlock {activeDeptMeta?.title || 'Terminal'}</span>
+                    </>
+                  )}
                 </button>
-              ))}
-              <button
-                type="button"
-                onClick={handleClear}
-                className="py-4 sm:py-5 rounded-[22px] font-montserrat font-black text-xs sm:text-sm uppercase border transition active:scale-95 bg-red-50/90 hover:bg-red-100 text-red-700 border-red-200/80 flex items-center justify-center select-none cursor-pointer"
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDigitPress('0')}
-                className="py-4 sm:py-5 rounded-[22px] font-montserrat font-black text-2xl sm:text-3xl border transition active:scale-95 shadow-xs bg-slate-100/90 hover:bg-[#0A006E] text-slate-900 hover:text-[#FFDE00] border-slate-200/80 hover:border-[#0A006E] flex items-center justify-center select-none cursor-pointer"
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={handleBackspace}
-                className="py-4 sm:py-5 rounded-[22px] font-montserrat font-black border transition active:scale-95 bg-slate-100/90 hover:bg-slate-200 text-slate-700 border-slate-200/80 flex items-center justify-center cursor-pointer select-none"
-                aria-label="Backspace"
-              >
-                <Delete className="w-6 h-6 stroke-[2.5]" />
-              </button>
+              </div>
             </div>
-
-            <button
-              type="button"
-              disabled={pinDigits.length !== 6 || isSubmitting}
-              onClick={() =>
-                onPinLogin(
-                  pinDigits,
-                  selectedDepartment || undefined,
-                  selectedUser?.id || undefined
-                )
-              }
-              className="w-full py-4 px-4 bg-[#34D186] hover:bg-[#28B873] border-2 border-[#0A006E] disabled:opacity-40 text-[#0A006E] font-montserrat font-black text-sm sm:text-base rounded-2xl transition-all cursor-pointer shadow-md active:scale-98 flex items-center justify-center gap-2"
-            >
-              {isSubmitting
-                ? 'Verifying PIN...'
-                : selectedUser
-                ? `Unlock as ${selectedUser.name}`
-                : `Unlock ${activeDeptMeta?.title || 'Terminal'}`}
-            </button>
           </div>
         )}
       </main>

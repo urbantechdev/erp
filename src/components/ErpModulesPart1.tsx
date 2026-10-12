@@ -8,6 +8,13 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Upload,
+  Trash2,
+  Star,
+  CheckCircle2,
+  AlertCircle,
+  FileSpreadsheet,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -30,6 +37,7 @@ import {
 } from '../erpUtils';
 import { NAIROBI_DRINKS_SUB_CATEGORIES } from '../data/nairobiDrinksCatalog';
 import { ProductImage } from './ProductImage';
+import { CsvInventoryImportModal } from './CsvInventoryImportModal';
 
 // ---------------------------------------------------------------------------
 // 1. OVERVIEW DASHBOARD
@@ -348,7 +356,8 @@ export const InventoryModule: React.FC<{
   products: Product[];
   branches: Branch[];
   onCreateProduct: (prod: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;
-}> = ({ products, branches, onCreateProduct }) => {
+  onBatchCreateProducts?: (prods: Omit<Product, 'id' | 'createdAt'>[]) => Promise<number>;
+}> = ({ products, branches, onCreateProduct, onBatchCreateProducts }) => {
   const [name, setName] = useState('');
   const [stockCategory, setStockCategory] = useState<StockCategory>('IPS');
   const [subCategory, setSubCategory] = useState<LiquorSubCategory>('Whisky');
@@ -359,11 +368,14 @@ export const InventoryModule: React.FC<{
   const [supplierName, setSupplierName] = useState('');
   const [importEntryRef, setImportEntryRef] = useState('');
   const [exciseStampSeries, setExciseStampSeries] = useState('');
+  const [barcode, setBarcode] = useState('');
+  const [caseBarcode, setCaseBarcode] = useState('');
   const [baseLandedCost, setBaseLandedCost] = useState<number>(0);
   const [baseWholesalePrice, setBaseWholesalePrice] = useState<number>(0);
   const [baseRetailPrice, setBaseRetailPrice] = useState<number>(0);
   const [initialBottles, setInitialBottles] = useState<number>(0);
   const [targetBranchId, setTargetBranchId] = useState<string>(branches[0]?.id || '');
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   // Catalog filter state
   const [filterStockCat, setFilterStockCat] = useState<'ALL' | StockCategory>('ALL');
@@ -400,8 +412,16 @@ export const InventoryModule: React.FC<{
       branchMap[b.id] = b.id === (targetBranchId || branches[0]?.id) ? initialBottles : 0;
     });
 
+    const resolvedBarcode =
+      barcode.trim() ||
+      String(Math.floor(6000000000000 + Math.random() * 999999999999));
+    const resolvedCaseBarcode =
+      caseBarcode.trim() || `1${resolvedBarcode.padStart(13, '0')}`;
+
     await onCreateProduct({
       sku: previewAutoSku,
+      barcode: resolvedBarcode,
+      caseBarcode: resolvedCaseBarcode,
       name: name.trim(),
       category: stockCategory,
       subCategory,
@@ -431,6 +451,8 @@ export const InventoryModule: React.FC<{
     });
 
     setName('');
+    setBarcode('');
+    setCaseBarcode('');
   };
 
   const handleExportInventoryPDF = () => {
@@ -491,8 +513,17 @@ export const InventoryModule: React.FC<{
             Complete with all 12 Liquor Categories from the VAAIRO catalog and deterministic Auto-SKU generation for new products.
           </p>
         </div>
-        <div className="flex items-center gap-2 relative z-10">
+        <div className="flex items-center gap-2 relative z-10 flex-wrap">
           <button
+            type="button"
+            onClick={() => setIsCsvModalOpen(true)}
+            className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Upload CSV Inventory
+          </button>
+          <button
+            type="button"
             onClick={handleExportInventoryPDF}
             className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md"
           >
@@ -500,6 +531,7 @@ export const InventoryModule: React.FC<{
             Download PDF
           </button>
           <button
+            type="button"
             onClick={handleExportInventoryCSV}
             className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
           >
@@ -615,6 +647,28 @@ export const InventoryModule: React.FC<{
               type="text"
               value={exciseStampSeries}
               onChange={(e) => setExciseStampSeries(e.target.value)}
+              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+            />
+          </div>
+
+          <div>
+            <label className="font-montserrat font-bold text-slate-700">Bottle Barcode (EAN-13 / UPC)</label>
+            <input
+              type="text"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              placeholder="e.g. 5000267014005 (or leave blank to auto-generate)"
+              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+            />
+          </div>
+
+          <div>
+            <label className="font-montserrat font-bold text-slate-700">Master Case Barcode (ITF-14)</label>
+            <input
+              type="text"
+              value={caseBarcode}
+              onChange={(e) => setCaseBarcode(e.target.value)}
+              placeholder="e.g. 15000267014002 (or leave blank to auto-link)"
               className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
             />
           </div>
@@ -823,6 +877,24 @@ export const InventoryModule: React.FC<{
           </div>
         )}
       </div>
+
+      {/* CSV Bulk Import Modal */}
+      <CsvInventoryImportModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        branches={branches}
+        onBatchImport={async (drafts) => {
+          if (onBatchCreateProducts) {
+            return await onBatchCreateProducts(drafts);
+          }
+          let count = 0;
+          for (const d of drafts) {
+            await onCreateProduct(d);
+            count++;
+          }
+          return count;
+        }}
+      />
     </div>
   );
 };
@@ -838,6 +910,8 @@ export const BranchesAndTransfersModule: React.FC<{
   partners: Partner[];
   transfers: StockTransfer[];
   onCreateBranch: (b: Omit<Branch, 'id' | 'createdAt'>) => Promise<void>;
+  onDeleteBranch?: (branchId: string) => Promise<void>;
+  onSetMainBranch?: (branchId: string) => Promise<void>;
   onCreateStockTransfer: (
     tr: Omit<StockTransfer, 'id' | 'createdAt'>,
     updatedProduct: { productId: string; newBranchStockJson: string }
@@ -850,12 +924,16 @@ export const BranchesAndTransfersModule: React.FC<{
   partners,
   transfers,
   onCreateBranch,
+  onDeleteBranch,
+  onSetMainBranch,
   onCreateStockTransfer,
 }) => {
   const [branchName, setBranchName] = useState('');
   const [branchRegionId, setBranchRegionId] = useState(regions[0]?.id || '');
   const [branchAddress, setBranchAddress] = useState('');
   const [exciseBondLicense, setExciseBondLicense] = useState('');
+  const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [fromBranchId, setFromBranchId] = useState(branches[0]?.id || '');
   const [toBranchId, setToBranchId] = useState(branches[1]?.id || branches[0]?.id || '');
@@ -1096,6 +1174,154 @@ export const BranchesAndTransfersModule: React.FC<{
           </button>
         </form>
       </div>
+
+      {/* Genuine Branches Directory */}
+      <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-[#0A006E]" />
+              <h3 className="text-sm sm:text-base font-montserrat font-black text-[#0A006E]">
+                Operational Genuine Depots & Bonded Branches ({branches.length} Active)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Genuine commissioned branches. The HQ Flagship depot serves as the primary system branch.
+            </p>
+          </div>
+          <span className="px-3 py-1 bg-white border border-slate-300 rounded-xl text-xs font-montserrat font-bold text-[#0A006E]">
+            Main Branch: {branches.find((b) => b.isMain || b.code === 'BR-HQ-001')?.name || 'HQ - Main Branch'}
+          </span>
+        </div>
+
+        <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                <th className="py-2.5 px-3 font-black">Branch Code</th>
+                <th className="py-2.5 px-3 font-black">Branch / Depot Name</th>
+                <th className="py-2.5 px-3 font-black">Geo-Zone & Address</th>
+                <th className="py-2.5 px-3 font-black">Customs Bond License</th>
+                <th className="py-2.5 px-3 font-black">Status</th>
+                <th className="py-2.5 px-3 font-black text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {branches.map((b) => {
+                const isMainBranch = Boolean(
+                  b.isMain ||
+                  b.code === 'BR-HQ-001' ||
+                  b.name.toLowerCase().includes('hq') ||
+                  b.name.toLowerCase().includes('flagship')
+                );
+                return (
+                  <tr key={b.id} className="hover:bg-slate-50">
+                    <td className="py-3 px-3 font-mono-tabular font-bold text-[#0A006E]">
+                      {b.code}
+                    </td>
+                    <td className="py-3 px-3 font-bold text-slate-900">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{b.name}</span>
+                        {isMainBranch && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-[#FFDE00] text-[#0A006E] border border-amber-300 shadow-2xs">
+                            <Star className="w-2.5 h-2.5 fill-current" />
+                            HQ · MAIN BRANCH
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-slate-700">
+                      <div className="font-semibold text-slate-800">{b.regionName}</div>
+                      <div className="text-[11px] text-slate-500">{b.address}</div>
+                    </td>
+                    <td className="py-3 px-3 font-mono-tabular text-slate-600">
+                      {b.exciseBondLicense || '—'}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {b.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {!isMainBranch && onSetMainBranch && (
+                          <button
+                            type="button"
+                            onClick={() => onSetMainBranch(b.id)}
+                            className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-montserrat font-bold cursor-pointer transition flex items-center gap-1"
+                            title="Set as Main HQ Branch"
+                          >
+                            <Star className="w-3 h-3 text-amber-600" />
+                            Set Main
+                          </button>
+                        )}
+                        {!isMainBranch && onDeleteBranch ? (
+                          <button
+                            type="button"
+                            onClick={() => setBranchToDelete(b)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-montserrat font-bold cursor-pointer transition flex items-center gap-1"
+                            title="Decommission Branch"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Delete
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-montserrat font-bold text-slate-400 uppercase tracking-wider">
+                            Protected Main
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Delete Branch Confirmation Modal */}
+      {branchToDelete && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border-2 border-[#0A006E] p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <h4 className="font-montserrat font-black text-base text-slate-900">
+                Confirm Branch Decommission
+              </h4>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete <span className="font-bold text-slate-900">{branchToDelete.name}</span> ({branchToDelete.code})? Any staff assigned to this station will automatically be reassigned to HQ - Main Branch.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setBranchToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  if (!onDeleteBranch) return;
+                  setIsDeleting(true);
+                  await onDeleteBranch(branchToDelete.id);
+                  setIsDeleting(false);
+                  setBranchToDelete(null);
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-sm flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isDeleting ? 'Deleting...' : 'Confirm Decommission'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stock Transfer Ledger */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-3">
