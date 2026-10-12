@@ -53,6 +53,9 @@ import {
   ComplianceRecord,
   AuditLog,
   ERPModuleId,
+  PayrollRun,
+  PayrollRecord,
+  DamageSpoilageIncident,
 } from './types';
 import {
   getDeviceFingerprint,
@@ -60,7 +63,7 @@ import {
   MASTER_IMPORTED_INVENTORY,
   formatKes,
 } from './erpUtils';
-import { ensureOperationalFoundationSeeded } from './seedData';
+import { ensureOperationalFoundationSeeded, NAIROBI_GEO_REGIONS } from './seedData';
 import { AuthGateway } from './components/AuthGateway';
 import { PosViews } from './components/PosViews';
 import { CustomerPortalView } from './components/CustomerPortalView';
@@ -78,6 +81,7 @@ import {
   AuditAndSecurityModule,
 } from './components/ErpModulesPart2';
 import { DocumentPrintModal } from './components/DocumentPrintModal';
+import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
@@ -104,13 +108,15 @@ export default function App() {
   // Real-time Firestore state
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [regions, setRegions] = useState<GeoRegion[]>([]);
+  const [regions, setRegions] = useState<GeoRegion[]>(NAIROBI_GEO_REGIONS);
   const [firestoreProducts, setFirestoreProducts] = useState<Product[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [transactions, setTransactions] = useState<TransactionDoc[]>([]);
   const [complianceRecords, setComplianceRecords] = useState<ComplianceRecord[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
+  const [viewingPayslipRecord, setViewingPayslipRecord] = useState<PayrollRecord | null>(null);
 
   // Active User Session State
   const [currentUser, setCurrentUser] = useState<StaffMember | null>(null);
@@ -154,6 +160,25 @@ export default function App() {
     const customCreated = Array.from(overrideMap.values());
     return [...customCreated, ...merged];
   }, [firestoreProducts]);
+
+  // Derive latest finalized payroll record for current user session
+  const currentUserLatestPayrollRecord = useMemo<PayrollRecord | null>(() => {
+    if (!currentUser || payrollRuns.length === 0) return null;
+    for (const run of payrollRuns) {
+      try {
+        const records: PayrollRecord[] = JSON.parse(run.recordsJson || '[]');
+        const match = records.find(
+          (r) =>
+            r.staffId === currentUser.id ||
+            (r.staffEmail && r.staffEmail.toLowerCase() === currentUser.email.toLowerCase())
+        );
+        if (match) return match;
+      } catch {
+        // ignore JSON parse error
+      }
+    }
+    return null;
+  }, [currentUser, payrollRuns]);
 
   // Boot connection test & operational seed (with zero staff)
   useEffect(() => {
@@ -284,6 +309,14 @@ export default function App() {
       (err) => handleFirestoreError(err, OperationType.GET, 'audit_logs')
     );
 
+    const unsubPayrollRuns = onSnapshot(
+      query(collection(db, 'payroll_runs'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
+      (snap) => {
+        setPayrollRuns(snap.docs.map((d) => ({ ...(d.data() as PayrollRun), id: d.id })));
+      },
+      (err) => handleFirestoreError(err, OperationType.GET, 'payroll_runs')
+    );
+
     return () => {
       unsubStaff();
       unsubBranches();
@@ -294,6 +327,7 @@ export default function App() {
       unsubTransactions();
       unsubCompliance();
       unsubAudit();
+      unsubPayrollRuns();
     };
   }, []);
 
@@ -360,6 +394,17 @@ export default function App() {
       // Check if an existing staff profile exists for this email
       const existingStaff = staffList.find((s) => s.email.toLowerCase() === userEmail);
 
+      if (targetRole === 'Admin') {
+        if (userEmail !== 'feminiholdings@gmail.com') {
+          const msg =
+            'Access Restricted: Only feminiholdings@gmail.com is authorized as System Administrator.';
+          setAuthError(msg);
+          triggerToast('error', 'Unauthorized Admin', msg);
+          setIsAuthenticating(false);
+          return;
+        }
+      }
+
       if (targetRole === 'Accountant') {
         if (!existingStaff || (existingStaff.role !== 'Accountant' && existingStaff.role !== 'Admin')) {
           const anyAccountantExists = staffList.some((s) => s.role === 'Accountant');
@@ -421,15 +466,15 @@ export default function App() {
         );
       } else {
         // Bootstrap the primary System Admin on first sign-in
-        const adminId = `staff-admin-${cred.user.uid.slice(0, 8)}`;
+        const adminId = 'staff-admin-feminiholdings';
         const defaultBranch = branches[0] || {
           id: 'br-hq-metro',
           name: 'Main Branch (Head Office — Nairobi CBD)',
         };
         const newAdmin: StaffMember = {
           id: adminId,
-          name: userName,
-          email: userEmail,
+          name: userName || 'Femini Holdings Admin',
+          email: 'feminiholdings@gmail.com',
           role: 'Admin',
           authMethod: 'google',
           branchId: defaultBranch.id,
@@ -660,6 +705,94 @@ export default function App() {
     } catch (error) {
       triggerToast('error', 'SKU Creation Failed', 'Unable to save product to inventory.');
       handleFirestoreError(error, OperationType.WRITE, 'products');
+    }
+  };
+
+  const handleUpdateProduct = async (productId: string, updates: Partial<Product>) => {
+    try {
+      await persistProductState(productId, updates);
+      triggerToast(
+        'success',
+        'Product Updated',
+        `Updated "${updates.name || 'product'}" specifications & bottle photo.`
+      );
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Updated Product ${updates.name || productId}`,
+          'Inventory & Auto-SKU',
+          `Edited product specs & uploaded bottle image for ${productId}`,
+          currentUser.branchName,
+          'Info'
+        );
+      }
+    } catch (error) {
+      triggerToast('error', 'Update Failed', 'Unable to update product details.');
+      handleFirestoreError(error, OperationType.WRITE, 'products');
+    }
+  };
+
+  const handleLogStockIncident = async (incident: DamageSpoilageIncident) => {
+    try {
+      const prod = products.find((p) => p.id === incident.productId);
+      if (!prod) return;
+
+      const currentDmg = prod.damagedBottlesCount || 0;
+      const currentSpoil = prod.spoiledBottlesCount || 0;
+      const newDmg = incident.incidentType === 'DAMAGED' ? currentDmg + incident.quantityBottles : currentDmg;
+      const newSpoil = incident.incidentType === 'SPOILED' ? currentSpoil + incident.quantityBottles : currentSpoil;
+      const newTotal = Math.max(0, (prod.totalBottles ?? 0) - incident.quantityBottles);
+
+      let updatedBranchSummary = prod.branchStockSummary;
+      if (prod.branchStockSummary && incident.branchId) {
+        try {
+          const map = JSON.parse(prod.branchStockSummary);
+          if (map[incident.branchId] !== undefined) {
+            map[incident.branchId] = Math.max(0, map[incident.branchId] - incident.quantityBottles);
+            updatedBranchSummary = JSON.stringify(map);
+          }
+        } catch {}
+      }
+
+      let incidents: DamageSpoilageIncident[] = [];
+      try {
+        if (prod.stockIncidentsJson) {
+          incidents = JSON.parse(prod.stockIncidentsJson);
+        }
+      } catch {}
+      incidents.unshift(incident);
+      if (incidents.length > 50) incidents = incidents.slice(0, 50);
+
+      await handleUpdateProduct(prod.id, {
+        totalBottles: newTotal,
+        damagedBottlesCount: newDmg,
+        spoiledBottlesCount: newSpoil,
+        branchStockSummary: updatedBranchSummary,
+        stockIncidentsJson: JSON.stringify(incidents),
+      });
+
+      triggerToast(
+        'success',
+        `${incident.incidentType} Stock Recorded`,
+        `Quarantined ${incident.quantityBottles} btls of ${incident.sku}. Loss: ${formatKes(incident.lossValueKes)}`
+      );
+
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Logged ${incident.incidentType} Stock (${incident.sku})`,
+          'Inventory & Loss Control',
+          `Quarantined ${incident.quantityBottles} btls at ${incident.branchName}. Reason: ${incident.reason}. Loss: ${formatKes(incident.lossValueKes)}`,
+          incident.branchName,
+          'Financial'
+        );
+      }
+    } catch {
+      triggerToast('error', 'Incident Logging Failed', 'Could not record stock incident.');
     }
   };
 
@@ -1088,6 +1221,40 @@ export default function App() {
     }
   };
 
+  const handleExecutePayrollRun = async (
+    runDraft: Omit<PayrollRun, 'id' | 'createdAt'>
+  ) => {
+    const id = `pr-${Date.now()}`;
+    const fullRun: PayrollRun = {
+      ...runDraft,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await setDoc(doc(db, 'payroll_runs', id), fullRun);
+      triggerToast(
+        'success',
+        `Payroll Disbursed (${fullRun.period})`,
+        `Finalized ${fullRun.totalEmployees} employee payslips (KES ${fullRun.totalDisbursed.toLocaleString()}).`
+      );
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Executed Payroll Run for ${fullRun.period}`,
+          'HR & Access Control',
+          `Disbursed net KES ${fullRun.totalDisbursed.toLocaleString()} across ${fullRun.totalEmployees} employees`,
+          currentUser.branchName,
+          'Financial'
+        );
+      }
+    } catch (err) {
+      triggerToast('error', 'Payroll Error', 'Failed to publish payroll disbursement.');
+      handleFirestoreError(err, OperationType.WRITE, 'payroll_runs');
+    }
+  };
+
   const handleUpdatePartner = async (partnerId: string, updates: Partial<Partner>) => {
     const existing = partners.find((p) => p.id === partnerId);
     if (!existing) return;
@@ -1413,6 +1580,9 @@ export default function App() {
               transactions={transactions}
               transfers={transfers}
               staffList={staffList}
+              latestPayrollRecord={currentUserLatestPayrollRecord}
+              payrollRuns={payrollRuns}
+              onOpenPayslip={(record) => setViewingPayslipRecord(record)}
               onPreviewDoc={(d) => setPreviewDoc(d)}
             />
           )}
@@ -1445,10 +1615,13 @@ export default function App() {
 
           {activeModule === 'inventory' && (
             <InventoryModule
+              currentUser={currentUser}
               products={products}
               branches={branches}
               onCreateProduct={handleCreateProduct}
               onBatchCreateProducts={handleBatchCreateProducts}
+              onUpdateProduct={handleUpdateProduct}
+              onLogStockIncident={handleLogStockIncident}
             />
           )}
 
@@ -1512,10 +1685,13 @@ export default function App() {
               currentUser={currentUser}
               staffList={staffList}
               branches={branches}
+              payrollRuns={payrollRuns}
               onCreateStaff={handleCreateStaff}
               onUpdateStaff={handleUpdateStaff}
               onSetStaffStatus={handleSetStaffStatus}
               onDeleteStaff={handleDeleteStaff}
+              onExecutePayrollRun={handleExecutePayrollRun}
+              onOpenPayslip={(record) => setViewingPayslipRecord(record)}
             />
           )}
 
@@ -1546,6 +1722,14 @@ export default function App() {
 
       {/* Commercial Print & PDF Modal */}
       <DocumentPrintModal docData={previewDoc} onClose={() => setPreviewDoc(null)} />
+
+      {/* Official 80mm/58mm Thermal Payslip Modal */}
+      {viewingPayslipRecord && (
+        <ThermalPayslipModal
+          record={viewingPayslipRecord}
+          onClose={() => setViewingPayslipRecord(null)}
+        />
+      )}
     </div>
   );
 }

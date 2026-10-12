@@ -546,10 +546,10 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
                           {p.barcode || '—'}
                         </td>
                         <td className="py-2 px-3 text-right font-mono-tabular font-semibold">
-                          KES {Math.round(p.baseWholesalePrice).toLocaleString()}
+                          KES {Math.round(p.baseWholesalePrice ?? 0).toLocaleString()}
                         </td>
                         <td className="py-2 px-3 text-right font-mono-tabular font-bold text-[#0A006E]">
-                          KES {Math.round(p.baseRetailPrice).toLocaleString()}
+                          KES {Math.round(p.baseRetailPrice ?? 0).toLocaleString()}
                         </td>
                         <td className="py-2 px-3 text-right font-mono-tabular font-bold text-emerald-700">
                           {p.totalBottles}

@@ -15,6 +15,18 @@ import {
   AlertCircle,
   FileSpreadsheet,
   ShieldCheck,
+  Edit3,
+  Image as ImageIcon,
+  Lock,
+  Receipt,
+  Printer,
+  X,
+  Wine,
+  Sliders,
+  AlertTriangle,
+  PackageX,
+  BarChart3,
+  Scale,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -26,6 +38,10 @@ import {
   TransactionDoc,
   StockCategory,
   LiquorSubCategory,
+  PayrollRecord,
+  PayrollRun,
+  DamageSpoilageIncident,
+  InventoryThresholdSettings,
 } from '../types';
 import {
   generateAutoSku,
@@ -38,6 +54,9 @@ import {
 import { NAIROBI_DRINKS_SUB_CATEGORIES } from '../data/nairobiDrinksCatalog';
 import { ProductImage } from './ProductImage';
 import { CsvInventoryImportModal } from './CsvInventoryImportModal';
+import { AccountantFinancialDashboard } from './AccountantFinancialDashboard';
+import { StockThresholdsGovernanceModal } from './StockThresholdsGovernanceModal';
+import { LogDamageSpoilageModal } from './LogDamageSpoilageModal';
 
 // ---------------------------------------------------------------------------
 // 1. OVERVIEW DASHBOARD
@@ -51,6 +70,9 @@ export const OverviewModule: React.FC<{
   transactions: TransactionDoc[];
   transfers: StockTransfer[];
   staffList: StaffMember[];
+  latestPayrollRecord?: PayrollRecord | null;
+  payrollRuns?: PayrollRun[];
+  onOpenPayslip?: (record: PayrollRecord) => void;
   onPreviewDoc: (doc: TransactionDoc) => void;
 }> = ({
   currentUser,
@@ -61,8 +83,13 @@ export const OverviewModule: React.FC<{
   transactions,
   transfers,
   staffList,
+  latestPayrollRecord,
+  payrollRuns = [],
+  onOpenPayslip,
   onPreviewDoc,
 }) => {
+  const isAccountant = currentUser.role === 'Accountant';
+  const [adminOverviewView, setAdminOverviewView] = useState<'executive' | 'accounting'>('executive');
   const scopedBranchId =
     ROLE_PERMISSIONS[currentUser.role].scopeToAssignedBranch ? currentUser.branchId : '';
 
@@ -139,6 +166,40 @@ export const OverviewModule: React.FC<{
     );
   };
 
+  if (isAccountant || adminOverviewView === 'accounting') {
+    return (
+      <div className="space-y-6">
+        {!isAccountant && (
+          <div className="bg-[#FFDE00] border-2 border-[#0A006E] rounded-2xl p-4 flex items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase">
+                System Administrator Financial Oversight Mode
+              </span>
+              <p className="text-xs text-slate-900 font-medium">
+                Viewing Chief Financial Accountant live P&L, sales ledger, stock asset valuation, and KRA tax schedules.
+              </p>
+            </div>
+            <button
+              onClick={() => setAdminOverviewView('executive')}
+              className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md"
+            >
+              Return to Operations Command
+            </button>
+          </div>
+        )}
+        <AccountantFinancialDashboard
+          currentUser={currentUser}
+          products={products}
+          transactions={visibleTransactions}
+          branches={branches}
+          regions={regions}
+          payrollRuns={payrollRuns}
+          onPreviewDoc={onPreviewDoc}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* VAAIRO Signature Yellow Hero Banner */}
@@ -158,7 +219,16 @@ export const OverviewModule: React.FC<{
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 relative z-10">
+        <div className="flex items-center gap-2.5 relative z-10 flex-wrap">
+          {currentUser.role === 'Admin' && (
+            <button
+              onClick={() => setAdminOverviewView('accounting')}
+              className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-md"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-[#FFDE00]" />
+              Financial Analysis
+            </button>
+          )}
           <button
             onClick={handleDownloadStatementPDF}
             className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-md"
@@ -173,6 +243,57 @@ export const OverviewModule: React.FC<{
             <Download className="w-3.5 h-3.5 text-[#0A006E]" />
             Export CSV
           </button>
+        </div>
+      </div>
+
+      {/* Employee Remuneration & Thermal Payslip Card */}
+      <div className="bg-white border-2 border-[#0A006E]/20 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-md">
+            <Receipt className="w-6 h-6 stroke-[2.2]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+                Employee Compensation & Thermal Payslip
+              </span>
+              {latestPayrollRecord ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#34D186]/25 text-[#1E9E60] border border-[#34D186]/60">
+                  Payroll Cleared ({latestPayrollRecord.period})
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                  Awaiting HR Payroll Execution
+                </span>
+              )}
+            </div>
+            <div className="text-sm font-montserrat font-bold text-slate-800 mt-0.5">
+              {currentUser.name} · {currentUser.role} ({currentUser.branchName})
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {latestPayrollRecord
+                ? `Net take-home pay of KES ${latestPayrollRecord.netSalary.toLocaleString()} finalized for ${latestPayrollRecord.period}.`
+                : 'Your 80mm/58mm thermal payslip unlocks immediately once HR runs payroll for this pay period.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="shrink-0">
+          {latestPayrollRecord ? (
+            <button
+              type="button"
+              onClick={() => onOpenPayslip?.(latestPayrollRecord)}
+              className="w-full sm:w-auto px-4 py-2.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-2 cursor-pointer shadow-md transition"
+            >
+              <Printer className="w-4 h-4" />
+              Download Thermal Payslip (KES {latestPayrollRecord.netSalary.toLocaleString()})
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-500 font-semibold">
+              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              Locked until HR runs payroll
+            </div>
+          )}
         </div>
       </div>
 
@@ -353,11 +474,58 @@ export const OverviewModule: React.FC<{
 // 2. INVENTORY & AUTO-SKU ENGINE MODULE (With Imported IPS/LPS & 12 Subcategories)
 // ---------------------------------------------------------------------------
 export const InventoryModule: React.FC<{
+  currentUser: StaffMember;
   products: Product[];
   branches: Branch[];
   onCreateProduct: (prod: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;
   onBatchCreateProducts?: (prods: Omit<Product, 'id' | 'createdAt'>[]) => Promise<number>;
-}> = ({ products, branches, onCreateProduct, onBatchCreateProducts }) => {
+  onUpdateProduct?: (productId: string, updates: Partial<Product>) => Promise<void>;
+  onLogStockIncident?: (incident: DamageSpoilageIncident) => Promise<void>;
+}> = ({
+  currentUser,
+  products,
+  branches,
+  onCreateProduct,
+  onBatchCreateProducts,
+  onUpdateProduct,
+  onLogStockIncident,
+}) => {
+  const isInventoryPerson =
+    currentUser.role === 'Inventory Controller' ||
+    (currentUser.role as string) === 'Inventory' ||
+    (currentUser.role as string).toLowerCase().includes('inventory');
+  const canEditProduct = currentUser.role === 'Admin' || isInventoryPerson;
+
+  // Threshold Governance State (Inventory Manager & Admin)
+  const [thresholdSettings, setThresholdSettings] = useState<InventoryThresholdSettings>(() => {
+    try {
+      const saved = localStorage.getItem('vaairo_inventory_thresholds');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      defaultDeadStockDays: 90,
+      defaultExpiryWarningDays: 60,
+      defaultMaxDamagePct: 2.0,
+      defaultMaxSpoilagePct: 1.0,
+      defaultMinSafetyStock: 24,
+    };
+  });
+  const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
+  const [isLogIncidentModalOpen, setIsLogIncidentModalOpen] = useState(false);
+  const [incidentTargetProduct, setIncidentTargetProduct] = useState<Product | null>(null);
+  const [filterRotationStatus, setFilterRotationStatus] = useState<
+    'ALL' | 'HEALTHY' | 'DEAD_STOCK' | 'EXPIRING' | 'DAMAGED_SPOILED'
+  >('ALL');
+
+  const handleSaveThresholdSettings = (newSettings: InventoryThresholdSettings) => {
+    setThresholdSettings(newSettings);
+    try {
+      localStorage.setItem('vaairo_inventory_thresholds', JSON.stringify(newSettings));
+    } catch {}
+    setProductFeedback('Saved inventory governance thresholds successfully.');
+    setTimeout(() => setProductFeedback(null), 4000);
+  };
+
   const [name, setName] = useState('');
   const [stockCategory, setStockCategory] = useState<StockCategory>('IPS');
   const [subCategory, setSubCategory] = useState<LiquorSubCategory>('Whisky');
@@ -375,7 +543,223 @@ export const InventoryModule: React.FC<{
   const [baseRetailPrice, setBaseRetailPrice] = useState<number>(0);
   const [initialBottles, setInitialBottles] = useState<number>(0);
   const [targetBranchId, setTargetBranchId] = useState<string>(branches[0]?.id || '');
+  const [newProductImage, setNewProductImage] = useState<string>('');
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+
+  // Product Edit & Image Upload Modal State
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editBrand, setEditBrand] = useState('');
+  const [editCategory, setEditCategory] = useState<StockCategory>('IPS');
+  const [editSubCategory, setEditSubCategory] = useState<LiquorSubCategory>('Whisky');
+  const [editVolumeMl, setEditVolumeMl] = useState<number>(750);
+  const [editAbv, setEditAbv] = useState<number>(40);
+  const [editBottlesPerCase, setEditBottlesPerCase] = useState<number>(12);
+  const [editWholesale, setEditWholesale] = useState<number>(0);
+  const [editRetail, setEditRetail] = useState<number>(0);
+  const [editCost, setEditCost] = useState<number>(0);
+  const [editTotalBottles, setEditTotalBottles] = useState<number>(0);
+  const [editBarcode, setEditBarcode] = useState('');
+  const [editCaseBarcode, setEditCaseBarcode] = useState('');
+  const [editOrigin, setEditOrigin] = useState('');
+  const [editSupplier, setEditSupplier] = useState('');
+  const [editImage, setEditImage] = useState<string>('');
+  const [editDeadStockDays, setEditDeadStockDays] = useState<number>(90);
+  const [editExpiryDays, setEditExpiryDays] = useState<number>(60);
+  const [editBatchExpiryDate, setEditBatchExpiryDate] = useState<string>('');
+  const [editDamagedCount, setEditDamagedCount] = useState<number>(0);
+  const [editSpoiledCount, setEditSpoiledCount] = useState<number>(0);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [productFeedback, setProductFeedback] = useState<string | null>(null);
+
+  const handleStartEditProduct = (prod: Product) => {
+    if (!canEditProduct) return;
+    setEditingProduct(prod);
+    setEditName(prod.name);
+    setEditBrand(prod.brand || prod.name.split(' ')[0] || '');
+    setEditCategory(prod.category === 'LPS' ? 'LPS' : 'IPS');
+    setEditSubCategory((prod.subCategory as LiquorSubCategory) || 'Whisky');
+    setEditVolumeMl(prod.volumeMl || 750);
+    setEditAbv(prod.alcoholPercentage ?? prod.abv ?? 40);
+    setEditBottlesPerCase(prod.packSize || prod.bottlesPerCase || 12);
+    setEditWholesale(prod.wholesalePriceKes ?? prod.baseWholesalePrice ?? 0);
+    setEditRetail(prod.retailPriceKes ?? prod.baseRetailPrice ?? 0);
+    setEditCost(prod.warehouseCostKes ?? prod.baseLandedCost ?? 0);
+    setEditTotalBottles(prod.totalBottles ?? 360);
+    setEditBarcode(prod.barcode || '');
+    setEditCaseBarcode(prod.caseBarcode || '');
+    setEditOrigin(prod.countryOfOrigin || prod.originCountry || '');
+    setEditSupplier(prod.supplierName || '');
+    setEditImage(prod.image || '');
+    setEditDeadStockDays(prod.deadStockThresholdDays || thresholdSettings.defaultDeadStockDays);
+    setEditExpiryDays(prod.expiryThresholdDays || thresholdSettings.defaultExpiryWarningDays);
+    setEditBatchExpiryDate(prod.batchExpiryDate || prod.defaultExpiryDate || '');
+    setEditDamagedCount(prod.damagedBottlesCount || 0);
+    setEditSpoiledCount(prod.spoiledBottlesCount || 0);
+  };
+
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawData = event.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 400;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          setEditImage(compressed);
+        } else {
+          setEditImage(rawData);
+        }
+      };
+      img.src = rawData;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveProductEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct || !onUpdateProduct) return;
+    setIsSavingProduct(true);
+    try {
+      await onUpdateProduct(editingProduct.id, {
+        name: editName.trim(),
+        brand: editBrand.trim(),
+        category: editCategory,
+        subCategory: editSubCategory,
+        volumeMl: Number(editVolumeMl),
+        abv: Number(editAbv),
+        alcoholPercentage: Number(editAbv),
+        packSize: Number(editBottlesPerCase),
+        bottlesPerCase: Number(editBottlesPerCase),
+        baseWholesalePrice: Number(editWholesale),
+        wholesalePriceKes: Number(editWholesale),
+        baseRetailPrice: Number(editRetail),
+        retailPriceKes: Number(editRetail),
+        baseLandedCost: Number(editCost),
+        warehouseCostKes: Number(editCost),
+        totalBottles: Number(editTotalBottles),
+        barcode: editBarcode.trim(),
+        caseBarcode: editCaseBarcode.trim(),
+        countryOfOrigin: editOrigin.trim(),
+        originCountry: editOrigin.trim(),
+        supplierName: editSupplier.trim(),
+        image: editImage || undefined,
+        deadStockThresholdDays: Number(editDeadStockDays),
+        expiryThresholdDays: Number(editExpiryDays),
+        batchExpiryDate: editBatchExpiryDate.trim() || undefined,
+        damagedBottlesCount: Number(editDamagedCount),
+        spoiledBottlesCount: Number(editSpoiledCount),
+      });
+      setProductFeedback(`Successfully updated "${editName.trim()}" specs, thresholds, and photo.`);
+      setTimeout(() => setProductFeedback(null), 4000);
+      setEditingProduct(null);
+    } finally {
+      setIsSavingProduct(false);
+    }
+  };
+
+  const handleLogIncidentDirect = async (incident: DamageSpoilageIncident) => {
+    if (onLogStockIncident) {
+      await onLogStockIncident(incident);
+    } else if (onUpdateProduct) {
+      const prod = products.find((p) => p.id === incident.productId);
+      if (!prod) return;
+      const curDmg = prod.damagedBottlesCount || 0;
+      const curSpoil = prod.spoiledBottlesCount || 0;
+      const newDmg = incident.incidentType === 'DAMAGED' ? curDmg + incident.quantityBottles : curDmg;
+      const newSpoil = incident.incidentType === 'SPOILED' ? curSpoil + incident.quantityBottles : curSpoil;
+      const newTotal = Math.max(0, (prod.totalBottles ?? 0) - incident.quantityBottles);
+      await onUpdateProduct(incident.productId, {
+        totalBottles: newTotal,
+        damagedBottlesCount: newDmg,
+        spoiledBottlesCount: newSpoil,
+      });
+    }
+    setProductFeedback(`Quarantined ${incident.quantityBottles} btls of ${incident.sku} (${formatKes(incident.lossValueKes)}).`);
+    setTimeout(() => setProductFeedback(null), 4500);
+  };
+
+  const now = useMemo(() => new Date(), []);
+  const stockHealthMetrics = useMemo(() => {
+    let deadStockCount = 0;
+    let deadStockValueKes = 0;
+    let expiringSoonCount = 0;
+    let totalDamagedBottles = 0;
+    let totalDamagedLossKes = 0;
+    let totalSpoiledBottles = 0;
+    let totalSpoiledLossKes = 0;
+
+    products.forEach((p) => {
+      const bottles = p.totalBottles ?? 360;
+      const unitCost = p.warehouseCostKes ?? p.baseLandedCost ?? 2000;
+      const deadDays = p.deadStockThresholdDays || thresholdSettings.defaultDeadStockDays;
+      const lastMove = p.lastStockMovementDate ? new Date(p.lastStockMovementDate) : new Date(p.createdAt || '2026-08-01');
+      const daysInactive = Math.max(0, Math.floor((now.getTime() - lastMove.getTime()) / (1000 * 60 * 60 * 24)));
+      const isDead = daysInactive >= deadDays && bottles > 0;
+
+      // Expiry check
+      const expiryDays = p.expiryThresholdDays || thresholdSettings.defaultExpiryWarningDays;
+      const expiryDateStr = p.batchExpiryDate || p.defaultExpiryDate;
+      let isExpiringSoon = false;
+      if (expiryDateStr) {
+        const expDate = new Date(expiryDateStr);
+        const daysToExpiry = Math.floor((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysToExpiry <= expiryDays && daysToExpiry >= 0) {
+          isExpiringSoon = true;
+        }
+      }
+
+      const dmg = p.damagedBottlesCount || 0;
+      const spoil = p.spoiledBottlesCount || 0;
+      if (dmg > 0) {
+        totalDamagedBottles += dmg;
+        totalDamagedLossKes += dmg * unitCost;
+      }
+      if (spoil > 0) {
+        totalSpoiledBottles += spoil;
+        totalSpoiledLossKes += spoil * unitCost;
+      }
+
+      if (isDead) {
+        deadStockCount++;
+        deadStockValueKes += bottles * unitCost;
+      }
+      if (isExpiringSoon) {
+        expiringSoonCount++;
+      }
+    });
+
+    return {
+      deadStockCount,
+      deadStockValueKes,
+      expiringSoonCount,
+      totalDamagedBottles,
+      totalDamagedLossKes,
+      totalSpoiledBottles,
+      totalSpoiledLossKes,
+    };
+  }, [products, thresholdSettings, now]);
 
   // Catalog filter state
   const [filterStockCat, setFilterStockCat] = useState<'ALL' | StockCategory>('ALL');
@@ -399,9 +783,36 @@ export const InventoryModule: React.FC<{
         p.sku.toLowerCase().includes(q) ||
         (p.brand || '').toLowerCase().includes(q) ||
         (p.barcode || '').includes(q);
-      return matchStock && matchSub && matchSearch;
+
+      if (!matchStock || !matchSub || !matchSearch) return false;
+
+      if (filterRotationStatus === 'ALL') return true;
+
+      const bottles = p.totalBottles ?? 360;
+      const deadDays = p.deadStockThresholdDays || thresholdSettings.defaultDeadStockDays;
+      const lastMove = p.lastStockMovementDate ? new Date(p.lastStockMovementDate) : new Date(p.createdAt || '2026-08-01');
+      const daysInactive = Math.max(0, Math.floor((now.getTime() - lastMove.getTime()) / (1000 * 60 * 60 * 24)));
+      const isDead = daysInactive >= deadDays && bottles > 0;
+
+      const expiryDays = p.expiryThresholdDays || thresholdSettings.defaultExpiryWarningDays;
+      const expiryDateStr = p.batchExpiryDate || p.defaultExpiryDate;
+      let isExpiringSoon = false;
+      if (expiryDateStr) {
+        const expDate = new Date(expiryDateStr);
+        const daysToExpiry = Math.floor((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysToExpiry <= expiryDays && daysToExpiry >= 0) isExpiringSoon = true;
+      }
+
+      const hasDamageOrSpoil = (p.damagedBottlesCount || 0) > 0 || (p.spoiledBottlesCount || 0) > 0;
+
+      if (filterRotationStatus === 'DEAD_STOCK') return isDead;
+      if (filterRotationStatus === 'EXPIRING') return isExpiringSoon;
+      if (filterRotationStatus === 'DAMAGED_SPOILED') return hasDamageOrSpoil;
+      if (filterRotationStatus === 'HEALTHY') return !isDead && !isExpiringSoon && !hasDamageOrSpoil;
+
+      return true;
     });
-  }, [products, filterStockCat, filterSubCat, searchQuery]);
+  }, [products, filterStockCat, filterSubCat, searchQuery, filterRotationStatus, thresholdSettings, now]);
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -448,11 +859,13 @@ export const InventoryModule: React.FC<{
       totalBottles: Number(initialBottles),
       branchStockSummary: JSON.stringify(branchMap),
       geoPriceOverrides: JSON.stringify({}),
+      image: newProductImage || undefined,
     });
 
     setName('');
     setBarcode('');
     setCaseBarcode('');
+    setNewProductImage('');
   };
 
   const handleExportInventoryPDF = () => {
@@ -514,14 +927,16 @@ export const InventoryModule: React.FC<{
           </p>
         </div>
         <div className="flex items-center gap-2 relative z-10 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setIsCsvModalOpen(true)}
-            className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Upload CSV Inventory
-          </button>
+          {canEditProduct && (
+            <button
+              type="button"
+              onClick={() => setIsCsvModalOpen(true)}
+              className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Upload CSV Inventory
+            </button>
+          )}
           <button
             type="button"
             onClick={handleExportInventoryPDF}
@@ -541,11 +956,165 @@ export const InventoryModule: React.FC<{
         </div>
       </div>
 
-      {/* Add New Independent Liquor SKU Form */}
-      <form
-        onSubmit={handleAddProduct}
-        className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
-      >
+      {/* Inventory Governance & Health Command Center (Dead Stock, Expiry, Damages, Spoilage) */}
+      <div className="bg-white border-2 border-[#0A006E]/20 rounded-2xl p-5 shadow-2xs space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-md">
+              <Sliders className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-montserrat font-black text-[#0A006E] text-sm">
+                  Inventory Health & Threshold Governance Command
+                </h3>
+                <span className="px-2 py-0.5 bg-[#FFDE00] text-[#0A006E] rounded-full text-[10px] font-montserrat font-black uppercase tracking-wider">
+                  Inventory Controller & Admin
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Active thresholds: Dead Stock Inactivity &gt; {thresholdSettings.defaultDeadStockDays}d · Expiry Warning &lt; {thresholdSettings.defaultExpiryWarningDays}d · Damage Alert Max {thresholdSettings.defaultMaxDamagePct}% · Spoilage Alert Max {thresholdSettings.defaultMaxSpoilagePct}%
+              </p>
+            </div>
+          </div>
+
+          {canEditProduct && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setIsThresholdModalOpen(true)}
+                className="px-3 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition"
+              >
+                <Sliders className="w-3.5 h-3.5 text-[#FFDE00]" />
+                Configure Thresholds
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIncidentTargetProduct(null);
+                  setIsLogIncidentModalOpen(true);
+                }}
+                className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition"
+              >
+                <PackageX className="w-3.5 h-3.5" />
+                Log Damage / Spoilage
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 4 Stock Health Metric Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Card 1: Healthy Stock */}
+          <div
+            onClick={() => setFilterRotationStatus('HEALTHY')}
+            className={`p-3.5 rounded-xl border cursor-pointer transition ${
+              filterRotationStatus === 'HEALTHY'
+                ? 'bg-emerald-50 border-emerald-500 shadow-sm'
+                : 'bg-slate-50 border-slate-200 hover:border-emerald-300'
+            }`}
+          >
+            <div className="flex items-center justify-between text-emerald-700">
+              <span className="text-[11px] font-montserrat font-bold uppercase tracking-wider">Healthy Stock</span>
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div className="text-xl font-montserrat font-black text-slate-900 mt-1">
+              {Math.max(0, products.length - stockHealthMetrics.deadStockCount - stockHealthMetrics.expiringSoonCount)}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">Fast & regular rotation items</div>
+          </div>
+
+          {/* Card 2: Dead Stock Alert */}
+          <div
+            onClick={() => setFilterRotationStatus('DEAD_STOCK')}
+            className={`p-3.5 rounded-xl border cursor-pointer transition ${
+              filterRotationStatus === 'DEAD_STOCK'
+                ? 'bg-amber-50 border-amber-500 shadow-sm'
+                : 'bg-slate-50 border-slate-200 hover:border-amber-300'
+            }`}
+          >
+            <div className="flex items-center justify-between text-amber-700">
+              <span className="text-[11px] font-montserrat font-bold uppercase tracking-wider">Dead Stock Alert</span>
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="text-xl font-montserrat font-black text-amber-900 mt-1">
+              {stockHealthMetrics.deadStockCount} <span className="text-xs font-normal text-slate-500">SKUs</span>
+            </div>
+            <div className="text-[10px] font-bold text-amber-700 mt-0.5">
+              Tied Capital: {formatKes(stockHealthMetrics.deadStockValueKes)}
+            </div>
+          </div>
+
+          {/* Card 3: Expiring Soon */}
+          <div
+            onClick={() => setFilterRotationStatus('EXPIRING')}
+            className={`p-3.5 rounded-xl border cursor-pointer transition ${
+              filterRotationStatus === 'EXPIRING'
+                ? 'bg-orange-50 border-orange-500 shadow-sm'
+                : 'bg-slate-50 border-slate-200 hover:border-orange-300'
+            }`}
+          >
+            <div className="flex items-center justify-between text-orange-700">
+              <span className="text-[11px] font-montserrat font-bold uppercase tracking-wider">Expiring Soon</span>
+              <AlertCircle className="w-4 h-4 text-orange-600" />
+            </div>
+            <div className="text-xl font-montserrat font-black text-orange-900 mt-1">
+              {stockHealthMetrics.expiringSoonCount} <span className="text-xs font-normal text-slate-500">SKUs</span>
+            </div>
+            <div className="text-[10px] text-orange-700 mt-0.5">
+              Within {thresholdSettings.defaultExpiryWarningDays}d warning limit
+            </div>
+          </div>
+
+          {/* Card 4: Damaged / Spoiled */}
+          <div
+            onClick={() => setFilterRotationStatus('DAMAGED_SPOILED')}
+            className={`p-3.5 rounded-xl border cursor-pointer transition ${
+              filterRotationStatus === 'DAMAGED_SPOILED'
+                ? 'bg-rose-50 border-rose-500 shadow-sm'
+                : 'bg-slate-50 border-slate-200 hover:border-rose-300'
+            }`}
+          >
+            <div className="flex items-center justify-between text-rose-700">
+              <span className="text-[11px] font-montserrat font-bold uppercase tracking-wider">Damaged / Spoiled</span>
+              <PackageX className="w-4 h-4 text-rose-600" />
+            </div>
+            <div className="text-xl font-montserrat font-black text-rose-900 mt-1">
+              {stockHealthMetrics.totalDamagedBottles + stockHealthMetrics.totalSpoiledBottles}{' '}
+              <span className="text-xs font-normal text-slate-500">bottles</span>
+            </div>
+            <div className="text-[10px] font-bold text-rose-700 mt-0.5">
+              Loss: {formatKes(stockHealthMetrics.totalDamagedLossKes + stockHealthMetrics.totalSpoiledLossKes)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Add New Independent Liquor SKU Form (Strictly for Inventory Person & Admin) */}
+      {!canEditProduct ? (
+        <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-700">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-slate-200 text-[#0A006E] rounded-xl shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-montserrat font-black text-sm text-[#0A006E]">
+                Inventory Management & Bottle Upload Restricted
+              </div>
+              <p className="text-[11px] text-slate-600 mt-0.5">
+                Only the Inventory Person and System Administrator are authorized to edit products, register new SKUs, import CSVs, or upload bottle images.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono-tabular font-bold text-slate-600 shrink-0">
+            Role: {currentUser.role} (Read-Only)
+          </span>
+        </div>
+      ) : (
+        <form
+          onSubmit={handleAddProduct}
+          className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
+        >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
           <h3 className="text-sm font-montserrat font-black text-[#0A006E] flex items-center gap-2">
             <Package className="w-4 h-4 text-[#0A006E]" />
@@ -713,6 +1282,86 @@ export const InventoryModule: React.FC<{
               </select>
             </div>
           </div>
+
+          <div className="sm:col-span-2 p-3 bg-white border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {newProductImage ? (
+                <div className="relative w-12 h-12 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-slate-50">
+                  <img
+                    src={newProductImage}
+                    alt="New bottle"
+                    className="w-full h-full object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewProductImage('')}
+                    className="absolute -top-1 -right-1 p-0.5 bg-rose-600 text-white rounded-full"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-lg bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center text-slate-400 shrink-0">
+                  <Wine className="w-5 h-5" />
+                </div>
+              )}
+              <div>
+                <div className="font-montserrat font-bold text-slate-800">
+                  Bottle Photo (Optional)
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  Upload bottle image directly from your camera or photo gallery.
+                </div>
+              </div>
+            </div>
+
+            <label className="px-3 py-1.5 bg-[#0A006E] text-[#FFDE00] rounded-lg font-montserrat font-black text-[11px] flex items-center gap-1.5 cursor-pointer hover:bg-[#060046] transition">
+              <Upload className="w-3.5 h-3.5" />
+              {newProductImage ? 'Change Bottle Photo' : 'Upload Bottle Photo'}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const rawData = ev.target?.result as string;
+                    const img = new Image();
+                    img.onload = () => {
+                      const canvas = document.createElement('canvas');
+                      const maxDim = 400;
+                      let width = img.width;
+                      let height = img.height;
+                      if (width > height) {
+                        if (width > maxDim) {
+                          height = Math.round((height * maxDim) / width);
+                          width = maxDim;
+                        }
+                      } else {
+                        if (height > maxDim) {
+                          width = Math.round((width * maxDim) / height);
+                          height = maxDim;
+                        }
+                      }
+                      canvas.width = width;
+                      canvas.height = height;
+                      const ctx = canvas.getContext('2d');
+                      if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        setNewProductImage(canvas.toDataURL('image/jpeg', 0.85));
+                      } else {
+                        setNewProductImage(rawData);
+                      }
+                    };
+                    img.src = rawData;
+                  };
+                  reader.readAsDataURL(file);
+                }}
+                className="hidden"
+              />
+            </label>
+          </div>
         </div>
 
         <div className="flex justify-end">
@@ -725,6 +1374,14 @@ export const InventoryModule: React.FC<{
           </button>
         </div>
       </form>
+      )}
+
+      {productFeedback && (
+        <div className="p-3 bg-[#34D186]/20 border border-[#34D186] text-[#0A006E] rounded-xl text-xs font-bold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-[#1E9E60]" />
+          {productFeedback}
+        </div>
+      )}
 
       {/* Master Catalog Filter Bar & Table */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
@@ -764,39 +1421,87 @@ export const InventoryModule: React.FC<{
           </div>
         </div>
 
-        {/* 12 Subcategory Pills */}
+        {/* Health & Rotation Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          <button
-            type="button"
-            onClick={() => {
-              setFilterSubCat('ALL');
-              setTableLimit(60);
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer ${
-              filterSubCat === 'ALL'
-                ? 'bg-[#0A006E] text-[#FFDE00]'
-                : 'bg-white text-slate-700 border border-slate-200'
-            }`}
-          >
-            All 12 Subcategories ({filteredProducts.length})
-          </button>
-          {NAIROBI_DRINKS_SUB_CATEGORIES.map((sub) => (
+          <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider shrink-0 mr-1">
+            Stock Rotation & Health:
+          </span>
+          {(
+            [
+              { id: 'ALL', label: `All Stock (${products.length})` },
+              { id: 'HEALTHY', label: 'Healthy Rotation' },
+              { id: 'DEAD_STOCK', label: `Dead Stock Alert (${stockHealthMetrics.deadStockCount})` },
+              { id: 'EXPIRING', label: `Expiring Soon (${stockHealthMetrics.expiringSoonCount})` },
+              {
+                id: 'DAMAGED_SPOILED',
+                label: `Damaged/Spoiled (${stockHealthMetrics.totalDamagedBottles + stockHealthMetrics.totalSpoiledBottles})`,
+              },
+            ] as const
+          ).map((item) => (
             <button
-              key={sub}
+              key={item.id}
               type="button"
               onClick={() => {
-                setFilterSubCat(sub);
+                setFilterRotationStatus(item.id);
+                setTableLimit(60);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer transition ${
+                filterRotationStatus === item.id
+                  ? 'bg-[#0A006E] text-[#FFDE00] shadow-sm'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => {
+                setFilterSubCat('ALL');
                 setTableLimit(60);
               }}
               className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer ${
-                filterSubCat === sub
+                filterSubCat === 'ALL'
                   ? 'bg-[#0A006E] text-[#FFDE00]'
                   : 'bg-white text-slate-700 border border-slate-200'
               }`}
             >
-              {sub}
+              All 12 Subcategories ({filteredProducts.length})
             </button>
-          ))}
+            {NAIROBI_DRINKS_SUB_CATEGORIES.map((sub) => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => {
+                  setFilterSubCat(sub);
+                  setTableLimit(60);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer ${
+                  filterSubCat === sub
+                    ? 'bg-[#0A006E] text-[#FFDE00]'
+                    : 'bg-white text-slate-700 border border-slate-200'
+                }`}
+              >
+                {sub}
+              </button>
+            ))}
+          </div>
+
+          {canEditProduct ? (
+            <span className="px-2.5 py-1 bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/50 rounded-lg text-[10px] font-bold flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              {currentUser.role}: Can Edit Specs & Upload Photos
+            </span>
+          ) : (
+            <span className="px-2.5 py-1 bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              View-Only: Only Inventory Person & System Admin can edit products
+            </span>
+          )}
         </div>
 
         <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
@@ -811,6 +1516,9 @@ export const InventoryModule: React.FC<{
                 <th className="py-2.5 px-3 font-black text-right">Wholesale (KES)</th>
                 <th className="py-2.5 px-3 font-black text-right">Retail (KES)</th>
                 <th className="py-2.5 px-3 font-black text-right">Total Bottles</th>
+                {canEditProduct && (
+                  <th className="py-2.5 px-3 font-black text-right">Action</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -821,6 +1529,23 @@ export const InventoryModule: React.FC<{
                 const retail = p.retailPriceKes ?? p.baseRetailPrice ?? 0;
                 const totalBtls = p.totalBottles ?? packSize * 30;
 
+                const deadDays = p.deadStockThresholdDays || thresholdSettings.defaultDeadStockDays;
+                const lastMove = p.lastStockMovementDate ? new Date(p.lastStockMovementDate) : new Date(p.createdAt || '2026-08-01');
+                const daysInactive = Math.max(0, Math.floor((now.getTime() - lastMove.getTime()) / (1000 * 60 * 60 * 24)));
+                const isDead = daysInactive >= deadDays && totalBtls > 0;
+
+                const expiryDays = p.expiryThresholdDays || thresholdSettings.defaultExpiryWarningDays;
+                const expiryDateStr = p.batchExpiryDate || p.defaultExpiryDate;
+                let daysToExpiry: number | null = null;
+                let isExpiringSoon = false;
+                if (expiryDateStr) {
+                  const expDate = new Date(expiryDateStr);
+                  daysToExpiry = Math.floor((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  if (daysToExpiry <= expiryDays && daysToExpiry >= 0) isExpiringSoon = true;
+                }
+                const dmg = p.damagedBottlesCount || 0;
+                const spoil = p.spoiledBottlesCount || 0;
+
                 return (
                   <tr key={p.id} className="hover:bg-slate-50">
                     <td className="py-2 px-3">
@@ -830,6 +1555,7 @@ export const InventoryModule: React.FC<{
                           category: p.category === 'LPS' ? 'LPS' : 'IPS',
                         }}
                         size="xs"
+                        onClick={canEditProduct ? () => handleStartEditProduct(p) : undefined}
                       />
                     </td>
                     <td className="py-2.5 px-3 font-mono-tabular">
@@ -840,6 +1566,23 @@ export const InventoryModule: React.FC<{
                       <div className="font-montserrat font-bold text-slate-900">{p.name}</div>
                       <div className="text-[11px] text-slate-500">
                         {p.brand} · {p.importDeclarationNumber || p.importEntryRef}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {isDead && (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded text-[9px] font-black uppercase">
+                            Dead Stock ({daysInactive}d inactive)
+                          </span>
+                        )}
+                        {isExpiringSoon && (
+                          <span className="px-1.5 py-0.5 bg-orange-100 text-orange-900 border border-orange-300 rounded text-[9px] font-black uppercase">
+                            Expiring in {daysToExpiry}d
+                          </span>
+                        )}
+                        {(dmg > 0 || spoil > 0) && (
+                          <span className="px-1.5 py-0.5 bg-rose-100 text-rose-900 border border-rose-300 rounded text-[9px] font-black uppercase">
+                            Loss: {dmg} dmg / {spoil} spoil
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-2.5 px-3">
@@ -858,6 +1601,32 @@ export const InventoryModule: React.FC<{
                     <td className="py-2.5 px-3 text-right font-mono-tabular font-bold text-[#1E9E60]">
                       {totalBtls} ({Math.floor(totalBtls / packSize)} cs)
                     </td>
+                    {canEditProduct && (
+                      <td className="py-2.5 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIncidentTargetProduct(p);
+                              setIsLogIncidentModalOpen(true);
+                            }}
+                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-[10px] font-montserrat font-bold flex items-center gap-1 cursor-pointer transition whitespace-nowrap"
+                            title="Log damage or spoilage incident for this SKU"
+                          >
+                            <PackageX className="w-3 h-3 text-rose-600" />
+                            Log Loss
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditProduct(p)}
+                            className="px-2.5 py-1 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-bold flex items-center gap-1 cursor-pointer transition whitespace-nowrap"
+                          >
+                            <Edit3 className="w-3 h-3 text-[#FFDE00]" />
+                            Edit
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -878,6 +1647,380 @@ export const InventoryModule: React.FC<{
         )}
       </div>
 
+      {/* Product Edit & Image Upload Modal (Strictly for Inventory Controller & Admin) */}
+      {editingProduct && canEditProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-xs overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-[#0A006E] text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#FFDE00] text-[#0A006E] rounded-xl">
+                  <Edit3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-montserrat font-black text-sm text-[#FFDE00]">
+                    Edit Product & Upload Bottle Photo
+                  </h3>
+                  <p className="text-[11px] text-slate-300 font-mono-tabular">
+                    SKU: {editingProduct.sku} · Role: {currentUser.role} ({currentUser.name})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSaveProductEdit} className="p-6 overflow-y-auto space-y-5 text-xs">
+              {/* Photo Upload & Preview Section */}
+              <div className="p-4 bg-[#F0F2F0] border-2 border-dashed border-[#0A006E]/30 rounded-2xl flex flex-col sm:flex-row items-center gap-5">
+                <div className="shrink-0 relative group">
+                  <ProductImage
+                    product={{
+                      ...editingProduct,
+                      name: editName,
+                      image: editImage,
+                      category: editCategory,
+                      subCategory: editSubCategory,
+                    }}
+                    size="xl"
+                  />
+                  {editImage && (
+                    <button
+                      type="button"
+                      onClick={() => setEditImage('')}
+                      className="absolute -top-2 -right-2 p-1 bg-rose-600 text-white rounded-full shadow-md hover:bg-rose-700 cursor-pointer"
+                      title="Remove uploaded image and use default illustration"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-2 text-center sm:text-left w-full">
+                  <div className="font-montserrat font-black text-slate-900 text-sm">
+                    Bottle Product Image
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    Upload bottle photo directly from your device camera or gallery. The image is compressed automatically to maintain instant ERP responsiveness.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 justify-center sm:justify-start">
+                    <label className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl font-montserrat font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition">
+                      <Upload className="w-3.5 h-3.5 text-[#FFDE00]" />
+                      Upload Bottle Image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {editImage && (
+                      <button
+                        type="button"
+                        onClick={() => setEditImage('')}
+                        className="px-3 py-2 bg-white border border-slate-300 text-slate-700 hover:text-rose-600 rounded-xl font-montserrat font-bold text-xs cursor-pointer transition"
+                      >
+                        Clear Custom Image
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="pt-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Or Paste Web Image URL
+                    </label>
+                    <input
+                      type="url"
+                      value={editImage}
+                      onChange={(e) => setEditImage(e.target.value)}
+                      placeholder="https://..."
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Product Core Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Product Name *</label>
+                  <input
+                    required
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Brand Name</label>
+                  <input
+                    type="text"
+                    value={editBrand}
+                    onChange={(e) => setEditBrand(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Stock Class</label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value as StockCategory)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-[#0A006E]"
+                  >
+                    <option value="IPS">IPS — Imported Products Stock (Bonded)</option>
+                    <option value="LPS">LPS — Local Products Stock (Domestic)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Subcategory</label>
+                  <select
+                    value={editSubCategory}
+                    onChange={(e) => setEditSubCategory(e.target.value as LiquorSubCategory)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-semibold"
+                  >
+                    {NAIROBI_DRINKS_SUB_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Volume (ml)</label>
+                  <input
+                    type="number"
+                    value={editVolumeMl}
+                    onChange={(e) => setEditVolumeMl(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Alcohol By Volume (ABV %)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editAbv}
+                    onChange={(e) => setEditAbv(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Base Wholesale Price (KES) *</label>
+                  <input
+                    required
+                    type="number"
+                    value={editWholesale}
+                    onChange={(e) => setEditWholesale(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular font-bold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Base Retail Price (KES) *</label>
+                  <input
+                    required
+                    type="number"
+                    value={editRetail}
+                    onChange={(e) => setEditRetail(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular font-black text-[#0A006E]"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Base Landed Cost (KES)</label>
+                  <input
+                    type="number"
+                    value={editCost}
+                    onChange={(e) => setEditCost(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Total Stock (Bottles)</label>
+                  <input
+                    required
+                    type="number"
+                    value={editTotalBottles}
+                    onChange={(e) => setEditTotalBottles(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular font-bold text-emerald-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">EAN-13 Bottle Barcode</label>
+                  <input
+                    type="text"
+                    value={editBarcode}
+                    onChange={(e) => setEditBarcode(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Outer Case Barcode (ITF-14)</label>
+                  <input
+                    type="text"
+                    value={editCaseBarcode}
+                    onChange={(e) => setEditCaseBarcode(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Country of Origin</label>
+                  <input
+                    type="text"
+                    value={editOrigin}
+                    onChange={(e) => setEditOrigin(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Authorized Supplier / Importer</label>
+                  <input
+                    type="text"
+                    value={editSupplier}
+                    onChange={(e) => setEditSupplier(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {/* Inventory Health & Governance Thresholds Section */}
+              <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-[#0A006E]" />
+                  <div className="font-montserrat font-black text-xs text-[#0A006E] uppercase">
+                    Inventory Governance Thresholds & Stock Health
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-600">
+                  Custom dead-stock and expiry thresholds configured by the Inventory Manager for this specific liquor SKU.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-montserrat font-bold text-slate-700">
+                      Dead Stock Threshold (Days)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="730"
+                      value={editDeadStockDays}
+                      onChange={(e) => setEditDeadStockDays(Number(e.target.value))}
+                      className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                    />
+                    <span className="text-[10px] text-slate-500">Flags stock inactive after X days</span>
+                  </div>
+
+                  <div>
+                    <label className="font-montserrat font-bold text-slate-700">
+                      Expiry Warning Alert (Days)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={editExpiryDays}
+                      onChange={(e) => setEditExpiryDays(Number(e.target.value))}
+                      className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                    />
+                    <span className="text-[10px] text-slate-500">Flags batches before expiry</span>
+                  </div>
+
+                  <div>
+                    <label className="font-montserrat font-bold text-slate-700">
+                      Batch Expiry Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editBatchExpiryDate}
+                      onChange={(e) => setEditBatchExpiryDate(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                    />
+                    <span className="text-[10px] text-slate-500">Cream liqueurs & fortified stock</span>
+                  </div>
+
+                  <div>
+                    <label className="font-montserrat font-bold text-slate-700">
+                      Damaged Bottles (Logged)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editDamagedCount}
+                      onChange={(e) => setEditDamagedCount(Number(e.target.value))}
+                      className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular text-rose-700 font-bold"
+                    />
+                    <span className="text-[10px] text-slate-500">Broken seal / cracked glass count</span>
+                  </div>
+
+                  <div>
+                    <label className="font-montserrat font-bold text-slate-700">
+                      Spoiled Bottles (Logged)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editSpoiledCount}
+                      onChange={(e) => setEditSpoiledCount(Number(e.target.value))}
+                      className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular text-rose-700 font-bold"
+                    />
+                    <span className="text-[10px] text-slate-500">Oxidized or curdled bottles</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-montserrat font-bold cursor-pointer transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProduct}
+                  className="px-5 py-2.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl font-montserrat font-black flex items-center gap-2 cursor-pointer shadow-md transition disabled:opacity-50"
+                >
+                  {isSavingProduct ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Saving Updates...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      Save Product & Sync Image
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* CSV Bulk Import Modal */}
       <CsvInventoryImportModal
         isOpen={isCsvModalOpen}
@@ -895,6 +2038,30 @@ export const InventoryModule: React.FC<{
           return count;
         }}
       />
+
+      {/* Inventory Governance Thresholds Modal (Dead Stock, Expiry Warning, Max Damage/Spoilage) */}
+      {isThresholdModalOpen && (
+        <StockThresholdsGovernanceModal
+          currentSettings={thresholdSettings}
+          onSave={handleSaveThresholdSettings}
+          onClose={() => setIsThresholdModalOpen(false)}
+        />
+      )}
+
+      {/* Log Damage / Spoilage Incident Modal */}
+      {isLogIncidentModalOpen && (
+        <LogDamageSpoilageModal
+          products={products}
+          branches={branches}
+          currentUser={currentUser}
+          initialProduct={incidentTargetProduct}
+          onLogIncident={handleLogIncidentDirect}
+          onClose={() => {
+            setIsLogIncidentModalOpen(false);
+            setIncidentTargetProduct(null);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -13,6 +13,15 @@ import {
   XCircle,
   X,
   Users,
+  Printer,
+  Receipt,
+  DollarSign,
+  Calculator,
+  Calendar,
+  History,
+  ArrowRight,
+  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -24,6 +33,8 @@ import {
   ComplianceRecord,
   AuditLog,
   Product,
+  PayrollRun,
+  PayrollRecord,
 } from '../types';
 import {
   ROLE_PERMISSIONS,
@@ -1205,20 +1216,29 @@ export const HrAndRbacModule: React.FC<{
   currentUser: StaffMember;
   staffList: StaffMember[];
   branches: Branch[];
+  payrollRuns?: PayrollRun[];
   onCreateStaff: (newStaff: Omit<StaffMember, 'id' | 'createdAt'>) => Promise<void>;
   onUpdateStaff?: (staffId: string, updates: Partial<StaffMember>) => Promise<void>;
   onSetStaffStatus?: (staffId: string, status: 'Active' | 'Suspended' | 'Terminated') => Promise<void>;
   onDeleteStaff?: (staffId: string) => Promise<void>;
+  onExecutePayrollRun?: (runDraft: Omit<PayrollRun, 'id' | 'createdAt'>) => Promise<void>;
+  onOpenPayslip?: (record: PayrollRecord) => void;
 }> = ({
   currentUser,
   staffList,
   branches,
+  payrollRuns = [],
   onCreateStaff,
   onUpdateStaff,
   onSetStaffStatus,
   onDeleteStaff,
+  onExecutePayrollRun,
+  onOpenPayslip,
 }) => {
   const creatableRoles = ROLE_PERMISSIONS[currentUser.role].canCreateRoles;
+  const canManagePayroll = currentUser.role === 'HR' || currentUser.role === 'Admin';
+
+  const [activeTab, setActiveTab] = useState<'roster' | 'payroll'>('roster');
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -1233,6 +1253,16 @@ export const HrAndRbacModule: React.FC<{
   );
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  // Default salary & deductions fields for new staff
+  const [baseSalary, setBaseSalary] = useState<number>(65000);
+  const [deductions, setDeductions] = useState<number>(12500);
+  const [penalties, setPenalties] = useState<number>(0);
+  const [deductionsBreakdown, setDeductionsBreakdown] = useState<string>('PAYE: KES 8,500, SHIF: KES 1,800, NSSF: KES 1,080, Housing Levy: KES 1,120');
+  const [penaltiesReason, setPenaltiesReason] = useState<string>('');
+  const [kraPin, setKraPin] = useState<string>('A009182741Z');
+  const [nssfNo, setNssfNo] = useState<string>('092837192');
+  const [nhifNo, setNhifNo] = useState<string>('88392019');
+
   // Edit Staff Modal State
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [editName, setEditName] = useState('');
@@ -1241,12 +1271,51 @@ export const HrAndRbacModule: React.FC<{
   const [editBranchId, setEditBranchId] = useState('');
   const [editStatus, setEditStatus] = useState<'Active' | 'Suspended' | 'Terminated'>('Active');
   const [editPin, setEditPin] = useState('');
+  const [editBaseSalary, setEditBaseSalary] = useState<number>(65000);
+  const [editDeductions, setEditDeductions] = useState<number>(12500);
+  const [editPenalties, setEditPenalties] = useState<number>(0);
+  const [editDeductionsBreakdown, setEditDeductionsBreakdown] = useState<string>('');
+  const [editPenaltiesReason, setEditPenaltiesReason] = useState<string>('');
+  const [editKraPin, setEditKraPin] = useState<string>('');
+  const [editNssfNo, setEditNssfNo] = useState<string>('');
+  const [editNhifNo, setEditNhifNo] = useState<string>('');
+
+  // Quick Compensation & Penalties Adjustment Modal State
+  const [compStaff, setCompStaff] = useState<StaffMember | null>(null);
+  const [compBase, setCompBase] = useState<number>(65000);
+  const [compDed, setCompDed] = useState<number>(12500);
+  const [compPen, setCompPen] = useState<number>(0);
+  const [compBreakdown, setCompBreakdown] = useState<string>('');
+  const [compReason, setCompReason] = useState<string>('');
+  const [compKra, setCompKra] = useState<string>('');
+  const [compNssf, setCompNssf] = useState<string>('');
+  const [compNhif, setCompNhif] = useState<string>('');
+  const [isSavingComp, setIsSavingComp] = useState<boolean>(false);
+
+  // Payroll Run execution state
+  const [payrollPeriod, setPayrollPeriod] = useState<string>('October 2026');
+  const [isRunningPayroll, setIsRunningPayroll] = useState<boolean>(false);
 
   // Delete Staff Modal State (Requirement 3: Prompt question if they are sure they want to delete because it is permanent)
   const [deletingStaff, setDeletingStaff] = useState<StaffMember | null>(null);
   const [isDeletingStaff, setIsDeletingStaff] = useState(false);
 
   const isGoogleRole = selectedRole === 'Admin' || selectedRole === 'Accountant';
+
+  const autoCalculateKenyanStatutory = (salary: number) => {
+    const nssf = Math.min(Math.round(salary * 0.06), 2160);
+    const shif = Math.round(salary * 0.0275);
+    const housing = Math.round(salary * 0.015);
+    const taxable = Math.max(0, salary - nssf);
+    let paye = 0;
+    if (taxable > 24000) {
+      paye = Math.round((taxable - 24000) * 0.25 - 2400);
+      if (paye < 0) paye = 0;
+    }
+    const totalDeds = nssf + shif + housing + paye;
+    const breakdown = `PAYE: KES ${paye.toLocaleString()}, SHIF: KES ${shif.toLocaleString()}, NSSF: KES ${nssf.toLocaleString()}, Housing Levy: KES ${housing.toLocaleString()}`;
+    return { totalDeds, breakdown };
+  };
 
   const handleRandomizePin = () => {
     setPin(String(Math.floor(100000 + Math.random() * 900000)));
@@ -1279,6 +1348,12 @@ export const HrAndRbacModule: React.FC<{
     const effectiveRole = creatableRoles.includes(selectedRole)
       ? selectedRole
       : creatableRoles[0];
+
+    if (effectiveRole === 'Admin' && email.trim().toLowerCase() !== 'feminiholdings@gmail.com') {
+      setFeedback('Restriction: Only feminiholdings@gmail.com is authorized as System Administrator.');
+      return;
+    }
+
     const effectiveAuthMethod =
       effectiveRole === 'Admin' || effectiveRole === 'Accountant' ? 'google' : 'pin';
 
@@ -1298,12 +1373,20 @@ export const HrAndRbacModule: React.FC<{
       status: 'Active',
       createdBy: currentUser.name,
       createdByRole: currentUser.role,
+      baseSalaryKes: Number(baseSalary),
+      deductionsKes: Number(deductions),
+      penaltiesKes: Number(penalties),
+      deductionsBreakdown: deductionsBreakdown.trim(),
+      penaltiesReason: penaltiesReason.trim(),
+      kraPin: kraPin.trim(),
+      nssfNo: nssfNo.trim(),
+      nhifNo: nhifNo.trim(),
     });
 
     setFeedback(
       effectiveAuthMethod === 'pin'
-        ? `Provisioned ${effectiveRole} "${name}" with 6-Digit PIN: ${pin}. They can now sign in via the 6-Digit PIN Terminal.`
-        : `Provisioned ${effectiveRole} "${name}" (${email}) for Google Authentication.`
+        ? `Provisioned ${effectiveRole} "${name}" with 6-Digit PIN: ${pin} & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`
+        : `Provisioned ${effectiveRole} "${name}" (${email}) for Google Authentication & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`
     );
     setName('');
     setEmail('');
@@ -1318,11 +1401,60 @@ export const HrAndRbacModule: React.FC<{
     setEditBranchId(staff.branchId);
     setEditStatus(staff.status);
     setEditPin(staff.pin || String(Math.floor(100000 + Math.random() * 900000)));
+    setEditBaseSalary(staff.baseSalaryKes ?? (staff.role === 'Admin' ? 180000 : staff.role === 'Accountant' ? 120000 : staff.role === 'Branch Manager' ? 95000 : 65000));
+    setEditDeductions(staff.deductionsKes ?? 12500);
+    setEditPenalties(staff.penaltiesKes ?? 0);
+    setEditDeductionsBreakdown(staff.deductionsBreakdown || 'PAYE: KES 8,500, SHIF: KES 1,800, NSSF: KES 1,080, Housing Levy: KES 1,120');
+    setEditPenaltiesReason(staff.penaltiesReason || '');
+    setEditKraPin(staff.kraPin || 'A009182741Z');
+    setEditNssfNo(staff.nssfNo || '092837192');
+    setEditNhifNo(staff.nhifNo || '88392019');
+  };
+
+  const handleOpenCompensation = (staff: StaffMember) => {
+    setCompStaff(staff);
+    const defSalary = staff.baseSalaryKes ?? (staff.role === 'Admin' ? 180000 : staff.role === 'Accountant' ? 120000 : staff.role === 'Branch Manager' ? 95000 : 65000);
+    setCompBase(defSalary);
+    setCompDed(staff.deductionsKes ?? 12500);
+    setCompPen(staff.penaltiesKes ?? 0);
+    setCompBreakdown(staff.deductionsBreakdown || 'PAYE: KES 8,500, SHIF: KES 1,800, NSSF: KES 1,080, Housing Levy: KES 1,120');
+    setCompReason(staff.penaltiesReason || '');
+    setCompKra(staff.kraPin || 'A009182741Z');
+    setCompNssf(staff.nssfNo || '092837192');
+    setCompNhif(staff.nhifNo || '88392019');
+  };
+
+  const handleSaveCompensation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!compStaff || !onUpdateStaff) return;
+    setIsSavingComp(true);
+    try {
+      await onUpdateStaff(compStaff.id, {
+        baseSalaryKes: Number(compBase),
+        deductionsKes: Number(compDed),
+        penaltiesKes: Number(compPen),
+        deductionsBreakdown: compBreakdown.trim(),
+        penaltiesReason: compReason.trim(),
+        kraPin: compKra.trim(),
+        nssfNo: compNssf.trim(),
+        nhifNo: compNhif.trim(),
+      });
+      setFeedback(`Compensation details updated for ${compStaff.name}. Net take-home: KES ${(compBase - compDed - compPen).toLocaleString()}`);
+      setCompStaff(null);
+    } finally {
+      setIsSavingComp(false);
+    }
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStaff || !onUpdateStaff) return;
+
+    if (editRole === 'Admin' && editEmail.trim().toLowerCase() !== 'feminiholdings@gmail.com') {
+      setFeedback('Restriction: Only feminiholdings@gmail.com is authorized as System Administrator.');
+      return;
+    }
+
     const branch = branches.find((b) => b.id === editBranchId) || branches[0];
     const effectiveAuth = editRole === 'Admin' || editRole === 'Accountant' ? 'google' : 'pin';
 
@@ -1335,10 +1467,72 @@ export const HrAndRbacModule: React.FC<{
       branchName: branch?.name || editingStaff.branchName,
       status: editStatus,
       pin: effectiveAuth === 'pin' ? editPin : undefined,
+      baseSalaryKes: Number(editBaseSalary),
+      deductionsKes: Number(editDeductions),
+      penaltiesKes: Number(editPenalties),
+      deductionsBreakdown: editDeductionsBreakdown.trim(),
+      penaltiesReason: editPenaltiesReason.trim(),
+      kraPin: editKraPin.trim(),
+      nssfNo: editNssfNo.trim(),
+      nhifNo: editNhifNo.trim(),
     });
 
     setFeedback(`Updated staff account for ${editName.trim()} successfully.`);
     setEditingStaff(null);
+  };
+
+  const handleExecutePayroll = async () => {
+    if (!onExecutePayrollRun) return;
+    const activeStaff = staffList.filter((s) => s.status === 'Active');
+    if (activeStaff.length === 0) {
+      setFeedback('Error: No active staff members found to run payroll.');
+      return;
+    }
+    setIsRunningPayroll(true);
+    try {
+      const records: PayrollRecord[] = activeStaff.map((s) => {
+        const bSalary = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
+        const ded = s.deductionsKes ?? Math.round(bSalary * 0.18);
+        const pen = s.penaltiesKes ?? 0;
+        const net = Math.max(0, bSalary - ded - pen);
+        return {
+          staffId: s.id,
+          staffName: s.name,
+          staffEmail: s.email,
+          staffRole: s.role,
+          branchName: s.branchName,
+          period: payrollPeriod,
+          baseSalary: bSalary,
+          deductions: ded,
+          penalties: pen,
+          netSalary: net,
+          deductionsBreakdown: s.deductionsBreakdown || 'PAYE / SHIF / NSSF / Affordable Housing Levy',
+          penaltiesReason: s.penaltiesReason || '',
+          kraPin: s.kraPin || 'A009182741Z',
+          nssfNo: s.nssfNo || '092837192',
+          nhifNo: s.nhifNo || '88392019',
+          runDate: new Date().toISOString(),
+          payrollRunId: `PR-${payrollPeriod.replace(/\s+/g, '-').toUpperCase()}`,
+        };
+      });
+
+      const totalNet = records.reduce((acc, r) => acc + r.netSalary, 0);
+
+      await onExecutePayrollRun({
+        period: payrollPeriod,
+        runDate: new Date().toISOString(),
+        runBy: currentUser.name,
+        runByRole: currentUser.role,
+        totalDisbursed: totalNet,
+        totalEmployees: records.length,
+        status: 'Paid',
+        recordsJson: JSON.stringify(records),
+      });
+
+      setFeedback(`Payroll for ${payrollPeriod} successfully executed! ${records.length} employees can now download their thermal payslips from their own dashboard.`);
+    } finally {
+      setIsRunningPayroll(false);
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -1386,291 +1580,838 @@ export const HrAndRbacModule: React.FC<{
         </div>
       )}
 
-      {creatableRoles.length === 0 ? (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900">
-          Your current role (<strong>{currentUser.role}</strong>) has read-only visibility into the organizational directory and cannot provision new staff accounts.
-        </div>
-      ) : (
-        <form
-          onSubmit={handleProvisionStaff}
-          className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs"
+      {/* Tab Switcher: Staff Directory vs HR Payroll */}
+      <div className="flex items-center gap-2 border-b border-slate-300 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab('roster')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-montserrat font-black flex items-center gap-2 cursor-pointer transition ${
+            activeTab === 'roster'
+              ? 'bg-[#0A006E] text-[#FFDE00] shadow-md'
+              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+          }`}
         >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-            <h3 className="text-sm font-montserrat font-black text-[#0A006E] flex items-center gap-2">
-              <UserPlus className="w-4 h-4 text-[#0A006E]" />
-              Provision New Staff Account (Authorized for {currentUser.role})
-            </h3>
-            <span className="text-xs text-slate-600">
-              Allowed Roles: <strong>{creatableRoles.join(', ')}</strong>
-            </span>
-          </div>
+          <Users className="w-4 h-4" />
+          Staff Directory & Roles ({staffList.length})
+        </button>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
-            <div>
-              <label className="font-montserrat font-bold text-slate-700">Full Legal Name *</label>
-              <input
-                required
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Brenda Wanjiku"
-                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-              />
+        {canManagePayroll && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('payroll')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-montserrat font-black flex items-center gap-2 cursor-pointer transition ${
+              activeTab === 'payroll'
+                ? 'bg-[#0A006E] text-[#FFDE00] shadow-md'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <DollarSign className="w-4 h-4 text-[#34D186]" />
+            HR Payroll, Salaries & Penalties Engine
+            {payrollRuns.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-[#34D186] text-[#0A006E]">
+                {payrollRuns.length} Runs
+              </span>
+            )}
+          </button>
+        )}
+      </div>
+
+      {activeTab === 'roster' && (
+        <>
+          {creatableRoles.length === 0 ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900">
+              Your current role (<strong>{currentUser.role}</strong>) has read-only visibility into the organizational directory and cannot provision new staff accounts.
             </div>
+          ) : (
+            <form
+              onSubmit={handleProvisionStaff}
+              className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs"
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h3 className="text-sm font-montserrat font-black text-[#0A006E] flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-[#0A006E]" />
+                  Provision New Staff Account (Authorized for {currentUser.role})
+                </h3>
+                <span className="text-xs text-slate-600">
+                  Allowed Roles: <strong>{creatableRoles.join(', ')}</strong>
+                </span>
+              </div>
 
-            <div>
-              <label className="font-montserrat font-bold text-slate-700">Corporate Email *</label>
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="staff@vaairo.co.ke"
-                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-              />
-            </div>
-
-            <div>
-              <label className="font-montserrat font-bold text-slate-700">Target ERP Role</label>
-              <select
-                value={creatableRoles.includes(selectedRole) ? selectedRole : creatableRoles[0]}
-                onChange={(e) => setSelectedRole(e.target.value as StaffRole)}
-                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-montserrat font-black text-[#0A006E]"
-              >
-                {creatableRoles.map((r) => (
-                  <option key={r} value={r}>
-                    {r} ({r === 'Accountant' || r === 'Admin' ? 'Google Login' : '6-Digit PIN'})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="font-montserrat font-bold text-slate-700">Assigned Branch</label>
-              <select
-                disabled={currentUser.role === 'Branch Manager'}
-                value={
-                  currentUser.role === 'Branch Manager' ? currentUser.branchId : branchId
-                }
-                onChange={(e) => setBranchId(e.target.value)}
-                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.code} · {b.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {!isGoogleRole ? (
-              <div className="sm:col-span-2">
-                <label className="font-montserrat font-bold text-slate-700">
-                  Assigned 6-Digit Authentication PIN (Enlarged Digits)
-                </label>
-                <div className="flex items-center gap-3 mt-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Full Legal Name *</label>
                   <input
                     required
                     type="text"
-                    maxLength={6}
-                    pattern="\d{6}"
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="w-52 h-13 px-4 bg-white border-2 border-[#0A006E] rounded-2xl font-mono-tabular font-black text-2xl tracking-widest text-[#0A006E] shadow-xs text-center"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Brenda Wanjiku"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
                   />
-                  <button
-                    type="button"
-                    onClick={handleRandomizePin}
-                    className="px-4 py-3 bg-white hover:bg-[#FFDE00] border border-slate-300 hover:border-[#0A006E] rounded-xl text-xs font-montserrat font-bold text-[#0A006E] cursor-pointer transition-colors"
-                  >
-                    Generate New PIN
-                  </button>
                 </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Corporate Email *</label>
+                  <input
+                    required
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="staff@vaairo.co.ke"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Target ERP Role</label>
+                  <select
+                    value={creatableRoles.includes(selectedRole) ? selectedRole : creatableRoles[0]}
+                    onChange={(e) => setSelectedRole(e.target.value as StaffRole)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-montserrat font-black text-[#0A006E]"
+                  >
+                    {creatableRoles.map((r) => (
+                      <option key={r} value={r}>
+                        {r} ({r === 'Accountant' || r === 'Admin' ? 'Google Login' : '6-Digit PIN'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Assigned Branch</label>
+                  <select
+                    disabled={currentUser.role === 'Branch Manager'}
+                    value={
+                      currentUser.role === 'Branch Manager' ? currentUser.branchId : branchId
+                    }
+                    onChange={(e) => setBranchId(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.code} · {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Initial Compensation Fields */}
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Basic Monthly Salary (KES)</label>
+                  <input
+                    type="number"
+                    value={baseSalary}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setBaseSalary(val);
+                      const calc = autoCalculateKenyanStatutory(val);
+                      setDeductions(calc.totalDeds);
+                      setDeductionsBreakdown(calc.breakdown);
+                    }}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Statutory Deductions (KES)</label>
+                  <input
+                    type="number"
+                    value={deductions}
+                    onChange={(e) => setDeductions(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular text-rose-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">KRA Tax PIN</label>
+                  <input
+                    type="text"
+                    value={kraPin}
+                    onChange={(e) => setKraPin(e.target.value.toUpperCase())}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular uppercase"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Estimated Net Pay</label>
+                  <div className="w-full mt-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono-tabular font-black text-[#0A006E]">
+                    KES {Math.max(0, baseSalary - deductions - penalties).toLocaleString()}
+                  </div>
+                </div>
+
+                {!isGoogleRole ? (
+                  <div className="sm:col-span-2 lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2">
+                    <label className="font-montserrat font-bold text-slate-700">
+                      Assigned 6-Digit Authentication PIN (Enlarged Digits)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        required
+                        type="text"
+                        maxLength={6}
+                        pattern="\d{6}"
+                        value={pin}
+                        onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        className="w-52 h-12 px-4 bg-white border-2 border-[#0A006E] rounded-xl font-mono-tabular font-black text-2xl tracking-widest text-[#0A006E] shadow-xs text-center"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRandomizePin}
+                        className="px-4 py-2.5 bg-slate-50 hover:bg-[#FFDE00] border border-slate-300 hover:border-[#0A006E] rounded-xl text-xs font-montserrat font-bold text-[#0A006E] cursor-pointer transition-colors"
+                      >
+                        Generate New PIN
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="sm:col-span-2 lg:col-span-4 flex items-center text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-200">
+                    <Lock className="w-4 h-4 text-[#0A006E] mr-2 shrink-0" />
+                    Accountant & Admin authenticate strictly via Google OAuth using their corporate email address.
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <UserPlus className="w-4 h-4" />
+                Create Staff Account & Activate Role Permissions
+              </button>
+            </form>
+          )}
+
+          {/* Organization Staff Directory Table */}
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+                Provisioned Organization Directory ({staffList.length} Staff)
+              </h3>
+              <button
+                onClick={() =>
+                  exportReportToPDF(
+                    'HR Staff & Role-Based Access Directory',
+                    `Exported by ${currentUser.name}`,
+                    ['Name', 'Email', 'Role', 'Status', 'Auth Method', 'Branch', 'Created By', 'Last Login'],
+                    staffList.map((s) => [
+                      s.name,
+                      s.email,
+                      s.role,
+                      s.status,
+                      s.authMethod === 'google' ? 'Google OAuth' : `6-Digit PIN (${s.pin || '******'})`,
+                      s.branchName,
+                      `${s.createdBy} (${s.createdByRole})`,
+                      s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString() : 'Never',
+                    ]),
+                    'Vaairo_HR_Staff_Directory'
+                  )
+                }
+                className="px-3.5 py-1.5 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
+                Export HR PDF
+              </button>
+            </div>
+
+            <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                    <th className="py-2.5 px-3 font-black">Staff Name & Email</th>
+                    <th className="py-2.5 px-3 font-black">Role & Status</th>
+                    <th className="py-2.5 px-3 font-black">Auth Mode & PIN</th>
+                    <th className="py-2.5 px-3 font-black">Assigned Branch</th>
+                    <th className="py-2.5 px-3 font-black text-right">Net Monthly Salary</th>
+                    <th className="py-2.5 px-3 font-black text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {staffList.map((s) => {
+                    const canManage = canManageStaff(s);
+                    const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
+                    const ded = s.deductionsKes ?? Math.round(bSal * 0.18);
+                    const pen = s.penaltiesKes ?? 0;
+                    const net = Math.max(0, bSal - ded - pen);
+
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">
+                          <div>{s.name}</div>
+                          <div className="text-slate-500 font-normal text-[11px]">{s.email}</div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-montserrat font-black text-[#0A006E]">{s.role}</div>
+                          <span className={`inline-flex items-center px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold ${
+                            s.status === 'Active'
+                              ? 'bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40'
+                              : s.status === 'Suspended'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : 'bg-rose-100 text-rose-800 border border-rose-300'
+                          }`}>
+                            {s.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono-tabular">
+                          {s.authMethod === 'google' ? (
+                            <span className="text-[#0A006E] font-bold">Google OAuth</span>
+                          ) : (
+                            <span className="text-slate-900 font-bold bg-slate-100 px-2 py-1 rounded-lg">
+                              PIN: <span className="font-extrabold text-[#0A006E] tracking-wider">{s.pin}</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-700">{s.branchName}</td>
+                        <td className="py-2.5 px-3 text-right font-mono-tabular font-bold text-[#0A006E]">
+                          KES {net.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          {canManage ? (
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCompensation(s)}
+                                className="px-2 py-1 bg-amber-50 hover:bg-[#FFDE00] text-[#0A006E] border border-amber-300 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                title="Set Salary, Deductions & Penalties"
+                              >
+                                <DollarSign className="w-3 h-3 text-[#1E9E60]" />
+                                Compensation
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(s)}
+                                className="px-2 py-1 bg-slate-100 hover:bg-[#0A006E] hover:text-[#FFDE00] text-slate-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                title="Edit Staff Member"
+                              >
+                                <Pencil className="w-3 h-3" />
+                                Edit
+                              </button>
+
+                              {s.status === 'Active' && (
+                                <button
+                                  type="button"
+                                  onClick={() => onSetStaffStatus?.(s.id, 'Suspended')}
+                                  className="px-2 py-1 bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                  title="Suspend Staff Access"
+                                >
+                                  <PauseCircle className="w-3 h-3" />
+                                  Suspend
+                                </button>
+                              )}
+
+                              {s.status === 'Suspended' && (
+                                <button
+                                  type="button"
+                                  onClick={() => onSetStaffStatus?.(s.id, 'Active')}
+                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                  title="Reactivate Staff Account"
+                                >
+                                  <PlayCircle className="w-3 h-3" />
+                                  Activate
+                                </button>
+                              )}
+
+                              {s.status !== 'Terminated' && (
+                                <button
+                                  type="button"
+                                  onClick={() => onSetStaffStatus?.(s.id, 'Terminated')}
+                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-500 hover:text-white text-rose-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                  title="Terminate Staff Account"
+                                >
+                                  <XCircle className="w-3 h-3" />
+                                  Terminate
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => setDeletingStaff(s)}
+                                className="p-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 rounded-lg transition-colors cursor-pointer"
+                                title="Permanently Delete Staff"
+                                aria-label={`Permanently Delete ${s.name}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">
+                              {s.id === currentUser.id ? 'Current User' : 'Restricted'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* PAYROLL & COMPENSATION ENGINE TAB */}
+      {activeTab === 'payroll' && canManagePayroll && (
+        <div className="space-y-6">
+          {/* Top KPI Summary Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+              <div className="text-xs font-montserrat font-bold text-slate-600">
+                Total Monthly Net Disbursement
+              </div>
+              <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+                KES {staffList.filter((s) => s.status === 'Active').reduce((sum, s) => {
+                  const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
+                  const ded = s.deductionsKes ?? Math.round(bSal * 0.18);
+                  const pen = s.penaltiesKes ?? 0;
+                  return sum + Math.max(0, bSal - ded - pen);
+                }, 0).toLocaleString()}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                For {staffList.filter((s) => s.status === 'Active').length} active employees on roster
+              </div>
+            </div>
+
+            <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+              <div className="text-xs font-montserrat font-bold text-slate-600">
+                Total Gross Monthly Salaries
+              </div>
+              <div className="text-2xl font-montserrat font-black text-slate-800 font-mono-tabular mt-1">
+                KES {staffList.filter((s) => s.status === 'Active').reduce((sum, s) => {
+                  return sum + (s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000));
+                }, 0).toLocaleString()}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Base contracted remuneration
+              </div>
+            </div>
+
+            <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+              <div className="text-xs font-montserrat font-bold text-slate-600">
+                Total Statutory Deductions
+              </div>
+              <div className="text-2xl font-montserrat font-black text-rose-600 font-mono-tabular mt-1">
+                KES {staffList.filter((s) => s.status === 'Active').reduce((sum, s) => {
+                  const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
+                  return sum + (s.deductionsKes ?? Math.round(bSal * 0.18));
+                }, 0).toLocaleString()}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                KRA PAYE · SHIF · NSSF · Housing Levy
+              </div>
+            </div>
+
+            <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+              <div className="text-xs font-montserrat font-bold text-slate-600">
+                Total Disciplinary Penalties
+              </div>
+              <div className="text-2xl font-montserrat font-black text-amber-600 font-mono-tabular mt-1">
+                KES {staffList.filter((s) => s.status === 'Active').reduce((sum, s) => sum + (s.penaltiesKes ?? 0), 0).toLocaleString()}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Shift variances & disciplinary fines
+              </div>
+            </div>
+          </div>
+
+          {/* Run Payroll Execution Control Panel */}
+          <div className="bg-[#FFDE00] border-2 border-[#0A006E] rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#0A006E]/20 pb-3">
+              <div>
+                <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+                  HR Corporate Disbursement Engine
+                </span>
+                <h3 className="text-base font-montserrat font-black text-[#0A006E]">
+                  Execute & Publish Payroll Disbursement
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-900">Pay Period:</span>
+                <input
+                  type="text"
+                  value={payrollPeriod}
+                  onChange={(e) => setPayrollPeriod(e.target.value)}
+                  placeholder="e.g. October 2026"
+                  className="px-3 py-1.5 bg-white border-2 border-[#0A006E] rounded-xl font-montserrat font-black text-xs text-[#0A006E]"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="text-xs text-slate-900 space-y-1">
+                <p className="font-semibold">
+                  Executing payroll locks the ledger for <strong>{payrollPeriod}</strong> and generates serialized thermal payslips for all <strong>{staffList.filter((s) => s.status === 'Active').length}</strong> active staff.
+                </p>
+                <p className="text-[11px] text-slate-800">
+                  <ShieldCheck className="w-3.5 h-3.5 inline mr-1 text-[#0A006E]" />
+                  Employees will immediately be able to download their 80mm/58mm POS thermal receipt payslip from their own dashboard.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={isRunningPayroll || staffList.filter((s) => s.status === 'Active').length === 0}
+                onClick={handleExecutePayroll}
+                className="px-6 py-3 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl font-montserrat font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg transition disabled:opacity-50 shrink-0"
+              >
+                {isRunningPayroll ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-[#FFDE00]" />
+                    Processing Ledger...
+                  </>
+                ) : (
+                  <>
+                    <Printer className="w-4 h-4 text-[#FFDE00]" />
+                    Run Payroll for {payrollPeriod}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Staff Compensation, Penalties & Net Pay Configuration Table */}
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+                  Staff Remuneration, Deductions & Penalties Roster ({staffList.length} Staff)
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Configure monthly salaries, statutory tax deductions, and disciplinary penalties for each employee.
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                    <th className="py-2.5 px-3 font-black">Staff Member</th>
+                    <th className="py-2.5 px-3 font-black">Role & Branch Depot</th>
+                    <th className="py-2.5 px-3 font-black text-right">Basic Salary (KES)</th>
+                    <th className="py-2.5 px-3 font-black text-right">Deductions (KES)</th>
+                    <th className="py-2.5 px-3 font-black text-right">Penalties (KES)</th>
+                    <th className="py-2.5 px-3 font-black text-right">Net Take-Home (KES)</th>
+                    <th className="py-2.5 px-3 font-black text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {staffList.map((s) => {
+                    const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
+                    const ded = s.deductionsKes ?? Math.round(bSal * 0.18);
+                    const pen = s.penaltiesKes ?? 0;
+                    const net = Math.max(0, bSal - ded - pen);
+
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">
+                          <div>{s.name}</div>
+                          <div className="text-slate-500 font-normal text-[11px]">{s.email}</div>
+                          {s.kraPin && (
+                            <div className="text-[10px] text-slate-400 font-mono">PIN: {s.kraPin}</div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-montserrat font-bold text-[#0A006E]">{s.role}</div>
+                          <div className="text-[11px] text-slate-600">{s.branchName}</div>
+                          <span className={`inline-flex items-center px-2 py-0.2 mt-0.5 rounded-full text-[9px] font-bold ${
+                            s.status === 'Active' ? 'bg-[#34D186]/20 text-[#1E9E60]' : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {s.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono-tabular font-bold text-slate-900">
+                          KES {bSal.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono-tabular text-rose-600">
+                          -KES {ded.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono-tabular text-amber-600">
+                          {pen > 0 ? `-KES ${pen.toLocaleString()}` : 'KES 0'}
+                          {s.penaltiesReason && (
+                            <div className="text-[9px] text-amber-800 truncate max-w-[120px] ml-auto">
+                              {s.penaltiesReason}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono-tabular font-black text-[#0A006E]">
+                          KES {net.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCompensation(s)}
+                            className="px-2.5 py-1 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-lg font-montserrat font-bold text-[11px] cursor-pointer shadow-xs transition ml-auto flex items-center gap-1"
+                          >
+                            <DollarSign className="w-3 h-3 text-[#FFDE00]" />
+                            Adjust Salary & Penalties
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Historical Payroll Runs & Generated Thermal Payslips */}
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-montserrat font-black text-[#0A006E] flex items-center gap-2">
+                  <History className="w-4 h-4 text-[#0A006E]" />
+                  Historical Payroll Execution Batches ({payrollRuns.length} Runs)
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Executed payroll batches. Individual employee thermal payslips are available for download.
+                </p>
+              </div>
+            </div>
+
+            {payrollRuns.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-2">
+                <Receipt className="w-8 h-8 text-slate-400 mx-auto" />
+                <div className="font-montserrat font-bold text-slate-700 text-sm">
+                  No Payroll Runs Finalized Yet
+                </div>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Click the <strong>"Run Payroll for {payrollPeriod}"</strong> button above to finalize your first disbursement cycle and generate employee thermal payslips.
+                </p>
               </div>
             ) : (
-              <div className="sm:col-span-2 flex items-center text-xs text-slate-600 pt-4">
-                <Lock className="w-4 h-4 text-[#0A006E] mr-2 shrink-0" />
-                Accountant & Admin authenticate strictly via Google OAuth using their corporate email address.
+              <div className="space-y-4">
+                {payrollRuns.map((run) => {
+                  let runRecords: PayrollRecord[] = [];
+                  try {
+                    runRecords = JSON.parse(run.recordsJson);
+                  } catch {
+                    runRecords = [];
+                  }
+
+                  return (
+                    <div key={run.id} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 bg-[#34D186]/20 text-[#1E9E60] rounded-xl font-bold">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="font-montserrat font-black text-slate-900 text-sm">
+                              Payroll Run: {run.period}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              Executed by {run.runBy} on {new Date(run.runDate).toLocaleString()} · Batch ID: {run.id}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="text-xs text-slate-500">Total Net Disbursed:</div>
+                            <div className="font-mono-tabular font-black text-[#0A006E] text-sm">
+                              KES {run.totalDisbursed.toLocaleString()}
+                            </div>
+                          </div>
+                          <span className="px-2.5 py-1 bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40 rounded-xl text-xs font-bold">
+                            PAID & CLEARED
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Employee payslip list inside this run */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                          Employee Payslips in this Batch ({runRecords.length}):
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          {runRecords.map((rec) => (
+                            <div
+                              key={rec.staffId}
+                              className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2 text-xs"
+                            >
+                              <div className="truncate">
+                                <div className="font-montserrat font-bold text-slate-900 truncate">
+                                  {rec.staffName}
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-mono-tabular">
+                                  {rec.staffRole} · KES {rec.netSalary.toLocaleString()}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => onOpenPayslip?.(rec)}
+                                className="px-2 py-1 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-lg font-montserrat font-black text-[10px] flex items-center gap-1 cursor-pointer transition shrink-0"
+                              >
+                                <Printer className="w-3 h-3" />
+                                Payslip
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
-
-          <button
-            type="submit"
-            className="px-5 py-2.5 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            Create Staff Account & Activate Role Permissions
-          </button>
-        </form>
+        </div>
       )}
 
-      {/* Organization Staff Directory Table */}
-      <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
-            Provisioned Organization Directory ({staffList.length} Staff)
-          </h3>
-          <button
-            onClick={() =>
-              exportReportToPDF(
-                'HR Staff & Role-Based Access Directory',
-                `Exported by ${currentUser.name}`,
-                ['Name', 'Email', 'Role', 'Status', 'Auth Method', 'Branch', 'Created By', 'Last Login'],
-                staffList.map((s) => [
-                  s.name,
-                  s.email,
-                  s.role,
-                  s.status,
-                  s.authMethod === 'google' ? 'Google OAuth' : `6-Digit PIN (${s.pin || '******'})`,
-                  s.branchName,
-                  `${s.createdBy} (${s.createdByRole})`,
-                  s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString() : 'Never',
-                ]),
-                'Vaairo_HR_Staff_Directory'
-              )
-            }
-            className="px-3.5 py-1.5 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
-            Export HR PDF
-          </button>
+      {/* Quick Compensation Adjustment Modal */}
+      {compStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-base font-montserrat font-black text-[#0A006E]">
+                  Configure Remuneration & Penalties
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {compStaff.name} ({compStaff.role} · {compStaff.branchName})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompStaff(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCompensation} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-montserrat font-bold text-slate-700">Basic Monthly Salary (KES) *</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const calc = autoCalculateKenyanStatutory(compBase);
+                        setCompDed(calc.totalDeds);
+                        setCompBreakdown(calc.breakdown);
+                      }}
+                      className="text-[11px] font-montserrat font-bold text-[#0A006E] hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <Calculator className="w-3 h-3" />
+                      Auto-Calculate Statutory (KRA eTIMS)
+                    </button>
+                  </div>
+                  <input
+                    required
+                    type="number"
+                    value={compBase}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setCompBase(val);
+                      const calc = autoCalculateKenyanStatutory(val);
+                      setCompDed(calc.totalDeds);
+                      setCompBreakdown(calc.breakdown);
+                    }}
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular font-bold text-slate-900 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Statutory Deductions (KES)</label>
+                  <input
+                    required
+                    type="number"
+                    value={compDed}
+                    onChange={(e) => setCompDed(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular font-bold text-rose-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Disciplinary Penalties (KES)</label>
+                  <input
+                    type="number"
+                    value={compPen}
+                    onChange={(e) => setCompPen(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular font-bold text-amber-600"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="font-montserrat font-bold text-slate-700">Deductions Itemized Breakdown</label>
+                  <input
+                    type="text"
+                    value={compBreakdown}
+                    onChange={(e) => setCompBreakdown(e.target.value)}
+                    placeholder="e.g. PAYE: KES 8,500, SHIF: KES 1,800, NSSF: KES 1,080, Housing Levy: KES 1,120"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl text-[11px]"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="font-montserrat font-bold text-slate-700">Reason for Penalties / Fines</label>
+                  <input
+                    type="text"
+                    value={compReason}
+                    onChange={(e) => setCompReason(e.target.value)}
+                    placeholder="e.g. Stock variance on POS batch #12 or Shift tardiness"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl text-[11px]"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">KRA Tax PIN</label>
+                  <input
+                    type="text"
+                    value={compKra}
+                    onChange={(e) => setCompKra(e.target.value.toUpperCase())}
+                    placeholder="A009182741Z"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular uppercase"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">NSSF Number</label>
+                  <input
+                    type="text"
+                    value={compNssf}
+                    onChange={(e) => setCompNssf(e.target.value)}
+                    placeholder="092837192"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular"
+                  />
+                </div>
+              </div>
+
+              {/* Net Pay Box */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold text-slate-500 uppercase">Calculated Net Take-Home Pay</div>
+                  <div className="text-lg font-black text-[#0A006E] font-mono-tabular">
+                    KES {Math.max(0, compBase - compDed - compPen).toLocaleString()}
+                  </div>
+                </div>
+                <div className="text-right text-[11px] text-slate-500">
+                  Gross KES {compBase.toLocaleString()} − KES {(compDed + compPen).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setCompStaff(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-montserrat font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingComp}
+                  className="px-5 py-2.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl font-montserrat font-black cursor-pointer shadow-md transition disabled:opacity-50"
+                >
+                  {isSavingComp ? 'Saving...' : 'Save Remuneration & Penalties'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-
-        <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
-                <th className="py-2.5 px-3 font-black">Staff Name & Email</th>
-                <th className="py-2.5 px-3 font-black">Role & Status</th>
-                <th className="py-2.5 px-3 font-black">Auth Mode & PIN</th>
-                <th className="py-2.5 px-3 font-black">Assigned Branch</th>
-                <th className="py-2.5 px-3 font-black">Provisioned By</th>
-                <th className="py-2.5 px-3 font-black">Last Login</th>
-                <th className="py-2.5 px-3 font-black text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {staffList.map((s) => {
-                const canManage = canManageStaff(s);
-                return (
-                  <tr key={s.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 font-semibold text-slate-900">
-                      <div>{s.name}</div>
-                      <div className="text-slate-500 font-normal text-[11px]">{s.email}</div>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <div className="font-montserrat font-black text-[#0A006E]">{s.role}</div>
-                      <span className={`inline-flex items-center px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold ${
-                        s.status === 'Active'
-                          ? 'bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40'
-                          : s.status === 'Suspended'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                          : 'bg-rose-100 text-rose-800 border border-rose-300'
-                      }`}>
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono-tabular">
-                      {s.authMethod === 'google' ? (
-                        <span className="text-[#0A006E] font-bold">Google OAuth</span>
-                      ) : (
-                        <span className="text-slate-900 font-bold bg-slate-100 px-2 py-1 rounded-lg">
-                          PIN: <span className="font-extrabold text-[#0A006E] tracking-wider">{s.pin}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-700">{s.branchName}</td>
-                    <td className="py-2.5 px-3 text-slate-600">
-                      {s.createdBy} ({s.createdByRole})
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-500 font-mono-tabular">
-                      {s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleTimeString() : 'Pending'}
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      {canManage ? (
-                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(s)}
-                            className="px-2 py-1 bg-slate-100 hover:bg-[#0A006E] hover:text-[#FFDE00] text-slate-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                            title="Edit Staff Member"
-                          >
-                            <Pencil className="w-3 h-3" />
-                            Edit
-                          </button>
-
-                          {s.status === 'Active' && (
-                            <button
-                              type="button"
-                              onClick={() => onSetStaffStatus?.(s.id, 'Suspended')}
-                              className="px-2 py-1 bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                              title="Suspend Staff Access"
-                            >
-                              <PauseCircle className="w-3 h-3" />
-                              Suspend
-                            </button>
-                          )}
-
-                          {s.status === 'Suspended' && (
-                            <button
-                              type="button"
-                              onClick={() => onSetStaffStatus?.(s.id, 'Active')}
-                              className="px-2 py-1 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                              title="Reactivate Staff Account"
-                            >
-                              <PlayCircle className="w-3 h-3" />
-                              Activate
-                            </button>
-                          )}
-
-                          {s.status !== 'Terminated' && (
-                            <button
-                              type="button"
-                              onClick={() => onSetStaffStatus?.(s.id, 'Terminated')}
-                              className="px-2 py-1 bg-rose-50 hover:bg-rose-500 hover:text-white text-rose-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                              title="Terminate Staff Account"
-                            >
-                              <XCircle className="w-3 h-3" />
-                              Terminate
-                            </button>
-                          )}
-
-                          {s.status === 'Terminated' && (
-                            <button
-                              type="button"
-                              onClick={() => onSetStaffStatus?.(s.id, 'Active')}
-                              className="px-2 py-1 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-lg font-montserrat font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-                              title="Reactivate Terminated Staff"
-                            >
-                              <PlayCircle className="w-3 h-3" />
-                              Activate
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => setDeletingStaff(s)}
-                            className="p-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 rounded-lg transition-colors cursor-pointer"
-                            title="Permanently Delete Staff"
-                            aria-label={`Permanently Delete ${s.name}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 italic">
-                          {s.id === currentUser.id ? 'Current User' : 'Restricted'}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
       {/* Edit Staff Modal */}
       {editingStaff && (

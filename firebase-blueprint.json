@@ -203,9 +203,30 @@
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["actorName", "actorRole", "action", "module", "details", "deviceFingerprint", "severity", "createdAt"]
+    },
+    "PayrollRun": {
+      "title": "PayrollRun",
+      "description": "Executed payroll disbursement batch and serialized employee thermal payslips",
+      "type": "object",
+      "properties": {
+        "period": { "type": "string", "maxLength": 60 },
+        "runDate": { "type": "string", "maxLength": 64 },
+        "runBy": { "type": "string", "maxLength": 120 },
+        "runByRole": { "type": "string", "maxLength": 80 },
+        "totalDisbursed": { "type": "number" },
+        "totalEmployees": { "type": "number" },
+        "status": { "type": "string", "enum": ["Draft", "Finalized", "Paid"] },
+        "recordsJson": { "type": "string", "maxLength": 200000 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["period", "runDate", "runBy", "totalDisbursed", "totalEmployees", "status", "recordsJson", "createdAt"]
     }
   },
   "firestore": {
+    "/payroll_runs/{runId}": {
+      "schema": { "$ref": "#/entities/PayrollRun" },
+      "description": "Payroll disbursement runs and employee thermal payslip records"
+    },
     "/staff/{staffId}": {
       "schema": { "$ref": "#/entities/Staff" },
       "description": "Staff accounts for Google and 6-digit PIN authentication"

@@ -252,13 +252,10 @@ export const ROLE_PERMISSIONS: Record<
     scopeToAssignedBranch: false,
   },
   Accountant: {
+    // Per requirement: "Accountant portal should only be able to deal with accounting issues"
     allowedModules: [
       'overview',
-      'geo_pricing',
       'documents_credit',
-      'partners',
-      'compliance',
-      'audit_security',
     ],
     canCreateRoles: [],
     badgeTitle: 'Chief Financial Accountant (Google Auth)',

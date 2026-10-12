@@ -42,6 +42,49 @@ export interface StaffMember {
   lastLoginAt?: string;
   lastDevice?: string;
   createdAt: string;
+
+  // Compensation & Payroll attributes set by HR/Admin
+  baseSalaryKes?: number;
+  deductionsKes?: number;
+  penaltiesKes?: number;
+  deductionsBreakdown?: string;
+  penaltiesReason?: string;
+  kraPin?: string;
+  nssfNo?: string;
+  nhifNo?: string;
+}
+
+export interface PayrollRecord {
+  staffId: string;
+  staffName: string;
+  staffEmail: string;
+  staffRole: StaffRole;
+  branchName: string;
+  period: string;
+  baseSalary: number;
+  deductions: number;
+  penalties: number;
+  netSalary: number;
+  deductionsBreakdown?: string;
+  penaltiesReason?: string;
+  kraPin?: string;
+  nssfNo?: string;
+  nhifNo?: string;
+  runDate: string;
+  payrollRunId: string;
+}
+
+export interface PayrollRun {
+  id: string;
+  period: string;
+  runDate: string;
+  runBy: string;
+  runByRole: string;
+  totalDisbursed: number;
+  totalEmployees: number;
+  status: 'Draft' | 'Finalized' | 'Paid';
+  recordsJson: string; // Serialized PayrollRecord[]
+  createdAt: string;
 }
 
 export interface Branch {
@@ -131,6 +174,46 @@ export interface Product {
   manufactureDate?: string;
   defaultExpiryDate?: string;
   createdAt?: string;
+
+  // Stock Health, Expiry & Governance Thresholds set by Inventory Manager
+  deadStockThresholdDays?: number;
+  expiryThresholdDays?: number;
+  batchExpiryDate?: string;
+  damageAlertThresholdPct?: number;
+  spoilageAlertThresholdPct?: number;
+  minReorderThresholdBottles?: number;
+
+  // Damages & Spoiled Items tracking set by Inventory Manager
+  damagedBottlesCount?: number;
+  spoiledBottlesCount?: number;
+  lastStockMovementDate?: string;
+  stockIncidentsJson?: string;
+}
+
+export interface DamageSpoilageIncident {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  incidentType: 'DAMAGED' | 'SPOILED';
+  quantityBottles: number;
+  reason: string;
+  lossValueKes: number;
+  branchId: string;
+  branchName: string;
+  reportedBy: string;
+  reportedByRole: string;
+  status: 'QUARANTINED' | 'WRITTEN_OFF';
+  notes?: string;
+  createdAt: string;
+}
+
+export interface InventoryThresholdSettings {
+  defaultDeadStockDays: number;
+  defaultExpiryWarningDays: number;
+  defaultMaxDamagePct: number;
+  defaultMaxSpoilagePct: number;
+  defaultMinSafetyStock: number;
 }
 
 export interface InventoryItem {
