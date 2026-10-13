@@ -30,6 +30,8 @@ import {
   Barcode,
   ShoppingCart,
   TrendingUp,
+  Camera,
+  Check,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -61,6 +63,7 @@ import { AccountantFinancialDashboard } from './AccountantFinancialDashboard';
 import { StockThresholdsGovernanceModal } from './StockThresholdsGovernanceModal';
 import { LogDamageSpoilageModal } from './LogDamageSpoilageModal';
 import { SalesPeriodTracker } from './SalesPeriodTracker';
+import { InventoryBarcodeAssignmentModal } from './InventoryBarcodeAssignmentModal';
 
 // ---------------------------------------------------------------------------
 // 1. OVERVIEW DASHBOARD
@@ -688,6 +691,9 @@ export const InventoryModule: React.FC<{
   const [filterRotationStatus, setFilterRotationStatus] = useState<
     'ALL' | 'HEALTHY' | 'DEAD_STOCK' | 'EXPIRING' | 'DAMAGED_SPOILED'
   >('ALL');
+  const [filterBarcodeStatus, setFilterBarcodeStatus] = useState<'ALL' | 'AWAITING' | 'REGISTERED'>('ALL');
+  const [isBarcodeAssignmentModalOpen, setIsBarcodeAssignmentModalOpen] = useState(false);
+  const [barcodeAssignmentTargetProductId, setBarcodeAssignmentTargetProductId] = useState<string | undefined>(undefined);
 
   const handleSaveThresholdSettings = (newSettings: InventoryThresholdSettings) => {
     setThresholdSettings(newSettings);
@@ -831,8 +837,10 @@ export const InventoryModule: React.FC<{
         baseLandedCost: Number(editCost),
         warehouseCostKes: Number(editCost),
         totalBottles: Number(editTotalBottles),
-        barcode: editBarcode.trim(),
-        caseBarcode: editCaseBarcode.trim(),
+        barcode: editBarcode.trim() || undefined,
+        caseBarcode: editCaseBarcode.trim() || undefined,
+        hasRealBarcode: Boolean(editBarcode.trim()),
+        barcodeVerificationStatus: Boolean(editBarcode.trim()) ? 'APPROVED_MASTER' : 'UNVERIFIED_SOURCE',
         countryOfOrigin: editOrigin.trim(),
         originCountry: editOrigin.trim(),
         supplierName: editSupplier.trim(),
@@ -981,10 +989,12 @@ export const InventoryModule: React.FC<{
       if (filterRotationStatus === 'EXPIRING') return isExpiringSoon;
       if (filterRotationStatus === 'DAMAGED_SPOILED') return hasDamageOrSpoil;
       if (filterRotationStatus === 'HEALTHY') return !isDead && !isExpiringSoon && !hasDamageOrSpoil;
+      if (filterBarcodeStatus === 'AWAITING' && p.hasRealBarcode) return false;
+      if (filterBarcodeStatus === 'REGISTERED' && !p.hasRealBarcode) return false;
 
       return true;
     });
-  }, [products, filterStockCat, filterSubCat, searchQuery, filterRotationStatus, thresholdSettings, now]);
+  }, [products, filterStockCat, filterSubCat, searchQuery, filterRotationStatus, filterBarcodeStatus, thresholdSettings, now]);
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -995,16 +1005,16 @@ export const InventoryModule: React.FC<{
       branchMap[b.id] = b.id === (targetBranchId || branches[0]?.id) ? initialBottles : 0;
     });
 
-    const resolvedBarcode =
-      barcode.trim() ||
-      String(Math.floor(6000000000000 + Math.random() * 999999999999));
-    const resolvedCaseBarcode =
-      caseBarcode.trim() || `1${resolvedBarcode.padStart(13, '0')}`;
+    const hasProvidedBarcode = Boolean(barcode.trim());
+    const resolvedBarcode = hasProvidedBarcode ? barcode.trim() : undefined;
+    const resolvedCaseBarcode = hasProvidedBarcode && caseBarcode.trim() ? caseBarcode.trim() : undefined;
 
     await onCreateProduct({
       sku: previewAutoSku,
       barcode: resolvedBarcode,
       caseBarcode: resolvedCaseBarcode,
+      hasRealBarcode: hasProvidedBarcode,
+      barcodeVerificationStatus: hasProvidedBarcode ? 'APPROVED_MASTER' : 'UNVERIFIED_SOURCE',
       name: name.trim(),
       category: stockCategory,
       subCategory,
@@ -1210,6 +1220,18 @@ export const InventoryModule: React.FC<{
 
           {canEditProduct && (
             <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setBarcodeAssignmentTargetProductId(undefined);
+                  setIsBarcodeAssignmentModalOpen(true);
+                }}
+                className="px-3.5 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition hover:scale-[1.02]"
+                title="Scan and register real bottle barcodes"
+              >
+                <Barcode className="w-3.5 h-3.5 text-[#0A006E]" />
+                Scan Real Barcodes ({products.filter((p) => !p.hasRealBarcode).length} Awaiting)
+              </button>
               <button
                 type="button"
                 onClick={() => setIsThresholdModalOpen(true)}
@@ -1686,6 +1708,41 @@ export const InventoryModule: React.FC<{
           ))}
         </div>
 
+        {/* Real Barcode Governance Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+            <Barcode className="w-3.5 h-3.5 text-[#0A006E]" />
+            Barcode Status:
+          </span>
+          {[
+            { id: 'ALL', label: `All Items (${products.length})` },
+            {
+              id: 'AWAITING',
+              label: `⚠️ Awaiting Real Barcode (${products.filter((p) => !p.hasRealBarcode).length})`,
+            },
+            {
+              id: 'REGISTERED',
+              label: `✓ Real Barcode Verified (${products.filter((p) => Boolean(p.hasRealBarcode)).length})`,
+            },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setFilterBarcodeStatus(item.id as any);
+                setTableLimit(60);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer transition ${
+                filterBarcodeStatus === item.id
+                  ? 'bg-[#0A006E] text-[#FFDE00] shadow-sm'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             <button
@@ -1790,7 +1847,17 @@ export const InventoryModule: React.FC<{
                     </td>
                     <td className="py-2.5 px-3 font-mono-tabular">
                       <div className="font-bold text-[#0A006E]">{p.sku}</div>
-                      {p.barcode && <div className="text-[10px] text-slate-500">EAN: {p.barcode}</div>}
+                      {p.hasRealBarcode && p.barcode ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded text-[9px] font-mono-tabular font-bold mt-0.5">
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                          {p.barcode}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded text-[9px] font-montserrat font-bold mt-0.5">
+                          <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+                          Awaiting Real Barcode
+                        </span>
+                      )}
                     </td>
                     <td className="py-2.5 px-3">
                       <div className="font-montserrat font-bold text-slate-900">{p.name}</div>
@@ -1845,6 +1912,22 @@ export const InventoryModule: React.FC<{
                           >
                             <PackageX className="w-3 h-3 text-rose-600" />
                             Log Loss
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBarcodeAssignmentTargetProductId(p.id);
+                              setIsBarcodeAssignmentModalOpen(true);
+                            }}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-montserrat font-bold flex items-center gap-1 cursor-pointer transition whitespace-nowrap ${
+                              p.hasRealBarcode
+                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                                : 'bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border border-amber-400 shadow-xs'
+                            }`}
+                            title="Scan and link real bottle barcode"
+                          >
+                            <Barcode className="w-3 h-3 text-[#0A006E]" />
+                            {p.hasRealBarcode ? 'Re-Scan Barcode' : 'Scan Real Barcode'}
                           </button>
                           <button
                             type="button"
@@ -2093,12 +2176,28 @@ export const InventoryModule: React.FC<{
                 </div>
 
                 <div>
-                  <label className="font-montserrat font-bold text-slate-700">EAN-13 Bottle Barcode</label>
+                  <div className="flex items-center justify-between">
+                    <label className="font-montserrat font-bold text-slate-700">Real Bottle Barcode (EAN-13)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingProduct) {
+                          setBarcodeAssignmentTargetProductId(editingProduct.id);
+                          setIsBarcodeAssignmentModalOpen(true);
+                        }
+                      }}
+                      className="text-[10px] font-montserrat font-black text-[#0A006E] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Camera className="w-3 h-3" />
+                      Scan with Camera / Gun
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={editBarcode}
                     onChange={(e) => setEditBarcode(e.target.value)}
-                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular"
+                    placeholder="Scan bottle or type real digits..."
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular font-bold text-[#0A006E]"
                   />
                 </div>
 
@@ -2290,6 +2389,21 @@ export const InventoryModule: React.FC<{
             setIsLogIncidentModalOpen(false);
             setIncidentTargetProduct(null);
           }}
+        />
+      )}
+
+      {/* Real Barcode Assignment & Scanning Station Modal */}
+      {isBarcodeAssignmentModalOpen && onUpdateProduct && (
+        <InventoryBarcodeAssignmentModal
+          isOpen={isBarcodeAssignmentModalOpen}
+          onClose={() => {
+            setIsBarcodeAssignmentModalOpen(false);
+            setBarcodeAssignmentTargetProductId(undefined);
+          }}
+          products={products}
+          initialProductId={barcodeAssignmentTargetProductId}
+          currentUser={currentUser}
+          onUpdateProduct={onUpdateProduct}
         />
       )}
     </div>

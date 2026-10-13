@@ -187,13 +187,28 @@ export default function App() {
       const override = overrideMap.get(baseItem.id);
       if (override) {
         overrideMap.delete(baseItem.id);
-        return { ...baseItem, ...override };
+        const isReal = Boolean(override.hasRealBarcode);
+        return {
+          ...baseItem,
+          ...override,
+          barcode: isReal ? override.barcode : undefined,
+          caseBarcode: isReal ? override.caseBarcode : undefined,
+          hasRealBarcode: isReal,
+        };
       }
       return baseItem;
     });
 
     // Prepend any brand-new products created via the Auto-SKU generator in Firestore
-    const customCreated = Array.from(overrideMap.values());
+    const customCreated = Array.from(overrideMap.values()).map((item) => {
+      const isReal = Boolean(item.hasRealBarcode);
+      return {
+        ...item,
+        barcode: isReal ? item.barcode : undefined,
+        caseBarcode: isReal ? item.caseBarcode : undefined,
+        hasRealBarcode: isReal,
+      };
+    });
     return [...customCreated, ...merged];
   }, [firestoreProducts]);
 

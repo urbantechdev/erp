@@ -242,6 +242,12 @@ export interface Product {
   lastStockMovementDate?: string;
   stockIncidentsJson?: string;
 
+  // Real Barcode Governance & Registration by Inventory Manager
+  hasRealBarcode?: boolean;
+  barcodeRegisteredAt?: string;
+  barcodeRegisteredBy?: string;
+  barcodeRegisteredByRole?: string;
+
   // Onboarding & Activation by Branch Manager
   isOnboarded?: boolean;
   status?: 'Active' | 'Pending Onboarding' | 'Inactive';

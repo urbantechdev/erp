@@ -186,14 +186,12 @@ export function convertAttachedCatalogueRowToProduct(row: AttachedCatalogueRow, 
   const retailPriceKes = Math.max(50, Math.round(row.retailPriceKes));
   const wholesalePriceKes = Math.max(40, Math.round(retailPriceKes * 0.86));
   const warehouseCostKes = Math.max(30, Math.round(retailPriceKes * 0.72));
-  const barcode = deterministicBarcode(row.sku, isLocal ? '616110' : '500029');
-  const caseBarcode = `1${barcode}`;
-
   const baseProduct: Product = {
     id: `cat-upd-${String(index + 1).padStart(3, '0')}`,
     sku: row.sku,
-    barcode,
-    caseBarcode,
+    barcode: undefined,
+    caseBarcode: undefined,
+    hasRealBarcode: false,
     name: displayName,
     category,
     subCategory,

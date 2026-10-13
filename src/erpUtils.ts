@@ -38,8 +38,18 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
 
   const defaultBranchStock = JSON.stringify({});
 
+  // Real Barcode Governance: Remove all fake simulated barcodes.
+  // Barcode is ONLY populated if scanned and registered as real by the Inventory Manager.
+  const isReal = Boolean(raw.hasRealBarcode);
+  const realBarcode = isReal ? raw.barcode : undefined;
+  const realCaseBarcode = isReal ? raw.caseBarcode : undefined;
+
   return {
     ...raw,
+    barcode: realBarcode,
+    caseBarcode: realCaseBarcode,
+    hasRealBarcode: isReal,
+    barcodeVerificationStatus: isReal ? 'APPROVED_MASTER' : 'UNVERIFIED_SOURCE',
     id: raw.id || `cat-prod-${index + 1}`,
     sku: raw.sku || generateAutoSku(raw.subCategory || 'Whisky', raw.volumeMl || 750, origin, index),
     category: raw.category === 'LPS' ? 'LPS' : 'IPS',
