@@ -361,7 +361,7 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
                       {item.product.name}
                     </div>
                     <div className="text-[10px] text-slate-500 font-mono">
-                      {formatKes(item.product.retailPriceKes)}
+                      {formatKes(item.product.retailPriceKes || 0)}
                     </div>
                   </div>
 
@@ -387,7 +387,7 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="font-mono font-bold text-[11px] text-[#0A006E] min-w-16 text-right">
-                      {formatKes(item.product.retailPriceKes * item.quantity)}
+                      {formatKes((item.product.retailPriceKes || 0) * item.quantity)}
                     </span>
                     <button
                       type="button"

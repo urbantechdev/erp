@@ -34,19 +34,25 @@ export const isPlatformFullscreen = (): boolean => {
     return true;
   }
   try {
-    if (window.parent && window.parent !== window && window.parent.document) {
-      const parentDoc = window.parent.document as Document & {
-        webkitFullscreenElement?: Element | null;
-        mozFullScreenElement?: Element | null;
-        msFullscreenElement?: Element | null;
-      };
-      if (
-        parentDoc.fullscreenElement ||
-        parentDoc.webkitFullscreenElement ||
-        parentDoc.mozFullScreenElement ||
-        parentDoc.msFullscreenElement
-      ) {
-        return true;
+    if (window.parent && window.parent !== window) {
+      try {
+        if (window.location.origin === window.parent.location.origin) {
+          const parentDoc = window.parent.document as Document & {
+            webkitFullscreenElement?: Element | null;
+            mozFullScreenElement?: Element | null;
+            msFullscreenElement?: Element | null;
+          };
+          if (
+            parentDoc.fullscreenElement ||
+            parentDoc.webkitFullscreenElement ||
+            parentDoc.mozFullScreenElement ||
+            parentDoc.msFullscreenElement
+          ) {
+            return true;
+          }
+        }
+      } catch {
+        // cross-origin access restricted
       }
     }
   } catch {
@@ -102,15 +108,15 @@ export const requestPlatformFullscreen = async (force = false): Promise<boolean>
   }
 
   try {
-    if (
-      window.parent &&
-      window.parent !== window &&
-      window.parent.document?.documentElement?.requestFullscreen
-    ) {
-      await window.parent.document.documentElement.requestFullscreen();
-      if (isPlatformFullscreen()) {
-        window.dispatchEvent(new CustomEvent('vaairo:fullscreen-change'));
-        return true;
+    if (window.parent && window.parent !== window) {
+      if (window.location.origin === window.parent.location.origin) {
+        if (window.parent.document?.documentElement?.requestFullscreen) {
+          await window.parent.document.documentElement.requestFullscreen().catch(() => {});
+          if (isPlatformFullscreen()) {
+            window.dispatchEvent(new CustomEvent('vaairo:fullscreen-change'));
+            return true;
+          }
+        }
       }
     }
   } catch {
@@ -602,9 +608,9 @@ export const SessionSecurityMonitor: React.FC = () => {
             </p>
             <p className="text-xs text-slate-600 leading-relaxed">
               Protecting active session for{' '}
-              <strong className="text-[#0A006E] font-bold">{currentUser.name}</strong>
+              <strong className="text-[#0A006E] font-bold">{currentUser?.name || 'Staff Operator'}</strong>
               <span className="mx-1.5 text-slate-400">·</span>
-              <span className="text-slate-700 font-medium">{currentRole.replace('_', ' ')}</span>
+              <span className="text-slate-700 font-medium">{(currentRole || 'Staff').replace('_', ' ')}</span>
               {activeBranch?.name ? (
                 <>
                   <span className="mx-1.5 text-slate-400">·</span>

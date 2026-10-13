@@ -18,9 +18,9 @@ interface Props {
 }
 
 export const EtimsReceiptModal: React.FC<Props> = ({ invoice, order, onClose }) => {
-  const { currentUser, orders } = useErp();
+  const { currentUser, orders = [] } = useErp() as any;
   const [showOrderItemsDoc, setShowOrderItemsDoc] = useState(false);
-  const resolvedOrder = order || orders.find(o => o.id === invoice.orderId || o.etimsInvoiceNumber === invoice.invoiceNumber);
+  const resolvedOrder = order || (orders || []).find((o: any) => o.id === invoice.orderId || o.etimsInvoiceNumber === invoice.invoiceNumber);
   const hasMultipleItems = resolvedOrder ? isMultiItemOrder(resolvedOrder.items) : false;
   const orderItemsDoc = resolvedOrder ? buildOrderDocumentFromSaleOrder(resolvedOrder) : null;
   const qrSvg = generateSimpleQrSvg(invoice.qrCodeUrl, 140);
@@ -159,7 +159,7 @@ export const EtimsReceiptModal: React.FC<Props> = ({ invoice, order, onClose }) 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[11px]">
-                  {resolvedOrder.attachedAlcoholBill.items.map((item, idx) => (
+                  {resolvedOrder?.attachedAlcoholBill?.items?.map((item: any, idx: number) => (
                     <tr key={idx} className="text-slate-800">
                       <td className="py-0.5">
                         <div className="font-medium text-slate-900">{item.productName}</div>

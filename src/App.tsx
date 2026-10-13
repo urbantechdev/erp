@@ -62,6 +62,7 @@ import {
   ComplianceRecord,
   AuditLog,
   ERPModuleId,
+  StaffRole,
   PayrollRun,
   PayrollRecord,
   DamageSpoilageIncident,
@@ -73,6 +74,7 @@ import {
   ROLE_PERMISSIONS,
   MASTER_IMPORTED_INVENTORY,
   formatKes,
+  getEffectiveUserModules,
 } from './erpUtils';
 import {
   ensureOperationalFoundationSeeded,
@@ -101,6 +103,7 @@ import { DocumentPrintModal } from './components/DocumentPrintModal';
 import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { OnboardItemsModal } from './components/OnboardItemsModal';
 import { AccessModelMatrixModal } from './components/AccessModelMatrixModal';
+import { UserFeatureAccessModal } from './components/UserFeatureAccessModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
@@ -164,6 +167,15 @@ export default function App() {
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
   const [isAccessMatrixOpen, setIsAccessMatrixOpen] = useState(false);
+  const [userFeatureModalStaff, setUserFeatureModalStaff] = useState<StaffMember | null>(null);
+  const [isUserFeatureModalOpen, setIsUserFeatureModalOpen] = useState(false);
+  const [customRoleMatrix, setCustomRoleMatrix] = useState<Record<StaffRole, ERPModuleId[]> | undefined>(() => {
+    try {
+      const saved = localStorage.getItem('erp_custom_role_matrix');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return undefined;
+  });
   const isGoogleAuthInProgressRef = useRef(false);
   const [toastStatus, setToastStatus] = useState<{
     type: 'success' | 'error';
@@ -239,10 +251,15 @@ export default function App() {
     ensureOperationalFoundationSeeded();
   }, []);
 
-  // Auto Full Screen the system on reload or first tap/click/touch interaction
+  // Full Screen helper with iframe and extension safety
   useEffect(() => {
     const enterFullscreen = async () => {
       try {
+        if (typeof document === 'undefined') return;
+        // If embedded in a preview iframe, skip auto-fullscreen to prevent permissions policy warnings
+        const isEmbedded = window.self !== window.top;
+        if (isEmbedded) return;
+
         const docEl = document.documentElement as HTMLElement & {
           webkitRequestFullscreen?: () => Promise<void>;
           msRequestFullscreen?: () => Promise<void>;
@@ -253,7 +270,7 @@ export default function App() {
 
         if (!document.fullscreenElement && !fsDoc.webkitFullscreenElement) {
           if (docEl.requestFullscreen) {
-            await docEl.requestFullscreen();
+            await docEl.requestFullscreen().catch(() => {});
           } else if (docEl.webkitRequestFullscreen) {
             await docEl.webkitRequestFullscreen();
           } else if (docEl.msRequestFullscreen) {
@@ -261,26 +278,22 @@ export default function App() {
           }
         }
       } catch {
-        // Browsers require a user gesture if triggered on initial reload;
-        // the pointerdown/touchstart/click listeners will immediately engage fullscreen on first tap.
+        // Silently catch unsupported environments or blocked gestures
       }
     };
 
-    // Attempt immediately on reload
-    enterFullscreen();
-
-    // Ensure any tap, click, or touch anywhere on screen enters fullscreen if not already active
+    // Attempt once on user interaction
     const handleUserGesture = () => {
       enterFullscreen();
+      window.removeEventListener('pointerdown', handleUserGesture);
+      window.removeEventListener('click', handleUserGesture);
     };
 
-    window.addEventListener('pointerdown', handleUserGesture, { passive: true });
-    window.addEventListener('touchstart', handleUserGesture, { passive: true });
-    window.addEventListener('click', handleUserGesture, { passive: true });
+    window.addEventListener('pointerdown', handleUserGesture, { passive: true, once: true });
+    window.addEventListener('click', handleUserGesture, { passive: true, once: true });
 
     return () => {
       window.removeEventListener('pointerdown', handleUserGesture);
-      window.removeEventListener('touchstart', handleUserGesture);
       window.removeEventListener('click', handleUserGesture);
     };
   }, []);
@@ -782,16 +795,128 @@ export default function App() {
     setStandaloneCustomerPortal(false);
   };
 
-  // Allowed modules for the currently logged in role
+  // Keep currentUser in sync with real-time updates to staffList (e.g. when Admin strips a feature)
+  useEffect(() => {
+    if (!currentUser) return;
+    const fresh = staffList.find((s) => s.id === currentUser.id);
+    if (fresh) {
+      if (
+        JSON.stringify(fresh.strippedFeatures) !== JSON.stringify(currentUser.strippedFeatures) ||
+        JSON.stringify(fresh.grantedFeatures) !== JSON.stringify(currentUser.grantedFeatures) ||
+        fresh.status !== currentUser.status ||
+        fresh.role !== currentUser.role
+      ) {
+        setCurrentUser(fresh);
+      }
+    }
+  }, [staffList, currentUser]);
+
+  // Allowed modules for the currently logged in user (with custom role matrix + stripped features)
   const allowedModules = useMemo<ERPModuleId[]>(() => {
     if (!currentUser) return [];
-    return ROLE_PERMISSIONS[currentUser.role].allowedModules;
-  }, [currentUser]);
+    return getEffectiveUserModules(currentUser, customRoleMatrix);
+  }, [currentUser, customRoleMatrix]);
+
+  // Auto-redirect if activeModule has been stripped or is no longer permitted
+  useEffect(() => {
+    if (allowedModules.length > 0 && !allowedModules.includes(activeModule)) {
+      setActiveModule(allowedModules[0]);
+    }
+  }, [allowedModules, activeModule]);
 
   const handleSelectModule = (modId: ERPModuleId) => {
     if (!allowedModules.includes(modId)) return;
     setActiveModule(modId);
     setMobileDrawerOpen(false);
+  };
+
+  // Enterprise Access Model Handlers
+  const handleSaveRoleMatrix = async (newMatrix: Record<StaffRole, ERPModuleId[]>) => {
+    try {
+      setCustomRoleMatrix(newMatrix);
+      localStorage.setItem('erp_custom_role_matrix', JSON.stringify(newMatrix));
+      triggerToast('success', 'Access Model Updated', 'Enterprise role access matrix updated successfully.');
+      await recordAuditLog(
+        currentUser?.name || 'Admin',
+        currentUser?.role || 'Admin',
+        currentUser?.email || '',
+        'SECURITY_ROLE_MATRIX_UPDATED',
+        'Security & RBAC',
+        'Admin updated enterprise access model permissions matrix.',
+        currentUser?.branchName,
+        'Security'
+      );
+    } catch (err: any) {
+      triggerToast('error', 'Update Failed', err.message || 'Could not save access model');
+    }
+  };
+
+  const handleResetRoleMatrix = async () => {
+    try {
+      setCustomRoleMatrix(undefined);
+      localStorage.removeItem('erp_custom_role_matrix');
+      triggerToast('success', 'Access Model Reset', 'Restored default statutory 8-role access baseline matrix.');
+      await recordAuditLog(
+        currentUser?.name || 'Admin',
+        currentUser?.role || 'Admin',
+        currentUser?.email || '',
+        'SECURITY_ROLE_MATRIX_RESET',
+        'Security & RBAC',
+        'Admin restored baseline enterprise access model.',
+        currentUser?.branchName,
+        'Security'
+      );
+    } catch (err: any) {
+      triggerToast('error', 'Reset Failed', err.message || 'Could not reset access model');
+    }
+  };
+
+  const handleSaveUserPermissions = async (
+    staffId: string,
+    updates: {
+      strippedFeatures: string[];
+      grantedFeatures: string[];
+      customPermissionsNote?: string;
+    }
+  ) => {
+    try {
+      const targetStaff = staffList.find((s) => s.id === staffId);
+      const updatedFields: Partial<StaffMember> = {
+        strippedFeatures: updates.strippedFeatures,
+        grantedFeatures: updates.grantedFeatures,
+        customPermissionsNote: updates.customPermissionsNote || '',
+        permissionsModifiedAt: new Date().toISOString(),
+        permissionsModifiedBy: currentUser?.name || 'Administrator',
+      };
+      await setDoc(doc(db, 'staff', staffId), cleanFirestoreData(updatedFields), { merge: true });
+
+      setStaffList((prev) =>
+        prev.map((s) => (s.id === staffId ? { ...s, ...updatedFields } : s))
+      );
+
+      if (currentUser && currentUser.id === staffId) {
+        setCurrentUser((prev) => (prev ? { ...prev, ...updatedFields } : null));
+      }
+
+      triggerToast(
+        'success',
+        'Permissions Enforced',
+        `Feature access updated for ${targetStaff?.name || 'user'} (${updates.strippedFeatures.length} stripped).`
+      );
+
+      await recordAuditLog(
+        currentUser?.name || 'Admin',
+        currentUser?.role || 'Admin',
+        currentUser?.email || '',
+        'SECURITY_USER_PERMISSIONS_OVERRIDE',
+        'Security & RBAC',
+        `Admin modified permissions for ${targetStaff?.name || staffId}: stripped [${updates.strippedFeatures.join(', ')}], granted [${updates.grantedFeatures.join(', ')}]`,
+        currentUser?.branchName,
+        'Security'
+      );
+    } catch (err: any) {
+      triggerToast('error', 'Permissions Error', err.message || 'Could not update user features');
+    }
   };
 
   // Mutation Handlers with full Firestore persistence & Audit Logging
@@ -2500,6 +2625,10 @@ export default function App() {
               onExecutePayrollRun={handleExecutePayrollRun}
               onOpenPayslip={(record) => setViewingPayslipRecord(record)}
               onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
+              onOpenUserFeatureModal={(staff) => {
+                setUserFeatureModalStaff(staff);
+                setIsUserFeatureModalOpen(true);
+              }}
             />
           )}
 
@@ -2509,6 +2638,10 @@ export default function App() {
               auditLogs={auditLogs}
               staffList={staffList}
               onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
+              onOpenUserFeatureModal={(staff) => {
+                setUserFeatureModalStaff(staff);
+                setIsUserFeatureModalOpen(true);
+              }}
             />
           )}
 
@@ -2581,6 +2714,29 @@ export default function App() {
           isOpen={isAccessMatrixOpen}
           onClose={() => setIsAccessMatrixOpen(false)}
           currentUser={currentUser}
+          staffList={staffList}
+          customRoleMatrix={customRoleMatrix}
+          onSaveRoleMatrix={handleSaveRoleMatrix}
+          onResetRoleMatrix={handleResetRoleMatrix}
+          onOpenUserFeatureModal={(staff) => {
+            setUserFeatureModalStaff(staff);
+            setIsUserFeatureModalOpen(true);
+          }}
+        />
+      )}
+
+      {/* Admin User Feature Access & Feature Stripping Modal */}
+      {isUserFeatureModalOpen && userFeatureModalStaff && currentUser && (
+        <UserFeatureAccessModal
+          isOpen={isUserFeatureModalOpen}
+          onClose={() => {
+            setIsUserFeatureModalOpen(false);
+            setUserFeatureModalStaff(null);
+          }}
+          staff={userFeatureModalStaff}
+          currentUser={currentUser}
+          customRoleMatrix={customRoleMatrix}
+          onSavePermissions={handleSaveUserPermissions}
         />
       )}
     </div>

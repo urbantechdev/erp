@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ShieldCheck,
+  ShieldAlert,
   X,
   Download,
   Info,
@@ -14,14 +15,32 @@ import {
   FileText,
   BadgeAlert,
   ArrowRight,
+  Sliders,
+  RotateCcw,
+  Save,
+  UserX,
+  Sparkles,
 } from 'lucide-react';
 import { StaffRole, StaffMember, ERPModuleId } from '../types';
-import { TARGET_ACCESS_MATRIX, ROLE_DISTINCTIONS, AccessLevel, exportToCSV, exportReportToPDF } from '../erpUtils';
+import {
+  TARGET_ACCESS_MATRIX,
+  ROLE_DISTINCTIONS,
+  ROLE_PERMISSIONS,
+  AccessLevel,
+  exportToCSV,
+  exportReportToPDF,
+  ERP_FEATURE_CATALOG,
+} from '../erpUtils';
 
 interface AccessModelMatrixModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: StaffMember;
+  staffList?: StaffMember[];
+  customRoleMatrix?: Record<StaffRole, ERPModuleId[]>;
+  onSaveRoleMatrix?: (newMatrix: Record<StaffRole, ERPModuleId[]>) => Promise<void>;
+  onResetRoleMatrix?: () => Promise<void>;
+  onOpenUserFeatureModal?: (staff: StaffMember) => void;
 }
 
 const ROLES_ORDER: StaffRole[] = [
@@ -35,14 +54,88 @@ const ROLES_ORDER: StaffRole[] = [
   'Affiliate Sales Representative',
 ];
 
+const ALL_MODULES: { id: ERPModuleId; label: string }[] = [
+  { id: 'overview', label: 'Executive Overview' },
+  { id: 'retail_pos', label: 'Retail Counter POS' },
+  { id: 'sales_pos', label: 'Wholesale B2B POS' },
+  { id: 'inventory', label: 'Inventory & Auto-SKU' },
+  { id: 'branches_transfers', label: 'Branches & Transfers' },
+  { id: 'geo_pricing', label: 'Geo-Pricing Multipliers' },
+  { id: 'partners', label: 'Suppliers & Logistics' },
+  { id: 'documents_credit', label: 'Docs, Receipts & Credit' },
+  { id: 'compliance', label: 'Excise & Regulatory Stamps' },
+  { id: 'hr_rbac', label: 'HR Provisioning & Roles' },
+  { id: 'audit_security', label: 'User Monitoring & Logs' },
+  { id: 'customer_portal', label: 'Customer Online Store' },
+  { id: 'outlets_restaurants', label: 'Outlets, Bars & Clubs' },
+];
+
 export const AccessModelMatrixModal: React.FC<AccessModelMatrixModalProps> = ({
   isOpen,
   onClose,
   currentUser,
+  staffList = [],
+  customRoleMatrix,
+  onSaveRoleMatrix,
+  onResetRoleMatrix,
+  onOpenUserFeatureModal,
 }) => {
+  const isAdmin = currentUser.role === 'Admin';
+  const [activeTab, setActiveTab] = useState<'matrix' | 'controller' | 'user_stripping'>('matrix');
   const [selectedRoleForDetail, setSelectedRoleForDetail] = useState<StaffRole>(currentUser.role);
 
+  // Editable Role Matrix state (defaults to passed customRoleMatrix or ROLE_PERMISSIONS)
+  const [editableMatrix, setEditableMatrix] = useState<Record<StaffRole, ERPModuleId[]>>(() => {
+    if (customRoleMatrix) return { ...customRoleMatrix };
+    const initial: Record<string, ERPModuleId[]> = {};
+    ROLES_ORDER.forEach((role) => {
+      initial[role] = [...ROLE_PERMISSIONS[role].allowedModules];
+    });
+    return initial as Record<StaffRole, ERPModuleId[]>;
+  });
+
+  const [isSavingMatrix, setIsSavingMatrix] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
   if (!isOpen) return null;
+
+  const handleToggleModuleForRole = (role: StaffRole, moduleId: ERPModuleId) => {
+    if (!isAdmin) return;
+    setEditableMatrix((prev) => {
+      const currentList = prev[role] || [];
+      const hasModule = currentList.includes(moduleId);
+      const updated = hasModule
+        ? currentList.filter((m) => m !== moduleId)
+        : [...currentList, moduleId];
+      return {
+        ...prev,
+        [role]: updated,
+      };
+    });
+  };
+
+  const handleSaveModel = async () => {
+    if (!onSaveRoleMatrix) return;
+    setIsSavingMatrix(true);
+    try {
+      await onSaveRoleMatrix(editableMatrix);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } finally {
+      setIsSavingMatrix(false);
+    }
+  };
+
+  const handleResetModel = async () => {
+    const initial: Record<string, ERPModuleId[]> = {};
+    ROLES_ORDER.forEach((role) => {
+      initial[role] = [...ROLE_PERMISSIONS[role].allowedModules];
+    });
+    setEditableMatrix(initial as Record<StaffRole, ERPModuleId[]>);
+    if (onResetRoleMatrix) {
+      await onResetRoleMatrix();
+    }
+  };
 
   const getBadgeStyle = (perm: AccessLevel) => {
     if (perm === 'Full') {
@@ -113,11 +206,11 @@ export const AccessModelMatrixModal: React.FC<AccessModelMatrixModalProps> = ({
                   AEGIS / VAAIRO Enterprise RBAC
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white">
-                  8-Role Matrix
+                  {isAdmin ? 'Admin Controlled Model' : '8-Role Architecture'}
                 </span>
               </div>
               <h2 className="text-base sm:text-lg font-montserrat font-black text-white italic">
-                Target Access Model &amp; Operational Boundaries
+                Access Model &amp; Operational Boundaries
               </h2>
             </div>
           </div>
@@ -149,277 +242,336 @@ export const AccessModelMatrixModal: React.FC<AccessModelMatrixModalProps> = ({
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="px-6 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setActiveTab('matrix')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
+              activeTab === 'matrix'
+                ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs'
+                : 'bg-white hover:bg-slate-200 text-slate-700'
+            }`}
+          >
+            Access Matrix Overview
+          </button>
+
+          {isAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTab('controller')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer transition ${
+                  activeTab === 'controller'
+                    ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs'
+                    : 'bg-white hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5 text-[#34D186]" />
+                Role Access Model Controller
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('user_stripping')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer transition ${
+                  activeTab === 'user_stripping'
+                    ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs'
+                    : 'bg-white hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+                User Feature Stripping Hub
+                {staffList.filter((s) => s.strippedFeatures && s.strippedFeatures.length > 0).length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white">
+                    {staffList.filter((s) => s.strippedFeatures && s.strippedFeatures.length > 0).length}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+
         {/* Modal Scrollable Body */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1 bg-slate-50">
-          {/* Legend Banner */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5 text-[#0A006E]" />
-                Access Permission Legend
-              </span>
-              <span className="text-xs text-slate-500 font-medium">
-                Active Session: <strong className="text-[#0A006E]">{currentUser.name}</strong> ({currentUser.role})
-              </span>
-            </div>
-            <div className="flex items-center flex-wrap gap-2 text-xs">
-              <span className="px-2.5 py-1 rounded-lg border bg-emerald-50 text-emerald-800 border-emerald-300 font-bold">
-                Full = administer
-              </span>
-              <span className="px-2.5 py-1 rounded-lg border bg-blue-50 text-blue-800 border-blue-300 font-bold">
-                Manage = create/update in scope
-              </span>
-              <span className="px-2.5 py-1 rounded-lg border bg-amber-50 text-amber-800 border-amber-300 font-bold">
-                Limited = approved actions
-              </span>
-              <span className="px-2.5 py-1 rounded-lg border bg-purple-50 text-purple-800 border-purple-300 font-bold">
-                Own = own records
-              </span>
-              <span className="px-2.5 py-1 rounded-lg border bg-slate-100 text-slate-500 border-slate-200 font-medium">
-                None = no access
-              </span>
-              <span className="px-2.5 py-1 rounded-lg border bg-indigo-50 text-indigo-800 border-indigo-300 font-bold">
-                Finance / Tax = accounting view
-              </span>
-            </div>
-          </div>
-
-          {/* Matrix Table */}
-          <div className="overflow-x-auto bg-white border border-slate-200 rounded-2xl shadow-xs">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-[#0A006E] text-white font-montserrat">
-                  <th className="py-3 px-3.5 font-black sticky left-0 bg-[#0A006E] z-10 w-44">
-                    Module / function
-                  </th>
-                  {ROLES_ORDER.map((role) => {
-                    const isCurrent = currentUser.role === role;
-                    return (
-                      <th
-                        key={role}
-                        onClick={() => setSelectedRoleForDetail(role)}
-                        className={`py-3 px-2.5 font-black text-center whitespace-nowrap cursor-pointer transition ${
-                          isCurrent ? 'bg-[#FFDE00] text-[#0A006E]' : 'hover:bg-white/10'
-                        }`}
-                      >
-                        <div className="flex items-center justify-center gap-1">
-                          {role === 'Sales Manager' ? 'Sales Mgr.' : role === 'Branch Manager' ? 'Branch Mgr.' : role === 'Inventory Controller' ? 'Inventory' : role === 'Counter Cashier' ? 'Cashier' : role === 'Affiliate Sales Representative' ? 'Affiliate' : role}
-                          {isCurrent && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#0A006E] shrink-0" />
-                          )}
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-sans">
-                {TARGET_ACCESS_MATRIX.map((item, idx) => (
-                  <tr
-                    key={item.moduleName}
-                    className={idx % 2 === 0 ? 'bg-white hover:bg-slate-50/80' : 'bg-slate-50/50 hover:bg-slate-50'}
-                  >
-                    <td className="py-2.5 px-3.5 font-montserrat font-bold text-slate-900 sticky left-0 bg-white shadow-xs z-10">
-                      <div>{item.moduleName}</div>
-                      <div className="text-[10px] text-slate-500 font-normal truncate max-w-[180px]">
-                        {item.description}
-                      </div>
-                    </td>
-                    {ROLES_ORDER.map((role) => {
-                      const perm = item.permissions[role];
-                      const isCurrent = currentUser.role === role;
-                      return (
-                        <td
-                          key={role}
-                          className={`py-2.5 px-2 text-center whitespace-nowrap ${
-                            isCurrent ? 'bg-amber-50/40' : ''
-                          }`}
-                        >
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded-md border text-[11px] ${getBadgeStyle(
-                              perm
-                            )}`}
-                          >
-                            {perm}
-                          </span>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Important Distinctions Callout Cards */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
-              <Lock className="w-4 h-4 text-[#0A006E]" />
-              Architectural Security Distinctions &amp; Boundary Guardrails
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {/* Accountant Card */}
-              <div
-                onClick={() => setSelectedRoleForDetail('Accountant')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer ${
-                  selectedRoleForDetail === 'Accountant'
-                    ? 'border-[#0A006E] bg-white shadow-md'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase">
-                    Accountant
+          {/* TAB 1: Standard Matrix View */}
+          {activeTab === 'matrix' && (
+            <>
+              {/* Legend Banner */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-[#0A006E]" />
+                    Access Permission Legend
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800">
-                    Financial Oversight
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Strict segregation of duties enforced by cryptographic tokens &amp; Firestore Zero-Trust rules
                   </span>
                 </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  Financial access does not permit editing inventory, staff, product costs, or transaction histories. Allows approved accounting actions, reconciliation, financial reporting, and credit-note workflows according to policy.
-                </p>
-              </div>
-
-              {/* HR Card */}
-              <div
-                onClick={() => setSelectedRoleForDetail('HR')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer ${
-                  selectedRoleForDetail === 'HR'
-                    ? 'border-[#0A006E] bg-white shadow-md'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase">
-                    Human Resources
+                <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                  <span className="px-2.5 py-1 rounded-lg border bg-emerald-50 text-emerald-800 border-emerald-300 font-bold">
+                    Full / Unrestricted
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
-                    Personnel &amp; Roles
+                  <span className="px-2.5 py-1 rounded-lg border bg-blue-50 text-blue-800 border-blue-300 font-bold">
+                    Manage / Provision
                   </span>
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  Manages employee records, approved role assignments, and payroll calculations. Cannot change financial transaction records or access unrestricted commercial sales data.
-                </p>
-              </div>
-
-              {/* Branch Manager Card */}
-              <div
-                onClick={() => setSelectedRoleForDetail('Branch Manager')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer ${
-                  selectedRoleForDetail === 'Branch Manager'
-                    ? 'border-[#0A006E] bg-white shadow-md'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase">
-                    Branch Manager
+                  <span className="px-2.5 py-1 rounded-lg border bg-amber-50 text-amber-800 border-amber-300 font-bold">
+                    Branch / Regional Scope
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                    Branch Scoped
+                  <span className="px-2.5 py-1 rounded-lg border bg-indigo-50 text-indigo-800 border-indigo-300 font-bold">
+                    Finance / Audit Scope
                   </span>
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  Access is strictly limited to the assigned branch and explicitly assigned business units. Can onboard staff only as Cashiers or Affiliate Reps within their branch.
-                </p>
-              </div>
-
-              {/* Inventory Controller Card */}
-              <div
-                onClick={() => setSelectedRoleForDetail('Inventory Controller')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer ${
-                  selectedRoleForDetail === 'Inventory Controller'
-                    ? 'border-[#0A006E] bg-white shadow-md'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase">
-                    Inventory Controller
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                    Stock &amp; Bonded Warehouses
-                  </span>
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  Manages stock, batches, expiry, damages, spoilage, barcodes, and transfers according to authorized warehouse scope. Cannot edit sales totals or finalize payroll.
-                </p>
-              </div>
-
-              {/* Counter Cashier Card */}
-              <div
-                onClick={() => setSelectedRoleForDetail('Counter Cashier')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer ${
-                  selectedRoleForDetail === 'Counter Cashier'
-                    ? 'border-[#0A006E] bg-white shadow-md'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase">
-                    Counter Cashier
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-100 text-cyan-800">
-                    Retail Checkout
-                  </span>
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  Processes checkout transactions, scans barcodes, issues receipts, and views own shift history. Refunds, voids, and credits require supervisor approval.
-                </p>
-              </div>
-
-              {/* Affiliate Sales Rep Card */}
-              <div
-                onClick={() => setSelectedRoleForDetail('Affiliate Sales Representative')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer ${
-                  selectedRoleForDetail === 'Affiliate Sales Representative'
-                    ? 'border-[#0A006E] bg-white shadow-md'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase">
-                    Affiliate Sales Rep
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
+                  <span className="px-2.5 py-1 rounded-lg border bg-purple-50 text-purple-800 border-purple-300 font-bold">
                     Personal Orders Only
                   </span>
+                  <span className="px-2.5 py-1 rounded-lg border bg-slate-100 text-slate-400 border-slate-200 font-medium">
+                    None (Zero Access)
+                  </span>
                 </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  Creates and tracks own permitted sales and orders with approved price catalogue. Cannot access another representative&apos;s customer records or the full customer directory.
-                </p>
               </div>
 
-              {/* Admin Card */}
-              <div
-                onClick={() => setSelectedRoleForDetail('Admin')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer md:col-span-2 lg:col-span-3 ${
-                  selectedRoleForDetail === 'Admin'
-                    ? 'border-[#0A006E] bg-white shadow-md'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase">
-                    Executive System Administrator
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFDE00] text-[#0A006E]">
-                    Audited Master Access
-                  </span>
+              {/* Matrix Table */}
+              <div className="overflow-x-auto bg-white border border-slate-200 rounded-2xl shadow-xs">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[#0A006E] text-white font-montserrat">
+                      <th className="py-3 px-3.5 font-black sticky left-0 bg-[#0A006E] z-10 min-w-[200px]">
+                        Module / Function
+                      </th>
+                      {ROLES_ORDER.map((role) => (
+                        <th
+                          key={role}
+                          className={`py-3 px-3 font-bold text-center whitespace-nowrap min-w-[110px] ${
+                            selectedRoleForDetail === role ? 'bg-indigo-900 text-[#FFDE00]' : ''
+                          }`}
+                        >
+                          {role}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {TARGET_ACCESS_MATRIX.map((item, idx) => (
+                      <tr key={item.moduleId} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                        <td className="py-3 px-3.5 font-montserrat font-bold text-slate-900 sticky left-0 bg-inherit z-10 border-r border-slate-200">
+                          <div>{item.moduleName}</div>
+                          <div className="text-[10px] text-slate-500 font-sans font-normal mt-0.5 line-clamp-1">
+                            {item.description}
+                          </div>
+                        </td>
+                        {ROLES_ORDER.map((role) => {
+                          const perm = item.permissions[role];
+                          return (
+                            <td key={role} className="py-2.5 px-2 text-center">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-lg border text-[11px] whitespace-nowrap ${getBadgeStyle(
+                                  perm
+                                )}`}
+                              >
+                                {perm}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* TAB 2: Admin Interactive Access Model Controller */}
+          {activeTab === 'controller' && isAdmin && (
+            <div className="space-y-4">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="text-sm font-montserrat font-black text-[#0A006E] flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4 text-[#34D186]" />
+                    Interactive System-Wide Role Access Matrix
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Configure which modules are available to each role across the organization. Changes take effect on user navigation immediately.
+                  </p>
                 </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  Has broad administrative access across all 13 modules, but sensitive actions remain audited in zero-trust logs with Google OAuth session verification and confirmation modals for destructive operations.
-                </p>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResetModel}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reset to Factory Defaults
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveModel}
+                    disabled={isSavingMatrix}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition ${
+                      saveSuccess
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00]'
+                    }`}
+                  >
+                    {saveSuccess ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-white" />
+                        Model Saved!
+                      </>
+                    ) : isSavingMatrix ? (
+                      'Saving Access Model...'
+                    ) : (
+                      <>
+                        <Save className="w-3.5 h-3.5" />
+                        Save Access Model
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Role Matrix Toggle Grid */}
+              <div className="overflow-x-auto bg-white border border-slate-200 rounded-2xl shadow-xs">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[#0A006E] text-white font-montserrat">
+                      <th className="py-3 px-3.5 font-black sticky left-0 bg-[#0A006E] z-10 min-w-[200px]">
+                        ERP Module
+                      </th>
+                      {ROLES_ORDER.map((role) => (
+                        <th key={role} className="py-3 px-2 text-center whitespace-nowrap min-w-[100px]">
+                          {role}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {ALL_MODULES.map((mod, idx) => (
+                      <tr key={mod.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                        <td className="py-3 px-3.5 font-montserrat font-bold text-slate-900 sticky left-0 bg-inherit z-10 border-r border-slate-200">
+                          {mod.label}
+                        </td>
+                        {ROLES_ORDER.map((role) => {
+                          const isAllowed = (editableMatrix[role] || []).includes(mod.id);
+                          const isProtectedAdmin = role === 'Admin' && mod.id === 'hr_rbac';
+
+                          return (
+                            <td key={role} className="py-2 px-2 text-center">
+                              <button
+                                type="button"
+                                disabled={isProtectedAdmin}
+                                onClick={() => handleToggleModuleForRole(role, mod.id)}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-montserrat font-black cursor-pointer transition border ${
+                                  isAllowed
+                                    ? 'bg-[#34D186]/20 text-[#1E9E60] border-[#34D186]/40 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300'
+                                    : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-emerald-100 hover:text-emerald-700 hover:border-emerald-300'
+                                }`}
+                                title={
+                                  isProtectedAdmin
+                                    ? 'Admin must always retain HR/RBAC access'
+                                    : isAllowed
+                                    ? `Click to strip ${mod.label} from ${role}`
+                                    : `Click to grant ${mod.label} to ${role}`
+                                }
+                              >
+                                {isAllowed ? 'ALLOWED' : 'REVOKED'}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* TAB 3: User Feature Stripping Hub */}
+          {activeTab === 'user_stripping' && isAdmin && (
+            <div className="space-y-4">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="text-sm font-montserrat font-black text-[#0A006E] flex items-center gap-1.5">
+                    <UserX className="w-4 h-4 text-rose-600" />
+                    Individual Staff Feature Stripping &amp; Permissions Hub
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Click any staff member below to selectively strip off specific modules, POS features, pricing overrides, or financial permissions.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {staffList.map((s) => {
+                  const hasStripped = s.strippedFeatures && s.strippedFeatures.length > 0;
+                  const hasGranted = s.grantedFeatures && s.grantedFeatures.length > 0;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`p-4 rounded-2xl border bg-white transition hover:shadow-md flex flex-col justify-between gap-3 ${
+                        hasStripped ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-montserrat font-black text-xs text-slate-900 truncate">
+                            {s.name}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#0A006E] text-[#FFDE00]">
+                            {s.role}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate mt-0.5">{s.email}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{s.branchName}</div>
+
+                        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                          {hasStripped ? (
+                            <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300 font-montserrat font-black text-[10px]">
+                              {s.strippedFeatures!.length} Feature{s.strippedFeatures!.length > 1 ? 's' : ''} Stripped
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[10px]">
+                              Standard Access
+                            </span>
+                          )}
+                          {hasGranted && (
+                            <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-300 font-montserrat font-black text-[10px]">
+                              +{s.grantedFeatures!.length} Custom
+                            </span>
+                          )}
+                        </div>
+
+                        {s.customPermissionsNote && (
+                          <div className="text-[10px] text-slate-500 italic mt-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100 line-clamp-2">
+                            &ldquo;{s.customPermissionsNote}&rdquo;
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => onOpenUserFeatureModal?.(s)}
+                        className="w-full py-2 bg-slate-50 hover:bg-[#FFDE00] text-[#0A006E] border border-slate-200 hover:border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1.5 cursor-pointer transition"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-[#0A006E]" />
+                        Manage Feature Access
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer */}
         <div className="px-6 py-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-4 shrink-0">
           <div className="text-xs text-slate-500">
-            Current Role: <strong className="text-[#0A006E]">{currentUser.role}</strong> ({currentUser.branchName})
+            Current Session: <strong className="text-[#0A006E]">{currentUser.name}</strong> ·{' '}
+            <span className="font-bold">{currentUser.role}</span> ({currentUser.branchName})
           </div>
           <button
             type="button"

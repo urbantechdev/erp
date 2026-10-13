@@ -43,7 +43,7 @@ import {
   BusinessUnit,
   RestaurantInventoryItem,
 } from '../types';
-import { calculateGeoPrice, formatKes } from '../erpUtils';
+import { calculateGeoPrice, formatKes, isUserFeaturePermitted } from '../erpUtils';
 import { NAIROBI_DRINKS_SUB_CATEGORIES } from '../data/nairobiDrinksCatalog';
 import {
   PRESET_SIGGER_ITEMS,
@@ -90,6 +90,8 @@ export const PosViews: React.FC<PosViewsProps> = ({
     currentUser.role === 'Branch Manager' ||
     currentUser.role === 'Counter Cashier' ||
     currentUser.role === 'Affiliate Sales Representative';
+
+  const canVoidOrder = isUserFeaturePermitted(currentUser, 'pos_voids');
 
   const defaultBranchId =
     (isScopedBranch && currentUser.branchId ? currentUser.branchId : branches[0]?.id) || '';
@@ -1525,14 +1527,24 @@ export const PosViews: React.FC<PosViewsProps> = ({
             <button
               type="button"
               onClick={() => {
+                if (!canVoidOrder) return;
                 setCart([]);
                 setActivatedProductIds([]);
               }}
-              disabled={cart.length === 0}
-              className="min-h-[44px] px-3.5 py-2.5 bg-white hover:bg-red-50 text-red-600 border border-slate-200 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40"
+              disabled={cart.length === 0 || !canVoidOrder}
+              className={`min-h-[44px] px-3.5 py-2.5 border rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 transition-colors ${
+                !canVoidOrder
+                  ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                  : 'bg-white hover:bg-red-50 text-red-600 border-slate-200 cursor-pointer disabled:opacity-40'
+              }`}
+              title={
+                !canVoidOrder
+                  ? 'Order void authorization stripped by Administrator'
+                  : 'Clear active cart'
+              }
             >
               <Trash2 className="w-4 h-4" />
-              Clear
+              {canVoidOrder ? 'Clear' : 'Void Locked'}
             </button>
             <button
               type="button"

@@ -60,6 +60,20 @@ export interface StaffMember {
   isCasual?: boolean;
   agreedCommissionPct?: number; // e.g. 5, 8, 10%
   casualDailyRateKes?: number;
+
+  // Granular Access Model & Feature Stripping (Admin Controlled)
+  strippedFeatures?: string[];
+  grantedFeatures?: string[];
+  allowedModuleOverrides?: ERPModuleId[];
+  customPermissionsNote?: string;
+  permissionsModifiedAt?: string;
+  permissionsModifiedBy?: string;
+}
+
+export interface CustomAccessModel {
+  roleMatrix: Record<StaffRole, ERPModuleId[]>;
+  updatedAt: string;
+  updatedBy: string;
 }
 
 export interface PayrollRecord {
@@ -608,6 +622,15 @@ export interface SaleOrder {
   paymentMethod?: string;
   mpesaReceiptNumber?: string;
   etimsInvoiceNumber?: string;
+  affiliateCommissionAmount?: number;
+  affiliateCommissionRate?: number;
+  affiliateBaseCommissionAmount?: number;
+  affiliateId?: string;
+  affiliateName?: string;
+  companySalesTotal?: number;
+  affiliateMarkupTotal?: number;
+  affiliateProfitAmount?: number;
+  attachedAlcoholBill?: any;
 }
 
 export interface ETimsInvoice {

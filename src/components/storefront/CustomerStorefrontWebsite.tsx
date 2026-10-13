@@ -835,7 +835,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
       );
       scriptEl.textContent = JSON.stringify(productSchema);
 
-      const pageTitle = `${selectedProductDetail.name} — KES ${selectedProductDetail.retailPriceKes.toLocaleString()} | VAAIRO LIQUOR HUB`;
+      const pageTitle = `${selectedProductDetail.name} — KES ${(selectedProductDetail.retailPriceKes || 0).toLocaleString()} | VAAIRO LIQUOR HUB`;
       const pageDesc = buildCleanProductDescription(selectedProductDetail);
       document.title = pageTitle;
       const metaDesc = document.querySelector('meta[name="description"]');
@@ -844,14 +844,14 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
       const catalogSchema = buildStorefrontCatalogJsonLd(
         products,
         inventoryItems,
-        activeBranch.id,
+        activeBranch?.id || '',
         siteOrigin,
         prod => prod.image || getProductImageUrl(prod)
       );
       scriptEl.textContent = JSON.stringify(catalogSchema);
       document.title = 'VAAIRO LIQUOR HUB — Direct Company Price Alcohol & Drinks Delivery';
     }
-  }, [selectedProductDetail, products, inventoryItems, activeBranch.id, siteOrigin]);
+  }, [selectedProductDetail, products, inventoryItems, activeBranch?.id, siteOrigin]);
 
   // Production Safaricom Daraja STK Push & Verification State (for On-Hold Delivery Orders)
   const [promptPhones, setPromptPhones] = useState<Record<string, string>>({});
@@ -1239,8 +1239,10 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     // If user is searching specific tokens, rank matches by exact prefix and scatter any grouped items
     if (tokens.length > 0) {
       const sortedMatches = [...matched].sort((a, b) => {
-        const aStarts = a.name.toLowerCase().startsWith(q) || a.brand.toLowerCase().startsWith(q) ? 1 : 0;
-        const bStarts = b.name.toLowerCase().startsWith(q) || b.brand.toLowerCase().startsWith(q) ? 1 : 0;
+        const aBrand = (a.brand || '').toLowerCase();
+        const bBrand = (b.brand || '').toLowerCase();
+        const aStarts = a.name.toLowerCase().startsWith(q) || (aBrand ? aBrand.startsWith(q) : false) ? 1 : 0;
+        const bStarts = b.name.toLowerCase().startsWith(q) || (bBrand ? bBrand.startsWith(q) : false) ? 1 : 0;
         return bStarts - aStarts;
       });
       return scatterAndReshuffleProducts(sortedMatches, storefrontShuffleTick);
@@ -1282,7 +1284,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
       const initialQty = Math.min(availableStock, qty);
       return [...prev, { product, quantity: initialQty }];
     });
-    setCheckoutBanner(`Added ${qty}x ${product.name} at Direct Company Price (${formatKes(product.retailPriceKes)})`);
+    setCheckoutBanner(`Added ${qty}x ${product.name} at Direct Company Price (${formatKes(product.retailPriceKes || 0)})`);
     setTimeout(() => setCheckoutBanner(null), 3500);
   };
 
@@ -1304,7 +1306,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
 
   const totalCartItems = webCart.reduce((sum, item) => sum + item.quantity, 0);
   const totalCartCompanyPriceKes = webCart.reduce(
-    (sum, item) => sum + item.product.retailPriceKes * item.quantity,
+    (sum, item) => sum + (item.product.retailPriceKes || 0) * item.quantity,
     0
   );
 
@@ -1880,7 +1882,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
 
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="font-mono font-black text-sm text-[#0A006E]">
-                          {formatKes(product.retailPriceKes)}
+                          {formatKes(product.retailPriceKes || 0)}
                         </span>
                         <span className="text-[10px] font-bold text-emerald-700 hidden sm:inline">
                           • Direct Company Price
@@ -2564,7 +2566,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                               Direct Company Price
                             </div>
                             <div className={`font-mono font-black text-lg ${isOutOfStock ? 'text-slate-400' : 'text-[#0A006E]'}`}>
-                              {formatKes(product.retailPriceKes)}
+                              {formatKes(product.retailPriceKes || 0)}
                             </div>
                           </div>
                           <span
@@ -2636,7 +2638,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                               {inCartItem.quantity} in Cart
                             </div>
                             <div className="text-[10px] font-mono text-emerald-800">
-                              {formatKes(inCartItem.quantity * product.retailPriceKes)}
+                              {formatKes(inCartItem.quantity * (product.retailPriceKes || 0))}
                             </div>
                           </div>
                           <button
@@ -2868,10 +2870,11 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
           }
         });
 
+        const currentBrandLower = (selectedProductDetail.brand || '').toLowerCase();
         const suggestedBrands = Array.from(brandMap.values())
           .sort((a, b) => {
-            const aIsCurrent = a.brand.toLowerCase() === selectedProductDetail.brand.toLowerCase() ? 1 : 0;
-            const bIsCurrent = b.brand.toLowerCase() === selectedProductDetail.brand.toLowerCase() ? 1 : 0;
+            const aIsCurrent = a.brand.toLowerCase() === currentBrandLower ? 1 : 0;
+            const bIsCurrent = b.brand.toLowerCase() === currentBrandLower ? 1 : 0;
             if (aIsCurrent !== bIsCurrent) return bIsCurrent - aIsCurrent;
             if (b.inStockCount !== a.inStockCount) return b.inStockCount - a.inStockCount;
             return b.count - a.count;
@@ -3312,7 +3315,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
 
                                 <div className="flex items-center justify-between gap-1 mt-1">
                                   <span className="font-mono font-black text-xs text-[#0A006E]">
-                                    {formatKes(sugProd.retailPriceKes)}
+                                    {formatKes(sugProd.retailPriceKes || 0)}
                                   </span>
                                   {!sugOutOfStock ? (
                                     <button
@@ -4240,7 +4243,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
         onClose={() => setIsMerchantSeoModalOpen(false)}
         products={products}
         inventoryItems={inventoryItems}
-        activeBranchId={activeBranch.id}
+        activeBranchId={activeBranch?.id || ''}
       />
 
       {/* Storefront Footer with Matching Wave Design */}

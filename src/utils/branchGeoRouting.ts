@@ -303,13 +303,23 @@ export function resolveBranchProductPrice(
       ? preset.defaultMultiplierPercent
       : 0;
 
-  const overrides: Record<string, BranchProductPriceOverride> = branch?.preferredProductPrices || {};
-  const exactOverride = overrides[product.id] || (product.sku ? overrides[product.sku] : undefined);
+  const rawOverrides = (branch?.preferredProductPrices || {}) as Record<
+    string,
+    BranchProductPriceOverride | number
+  >;
+  const getOverride = (key: string): BranchProductPriceOverride | undefined => {
+    const val = rawOverrides[key];
+    if (typeof val === 'number') {
+      return { retailPriceKes: val, wholesalePriceKes: val };
+    }
+    return val;
+  };
+  const exactOverride = getOverride(product.id) || (product.sku ? getOverride(product.sku) : undefined);
 
   // Check if this is a volume variant (`prod-id-vol-1000`) and scale base product override if present
   const isVolumeVariant = product.id.includes('-vol-');
   const baseProdId = isVolumeVariant ? product.id.split('-vol-')[0] : product.id;
-  const baseOverride = !exactOverride && isVolumeVariant ? overrides[baseProdId] : undefined;
+  const baseOverride = !exactOverride && isVolumeVariant ? getOverride(baseProdId) : undefined;
 
   let retailPriceKes = baselineRetailPriceKes;
   let wholesalePriceKes = baselineWholesalePriceKes;

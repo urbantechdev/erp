@@ -245,7 +245,7 @@ export const MerchantSeoDiagnosticsModal: React.FC<Props> = ({
                     <span>Embedded in &lt;head&gt; &amp; Product Cards — 100% Aligned with Visible Storefront Data</span>
                   </div>
                   <p className="text-[11px] text-emerald-900">
-                    Price ({formatKes(selectedProduct.retailPriceKes)}), availability (
+                    Price ({formatKes(selectedProduct.retailPriceKes || 0)}), availability (
                     {selectedProductStock > 0 ? 'InStock' : 'OutOfStock'}), SKU ({selectedProduct.sku}), and high-res image (&ge;500x500px) match the rendered DOM.
                   </p>
                 </div>
@@ -273,7 +273,7 @@ export const MerchantSeoDiagnosticsModal: React.FC<Props> = ({
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <div className="text-[10px] font-bold uppercase text-slate-400">Schema Offer Price</div>
                   <div className="font-mono font-black text-sm text-[#0A006E] mt-0.5">
-                    {selectedProduct.retailPriceKes.toFixed(2)} KES
+                    {(selectedProduct.retailPriceKes || 0).toFixed(2)} KES
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">

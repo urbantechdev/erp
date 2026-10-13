@@ -28,6 +28,8 @@ import {
   Tag,
   Package,
   FileText,
+  Sliders,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -49,6 +51,7 @@ import {
   exportReportToPDF,
   exportCommercialDocumentPDF,
   formatKes,
+  isUserFeaturePermitted,
 } from '../erpUtils';
 import { cleanFirestoreData } from '../firebase';
 import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
@@ -710,9 +713,10 @@ export const DocumentsAndCreditNotesModule: React.FC<{
   );
 
   const canIssueCreditNote =
-    currentUser.role === 'Admin' ||
-    currentUser.role === 'Accountant' ||
-    currentUser.role === 'Branch Manager';
+    (currentUser.role === 'Admin' ||
+      currentUser.role === 'Accountant' ||
+      currentUser.role === 'Branch Manager') &&
+    isUserFeaturePermitted(currentUser, 'issue_credit_notes');
 
   // Role-scoped documents based on Target Access Model
   const visibleDocs = useMemo(() => {
@@ -1416,6 +1420,7 @@ export const HrAndRbacModule: React.FC<{
   onExecutePayrollRun?: (runDraft: Omit<PayrollRun, 'id' | 'createdAt'>) => Promise<void>;
   onOpenPayslip?: (record: PayrollRecord) => void;
   onOpenAccessMatrix?: () => void;
+  onOpenUserFeatureModal?: (staff: StaffMember) => void;
 }> = ({
   currentUser,
   staffList,
@@ -1428,9 +1433,12 @@ export const HrAndRbacModule: React.FC<{
   onExecutePayrollRun,
   onOpenPayslip,
   onOpenAccessMatrix,
+  onOpenUserFeatureModal,
 }) => {
   const creatableRoles = ROLE_PERMISSIONS[currentUser.role].canCreateRoles;
-  const canManagePayroll = currentUser.role === 'HR' || currentUser.role === 'Admin';
+  const canManagePayroll =
+    (currentUser.role === 'HR' || currentUser.role === 'Admin') &&
+    isUserFeaturePermitted(currentUser, 'manage_staff_salaries');
 
   const [activeTab, setActiveTab] = useState<'roster' | 'payroll'>('roster');
 
@@ -2147,6 +2155,16 @@ export const HrAndRbacModule: React.FC<{
                               {s.status}
                             </span>
                           </div>
+                          {s.strippedFeatures && s.strippedFeatures.length > 0 && (
+                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-montserrat font-black bg-rose-100 text-rose-800 border border-rose-300">
+                              {s.strippedFeatures.length} Feature{s.strippedFeatures.length > 1 ? 's' : ''} Stripped
+                            </span>
+                          )}
+                          {s.grantedFeatures && s.grantedFeatures.length > 0 && (
+                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-montserrat font-black bg-blue-100 text-blue-800 border border-blue-300">
+                              +{s.grantedFeatures.length} Custom
+                            </span>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 font-mono-tabular">
                           {s.authMethod === 'google' ? (
@@ -2172,6 +2190,18 @@ export const HrAndRbacModule: React.FC<{
                         <td className="py-2.5 px-3 text-right">
                           {canManage ? (
                             <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                              {currentUser.role === 'Admin' && onOpenUserFeatureModal && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenUserFeatureModal(s)}
+                                  className="px-2 py-1 bg-purple-50 hover:bg-[#0A006E] hover:text-[#FFDE00] text-purple-800 border border-purple-200 rounded-lg font-montserrat font-black text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                                  title="Control Access Model & Strip Features from User"
+                                >
+                                  <Sliders className="w-3 h-3 text-purple-600" />
+                                  Features
+                                </button>
+                              )}
+
                               <button
                                 type="button"
                                 onClick={() => handleOpenCompensation(s)}
@@ -2930,7 +2960,8 @@ export const AuditAndSecurityModule: React.FC<{
   auditLogs: AuditLog[];
   staffList: StaffMember[];
   onOpenAccessMatrix?: () => void;
-}> = ({ currentUser, auditLogs, staffList, onOpenAccessMatrix }) => {
+  onOpenUserFeatureModal?: (staff: StaffMember) => void;
+}> = ({ currentUser, auditLogs, staffList, onOpenAccessMatrix, onOpenUserFeatureModal }) => {
   const [severityFilter, setSeverityFilter] = useState<string>('All');
 
   // Role-scoped audit telemetry matching Target Access Model:
@@ -3142,6 +3173,27 @@ export const AuditAndSecurityModule: React.FC<{
                   Device: {s.lastDevice || 'Unregistered Terminal'}
                 </div>
               </div>
+              {s.strippedFeatures && s.strippedFeatures.length > 0 && (
+                <div className="pt-1">
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-montserrat font-black bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center gap-1">
+                    <ShieldAlert className="w-2.5 h-2.5 text-rose-600" />
+                    {s.strippedFeatures.length} Feature{s.strippedFeatures.length > 1 ? 's' : ''} Stripped
+                  </span>
+                </div>
+              )}
+              {currentUser.role === 'Admin' && onOpenUserFeatureModal && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpenUserFeatureModal(s)}
+                    className="w-full py-1.5 bg-purple-50 hover:bg-[#0A006E] hover:text-[#FFDE00] text-purple-800 border border-purple-200 rounded-lg font-montserrat font-black text-[11px] transition-colors cursor-pointer flex items-center justify-center gap-1"
+                    title="Control features or strip access from this user"
+                  >
+                    <Sliders className="w-3 h-3 text-purple-600" />
+                    Control Feature Access
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

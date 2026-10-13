@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   StaffRole,
+  StaffMember,
   ERPModuleId,
   Product,
   GeoRegion,
@@ -625,6 +626,265 @@ export function getRoleAccessLevel(role: StaffRole, moduleId: ERPModuleId): Acce
   const item = TARGET_ACCESS_MATRIX.find((m) => m.moduleId === moduleId);
   if (!item) return 'None';
   return item.permissions[role] || 'None';
+}
+
+export interface GranularFeatureDefinition {
+  key: string;
+  label: string;
+  category: 'Core Modules' | 'POS & Sales Operations' | 'Inventory & Stock Governance' | 'Finance, Credit & Invoicing' | 'HR, Access & Administration';
+  description: string;
+  isModule: boolean;
+  moduleId?: ERPModuleId;
+}
+
+export const ERP_FEATURE_CATALOG: GranularFeatureDefinition[] = [
+  // Module-Level Features
+  {
+    key: 'overview',
+    label: 'Executive Overview Dashboard',
+    category: 'Core Modules',
+    description: 'High-level business intelligence, gross revenue, branch KPIs, and live ledger summaries.',
+    isModule: true,
+    moduleId: 'overview',
+  },
+  {
+    key: 'retail_pos',
+    label: 'Retail Counter POS Terminal',
+    category: 'POS & Sales Operations',
+    description: 'Direct barcode scanning, cash/M-Pesa tender, optical search, and real-time counter sales.',
+    isModule: true,
+    moduleId: 'retail_pos',
+  },
+  {
+    key: 'sales_pos',
+    label: 'Wholesale Commercial B2B POS',
+    category: 'POS & Sales Operations',
+    description: 'Bulk order processing, credit facility transactions, tiered discounts, and distributor billing.',
+    isModule: true,
+    moduleId: 'sales_pos',
+  },
+  {
+    key: 'inventory',
+    label: 'Bonded Warehouse Inventory & Auto-SKU',
+    category: 'Inventory & Stock Governance',
+    description: 'Master liquor catalog, barcode assignment, physical count reconciliation, and batch tracking.',
+    isModule: true,
+    moduleId: 'inventory',
+  },
+  {
+    key: 'branches_transfers',
+    label: 'Branch Outlets & Inter-Branch Transfers',
+    category: 'Core Modules',
+    description: 'Distribution hub network, transit manifests, stock dispatch, and transfer receipt confirmations.',
+    isModule: true,
+    moduleId: 'branches_transfers',
+  },
+  {
+    key: 'geo_pricing',
+    label: 'Geo-Regional Pricing & Zone Multipliers',
+    category: 'Core Modules',
+    description: 'Autonomous location-based pricing tiers, freight levies, and regional markup rules.',
+    isModule: true,
+    moduleId: 'geo_pricing',
+  },
+  {
+    key: 'partners',
+    label: 'Suppliers, Retailers & Logistics Directory',
+    category: 'Core Modules',
+    description: 'Distributor directory, liquor trade licenses, KRA PIN compliance, and 3PL carriers.',
+    isModule: true,
+    moduleId: 'partners',
+  },
+  {
+    key: 'documents_credit',
+    label: 'Invoices, Thermal Receipts & Credit Notes',
+    category: 'Finance, Credit & Invoicing',
+    description: 'Official tax documentation, eTIMS QR invoices, thermal payslips, and credit note issuance.',
+    isModule: true,
+    moduleId: 'documents_credit',
+  },
+  {
+    key: 'compliance',
+    label: 'Regulatory & Excise Bonded Stamp Control',
+    category: 'Core Modules',
+    description: 'KRA excise stamps, import customs declarations, bond licenses, and regulatory audits.',
+    isModule: true,
+    moduleId: 'compliance',
+  },
+  {
+    key: 'hr_rbac',
+    label: 'HR Provisioning & Role-Based Access Control',
+    category: 'HR, Access & Administration',
+    description: 'Employee onboarding, credential generation, salary compensation, and feature permission stripping.',
+    isModule: true,
+    moduleId: 'hr_rbac',
+  },
+  {
+    key: 'audit_security',
+    label: 'User Security Traces & Audit Logs',
+    category: 'HR, Access & Administration',
+    description: 'Tamper-evident system logs, biometric device fingerprints, and unauthorized attempt alerts.',
+    isModule: true,
+    moduleId: 'audit_security',
+  },
+  {
+    key: 'customer_portal',
+    label: 'Customer Online Storefront Portal',
+    category: 'Core Modules',
+    description: 'Public eCommerce portal, web orders, live delivery tracking, and client order placement.',
+    isModule: true,
+    moduleId: 'customer_portal',
+  },
+  {
+    key: 'outlets_restaurants',
+    label: 'Branch Outlets, Bars & Club Management',
+    category: 'Core Modules',
+    description: 'Commercial outlet operations, food/beverage menus, bar pantry stock, and central liquor top-ups.',
+    isModule: true,
+    moduleId: 'outlets_restaurants',
+  },
+
+  // Granular Sub-Features
+  {
+    key: 'pos_discounts',
+    label: 'Manual Discount & Price Override at Checkout',
+    category: 'POS & Sales Operations',
+    description: 'Ability for cashier or salesperson to adjust unit prices or apply non-standard discounts during POS sales.',
+    isModule: false,
+    moduleId: 'retail_pos',
+  },
+  {
+    key: 'pos_voids',
+    label: 'Void Scanned Items & Cancel Orders',
+    category: 'POS & Sales Operations',
+    description: 'Authority to void scanned line items or abort an active checkout transaction after scanning.',
+    isModule: false,
+    moduleId: 'retail_pos',
+  },
+  {
+    key: 'inventory_damage_logging',
+    label: 'Quarantine & Spoilage Write-off Authorization',
+    category: 'Inventory & Stock Governance',
+    description: 'Permission to log broken bottles, transit damage, or spoiled stock and deduct from active asset balance.',
+    isModule: false,
+    moduleId: 'inventory',
+  },
+  {
+    key: 'issue_credit_notes',
+    label: 'Issue Customer Credit Notes & Refunds',
+    category: 'Finance, Credit & Invoicing',
+    description: 'Authority to issue commercial credit notes that reduce client accounts receivable balances.',
+    isModule: false,
+    moduleId: 'documents_credit',
+  },
+  {
+    key: 'export_financial_pdf',
+    label: 'Export Confidential Executive Financial Reports',
+    category: 'Finance, Credit & Invoicing',
+    description: 'Ability to export gross profit, COGS, dead-stock capital, and P&L financial data to PDF/CSV.',
+    isModule: false,
+    moduleId: 'documents_credit',
+  },
+  {
+    key: 'manage_staff_salaries',
+    label: 'Manage Staff Compensation & Execute Payroll',
+    category: 'HR, Access & Administration',
+    description: 'Permission to view, modify base salaries, calculate statutory deductions, and finalize monthly payroll disbursements.',
+    isModule: false,
+    moduleId: 'hr_rbac',
+  },
+];
+
+/**
+ * Calculates effective ERP modules available to a staff member, taking into account:
+ * 1. Role baseline permissions (or Admin custom matrix overrides)
+ * 2. User-specific explicitly stripped modules/features (removed by Admin)
+ * 3. User-specific explicitly granted modules/features (added by Admin)
+ */
+export function getEffectiveUserModules(
+  staff: StaffMember,
+  customRoleMatrix?: Record<StaffRole, ERPModuleId[]>
+): ERPModuleId[] {
+  // Baseline modules from role (checking custom admin matrix first if provided)
+  const baseModules =
+    (customRoleMatrix && customRoleMatrix[staff.role]) ||
+    ROLE_PERMISSIONS[staff.role]?.allowedModules ||
+    [];
+
+  // If user has complete module override, use it as initial
+  let effective: ERPModuleId[] =
+    staff.allowedModuleOverrides && staff.allowedModuleOverrides.length > 0
+      ? [...staff.allowedModuleOverrides]
+      : [...baseModules];
+
+  // Strip off features revoked by Admin
+  if (staff.strippedFeatures && staff.strippedFeatures.length > 0) {
+    effective = effective.filter((mod) => !staff.strippedFeatures!.includes(mod));
+  }
+
+  // Grant extra features explicitly enabled by Admin
+  if (staff.grantedFeatures && staff.grantedFeatures.length > 0) {
+    staff.grantedFeatures.forEach((feat: string) => {
+      const isKnownModule = ERP_FEATURE_CATALOG.some(
+        (f) => f.isModule && f.key === feat
+      );
+      if (isKnownModule && !effective.includes(feat as ERPModuleId)) {
+        effective.push(feat as ERPModuleId);
+      }
+    });
+  }
+
+  return effective;
+}
+
+/**
+ * Checks whether a specific sub-feature or module is allowed for a user
+ */
+export function isUserFeaturePermitted(
+  staff: StaffMember,
+  featureKey: string,
+  customRoleMatrix?: Record<StaffRole, ERPModuleId[]>
+): boolean {
+  // If explicitly stripped from this user, access is strictly denied
+  if (staff.strippedFeatures && staff.strippedFeatures.includes(featureKey)) {
+    return false;
+  }
+
+  // If explicitly granted to this user, access is permitted
+  if (staff.grantedFeatures && staff.grantedFeatures.includes(featureKey)) {
+    return true;
+  }
+
+  // If this is a module-level feature, check module permissions
+  const featDef = ERP_FEATURE_CATALOG.find((f) => f.key === featureKey);
+  if (featDef?.isModule) {
+    const allowedMods = getEffectiveUserModules(staff, customRoleMatrix);
+    return allowedMods.includes(featDef.moduleId || (featureKey as ERPModuleId));
+  }
+
+  // For sub-features: if parent module is stripped, sub-feature is also blocked
+  if (featDef?.moduleId) {
+    const allowedMods = getEffectiveUserModules(staff, customRoleMatrix);
+    if (!allowedMods.includes(featDef.moduleId)) {
+      return false;
+    }
+  }
+
+  // Default role allowance
+  if (staff.role === 'Admin') return true;
+  if (staff.role === 'Accountant') {
+    return !['pos_discounts', 'pos_voids', 'inventory_damage_logging', 'manage_staff_salaries'].includes(featureKey);
+  }
+  if (staff.role === 'HR') {
+    return ['manage_staff_salaries'].includes(featureKey);
+  }
+  if (staff.role === 'Branch Manager' || staff.role === 'Sales Manager') {
+    return ['pos_discounts', 'pos_voids', 'inventory_damage_logging', 'issue_credit_notes'].includes(featureKey);
+  }
+  if (staff.role === 'Inventory Controller') {
+    return ['inventory_damage_logging'].includes(featureKey);
+  }
+  return false;
 }
 
 // Export any dataset to CSV

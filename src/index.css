@@ -40,12 +40,14 @@
 :root {
   --font-heading: 'Montserrat', sans-serif;
   --font-body: 'Raleway', sans-serif;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 body {
   font-family: 'Raleway', sans-serif;
   background-color: #FFFFFF;
   color: #0f172a;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .font-montserrat {
@@ -69,9 +71,55 @@ body {
   font-family: 'Raleway', sans-serif;
 }
 
-.font-mono-tabular {
-  font-family: 'JetBrains Mono', monospace;
-  font-variant-numeric: tabular-nums;
+/* ==========================================================================
+   ENTERPRISE TYPOGRAPHY: BOLD DIGITS & FIGURES CONFIGURATION
+   ========================================================================== */
+
+/* All digits, figures, currency amounts, codes, and tabular values render in bold modern sans (Plus Jakarta Sans & Montserrat) */
+.font-mono,
+.font-mono-tabular,
+.tabular-nums,
+[class*="font-mono"] {
+  font-family: 'Plus Jakarta Sans', 'Montserrat', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums lining-nums diagonal-fractions !important;
+  letter-spacing: -0.01em;
+}
+
+/* Heaviest figures in KPI dashboards, executive summaries, and prominent hero amounts */
+.font-mono.font-black,
+.font-mono-tabular.font-black,
+.font-black .font-mono,
+.font-black .font-mono-tabular,
+.font-black.font-mono,
+.font-black.font-mono-tabular {
+  font-weight: 900 !important;
+}
+
+.font-mono.font-extrabold,
+.font-mono-tabular.font-extrabold {
+  font-weight: 800 !important;
+}
+
+.font-mono.font-bold,
+.font-mono-tabular.font-bold {
+  font-weight: 700 !important;
+}
+
+/* Ensure bold font weight for all figures across table rows, stats, and badges */
+td.font-mono,
+td.font-mono-tabular,
+th.font-mono,
+th.font-mono-tabular,
+span.font-mono,
+span.font-mono-tabular,
+div.font-mono,
+div.font-mono-tabular,
+p.font-mono,
+p.font-mono-tabular {
+  font-family: 'Plus Jakarta Sans', 'Montserrat', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 /* Custom scrollbars for high density ERP data */
