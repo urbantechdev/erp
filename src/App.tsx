@@ -38,6 +38,7 @@ import {
   AlertTriangle,
   Barcode,
   ChevronRight,
+  UtensilsCrossed,
 } from 'lucide-react';
 import {
   db,
@@ -47,6 +48,7 @@ import {
   signOut,
   testFirestoreConnection,
   handleFirestoreError,
+  cleanFirestoreData,
   OperationType,
 } from './firebase';
 import {
@@ -63,6 +65,8 @@ import {
   PayrollRun,
   PayrollRecord,
   DamageSpoilageIncident,
+  BusinessUnit,
+  RestaurantInventoryItem,
 } from './types';
 import {
   getDeviceFingerprint,
@@ -70,7 +74,12 @@ import {
   MASTER_IMPORTED_INVENTORY,
   formatKes,
 } from './erpUtils';
-import { ensureOperationalFoundationSeeded, NAIROBI_GEO_REGIONS } from './seedData';
+import {
+  ensureOperationalFoundationSeeded,
+  NAIROBI_GEO_REGIONS,
+  INITIAL_BUSINESS_UNITS,
+  INITIAL_RESTAURANT_INVENTORY,
+} from './seedData';
 import { AuthGateway } from './components/AuthGateway';
 import { PosViews } from './components/PosViews';
 import { CustomerPortalView } from './components/CustomerPortalView';
@@ -87,6 +96,7 @@ import {
   HrAndRbacModule,
   AuditAndSecurityModule,
 } from './components/ErpModulesPart2';
+import { RestaurantOutletManagement } from './components/RestaurantOutletManagement';
 import { DocumentPrintModal } from './components/DocumentPrintModal';
 import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { OnboardItemsModal } from './components/OnboardItemsModal';
@@ -111,6 +121,7 @@ const MODULE_META: Record<
   hr_rbac: { label: 'HR & Role Provisioning', shortMobileLabel: 'HR & Roles', icon: UserPlus },
   audit_security: { label: 'User Monitoring & Security Logs', shortMobileLabel: 'Security', icon: Activity },
   customer_portal: { label: 'Customer Online Portal', shortMobileLabel: 'Online Store', icon: ShoppingBag },
+  outlets_restaurants: { label: 'Branch Outlets & Restaurants', shortMobileLabel: 'Outlets', icon: UtensilsCrossed },
 };
 
 export default function App() {
@@ -125,6 +136,20 @@ export default function App() {
   const [complianceRecords, setComplianceRecords] = useState<ComplianceRecord[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
+  const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_business_units');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_BUSINESS_UNITS;
+  });
+  const [restaurantInventory, setRestaurantInventory] = useState<RestaurantInventoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_restaurant_inventory');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_RESTAURANT_INVENTORY;
+  });
   const [viewingPayslipRecord, setViewingPayslipRecord] = useState<PayrollRecord | null>(null);
 
   // Active User Session State
@@ -328,6 +353,40 @@ export default function App() {
       (err) => handleFirestoreError(err, OperationType.GET, 'payroll_runs')
     );
 
+    const unsubBusinessUnits = onSnapshot(
+      query(collection(db, 'business_units'), where('createdAt', '>=', '')),
+      (snap) => {
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as BusinessUnit), id: d.id }));
+          setBusinessUnits(list);
+          try {
+            localStorage.setItem('erp_business_units', JSON.stringify(list));
+          } catch {}
+        }
+      },
+      (err) => {
+        // Fall back gracefully to local storage when remote collection permissions are restricted
+        console.warn('[Firestore] business_units access restricted; using local data:', err?.message || err);
+      }
+    );
+
+    const unsubRestaurantInventory = onSnapshot(
+      query(collection(db, 'restaurant_inventory'), where('createdAt', '>=', '')),
+      (snap) => {
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as RestaurantInventoryItem), id: d.id }));
+          setRestaurantInventory(list);
+          try {
+            localStorage.setItem('erp_restaurant_inventory', JSON.stringify(list));
+          } catch {}
+        }
+      },
+      (err) => {
+        // Fall back gracefully to local storage when remote collection permissions are restricted
+        console.warn('[Firestore] restaurant_inventory access restricted; using local data:', err?.message || err);
+      }
+    );
+
     return () => {
       unsubStaff();
       unsubBranches();
@@ -339,6 +398,8 @@ export default function App() {
       unsubCompliance();
       unsubAudit();
       unsubPayrollRuns();
+      unsubBusinessUnits();
+      unsubRestaurantInventory();
     };
   }, []);
 
@@ -715,11 +776,11 @@ export default function App() {
     updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[]
   ): Promise<TransactionDoc | null> => {
     const id = `tx-${Date.now()}`;
-    const fullTx: TransactionDoc = {
+    const fullTx: TransactionDoc = cleanFirestoreData({
       ...txDraft,
       id,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'transactions', id), fullTx);
       for (const up of updatedProducts) {
@@ -753,11 +814,11 @@ export default function App() {
 
   const handleCreateProduct = async (prodDraft: Omit<Product, 'id' | 'createdAt'>) => {
     const id = `prod-${Date.now()}`;
-    const fullProd: Product = {
+    const fullProd: Product = cleanFirestoreData({
       ...prodDraft,
       id,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'products', id), fullProd);
       triggerToast(
@@ -932,11 +993,11 @@ export default function App() {
 
   const handleCreateBranch = async (branchDraft: Omit<Branch, 'id' | 'createdAt'>) => {
     const id = `br-${Date.now()}`;
-    const fullBranch: Branch = {
+    const fullBranch: Branch = cleanFirestoreData({
       ...branchDraft,
       id,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'branches', id), fullBranch);
       triggerToast(
@@ -1049,11 +1110,11 @@ export default function App() {
     updatedProd: { productId: string; newBranchStockJson: string }
   ) => {
     const id = `trf-${Date.now()}`;
-    const fullTr: StockTransfer = {
+    const fullTr: StockTransfer = cleanFirestoreData({
       ...trDraft,
       id,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'stock_transfers', id), fullTr);
       await persistProductState(updatedProd.productId, {
@@ -1084,11 +1145,11 @@ export default function App() {
 
   const handleCreateRegion = async (regDraft: Omit<GeoRegion, 'id' | 'createdAt'>) => {
     const id = `reg-${Date.now()}`;
-    const fullReg: GeoRegion = {
+    const fullReg: GeoRegion = cleanFirestoreData({
       ...regDraft,
       id,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'geo_regions', id), fullReg);
       triggerToast(
@@ -1161,11 +1222,11 @@ export default function App() {
 
   const handleCreatePartner = async (partDraft: Omit<Partner, 'id' | 'createdAt'>) => {
     const id = `part-${Date.now()}`;
-    const fullPartner: Partner = {
+    const fullPartner: Partner = cleanFirestoreData({
       ...partDraft,
       id,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'partners', id), fullPartner);
       triggerToast(
@@ -1193,11 +1254,11 @@ export default function App() {
 
   const handleCreateCompliance = async (compDraft: Omit<ComplianceRecord, 'id' | 'createdAt'>) => {
     const id = `comp-${Date.now()}`;
-    const fullComp: ComplianceRecord = {
+    const fullComp: ComplianceRecord = cleanFirestoreData({
       ...compDraft,
       id,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'compliance_records', id), fullComp);
       triggerToast(
@@ -1230,12 +1291,12 @@ export default function App() {
         ? staffDraft.pin
         : await hashPin(staffDraft.pin)
       : undefined;
-    const fullStaff: StaffMember = {
+    const fullStaff: StaffMember = cleanFirestoreData({
       ...staffDraft,
       pin: encryptedPin,
       id,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'staff', id), fullStaff);
       triggerToast(
@@ -1268,11 +1329,11 @@ export default function App() {
     if (encryptedPin && !isPinHashed(encryptedPin)) {
       encryptedPin = await hashPin(encryptedPin);
     }
-    const fullUpdated: StaffMember = {
+    const fullUpdated: StaffMember = cleanFirestoreData({
       ...existing,
       ...updates,
       pin: encryptedPin,
-    };
+    });
     try {
       await setDoc(doc(db, 'staff', staffId), fullUpdated);
       triggerToast(
@@ -1308,10 +1369,10 @@ export default function App() {
       triggerToast('error', 'Action Restricted', 'You cannot suspend or terminate your own active account.');
       return;
     }
-    const fullUpdated: StaffMember = {
+    const fullUpdated: StaffMember = cleanFirestoreData({
       ...existing,
       status: newStatus,
-    };
+    });
     try {
       await setDoc(doc(db, 'staff', staffId), fullUpdated);
       const verb = newStatus === 'Suspended' ? 'Suspended' : newStatus === 'Terminated' ? 'Terminated' : 'Re-activated';
@@ -1397,6 +1458,190 @@ export default function App() {
     } catch (err) {
       triggerToast('error', 'Payroll Error', 'Failed to publish payroll disbursement.');
       handleFirestoreError(err, OperationType.WRITE, 'payroll_runs');
+    }
+  };
+
+  const handleCreateBusinessUnit = async (unitDraft: Omit<BusinessUnit, 'id' | 'createdAt'>) => {
+    const id = `bu-${Date.now()}`;
+    const newUnit: BusinessUnit = {
+      ...unitDraft,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setBusinessUnits((prev) => {
+      const updated = [newUnit, ...prev];
+      try {
+        localStorage.setItem('erp_business_units', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    triggerToast('success', 'Outlet Created', `Created outlet: ${newUnit.name}`);
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Created Outlet: ${newUnit.name}`,
+        'Branch Outlets',
+        `Created outlet ${newUnit.name} (${newUnit.unitType}) under branch ${newUnit.branchName}`,
+        currentUser.branchName,
+        'Info'
+      );
+    }
+    try {
+      await setDoc(doc(db, 'business_units', id), newUnit);
+    } catch (err) {
+      console.warn('[Firestore] Cloud sync for business unit deferred:', err);
+    }
+  };
+
+  const handleUpdateBusinessUnit = async (unitId: string, updates: Partial<BusinessUnit>) => {
+    const existing = businessUnits.find((u) => u.id === unitId);
+    const fullUnit: BusinessUnit | null = existing ? { ...existing, ...updates } : null;
+
+    setBusinessUnits((prev) => {
+      const updated = prev.map((u) => (u.id === unitId ? { ...u, ...updates } : u));
+      try {
+        localStorage.setItem('erp_business_units', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    triggerToast('success', 'Outlet Updated', 'Updated sub-business outlet configuration.');
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Updated Sub-Business: ${fullUnit?.name || unitId}`,
+        'Branch Outlets',
+        `Updated configuration for sub-business outlet ${unitId}`,
+        currentUser.branchName,
+        'Info'
+      );
+    }
+    try {
+      if (fullUnit) {
+        await setDoc(doc(db, 'business_units', unitId), fullUnit);
+      } else {
+        await updateDoc(doc(db, 'business_units', unitId), updates);
+      }
+    } catch (err) {
+      console.warn('[Firestore] Cloud sync for business unit update deferred:', err);
+    }
+  };
+
+  const handleDeleteBusinessUnit = async (unitId: string) => {
+    const target = businessUnits.find((u) => u.id === unitId);
+    setBusinessUnits((prev) => {
+      const updated = prev.filter((u) => u.id !== unitId);
+      try {
+        localStorage.setItem('erp_business_units', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    // Unassign staff members from this deleted sub-business
+    setStaffList((prev) => {
+      const updated = prev.map((s) => (s.businessUnitId === unitId ? { ...s, businessUnitId: '', businessUnitName: '' } : s));
+      try {
+        localStorage.setItem('erp_staff_list', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    triggerToast('success', 'Sub-Business Deleted', `Deleted sub-business: ${target?.name || unitId}`);
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Deleted Sub-Business: ${target?.name || unitId}`,
+        'Branch Outlets',
+        `Deleted sub-business outlet record ID ${unitId}`,
+        currentUser.branchName,
+        'Security'
+      );
+    }
+    try {
+      await deleteDoc(doc(db, 'business_units', unitId));
+    } catch (err) {
+      console.warn('[Firestore] Cloud sync for business unit delete deferred:', err);
+    }
+  };
+
+  const handleCreateRestaurantItem = async (itemDraft: Omit<RestaurantInventoryItem, 'id' | 'createdAt'>) => {
+    const id = `ri-${Date.now()}`;
+    const newItem: RestaurantInventoryItem = {
+      ...itemDraft,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setRestaurantInventory((prev) => {
+      const updated = [newItem, ...prev];
+      try {
+        localStorage.setItem('erp_restaurant_inventory', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    triggerToast('success', 'Menu Item Added', `Added ${newItem.name} to kitchen/pantry.`);
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Added Restaurant Item: ${newItem.name}`,
+        'Branch Outlets',
+        `Added menu/pantry item ${newItem.name} (${newItem.portionUnit}) at KES ${newItem.sellingPriceKes}`,
+        currentUser.branchName,
+        'Info'
+      );
+    }
+    try {
+      await setDoc(doc(db, 'restaurant_inventory', id), newItem);
+    } catch (err) {
+      console.warn('[Firestore] Cloud sync for restaurant item deferred:', err);
+    }
+  };
+
+  const handleUpdateRestaurantItem = async (itemId: string, updates: Partial<RestaurantInventoryItem>) => {
+    setRestaurantInventory((prev) => {
+      const updated = prev.map((item) => (item.id === itemId ? { ...item, ...updates } : item));
+      try {
+        localStorage.setItem('erp_restaurant_inventory', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    triggerToast('success', 'Item Updated', 'Updated restaurant item.');
+    try {
+      await updateDoc(doc(db, 'restaurant_inventory', itemId), updates);
+    } catch (err) {
+      console.warn('[Firestore] Cloud sync for restaurant item update deferred:', err);
+    }
+  };
+
+  const handleDeleteRestaurantItem = async (itemId: string) => {
+    setRestaurantInventory((prev) => {
+      const updated = prev.filter((item) => item.id !== itemId);
+      try {
+        localStorage.setItem('erp_restaurant_inventory', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    triggerToast('success', 'Item Removed', 'Deleted restaurant inventory item.');
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Deleted Restaurant Item: ${itemId}`,
+        'Branch Outlets',
+        `Removed menu/pantry item ID ${itemId}`,
+        currentUser.branchName,
+        'Security'
+      );
+    }
+    try {
+      await deleteDoc(doc(db, 'restaurant_inventory', itemId));
+    } catch (err) {
+      console.warn('[Firestore] Cloud sync for restaurant item delete deferred:', err);
     }
   };
 
@@ -2067,8 +2312,11 @@ export default function App() {
               branches={branches}
               regions={regions}
               partners={partners}
+              businessUnits={businessUnits}
+              restaurantInventory={restaurantInventory}
               onCommitTransaction={handleCommitTransaction}
               onPreviewDoc={(d) => setPreviewDoc(d)}
+              onUpdateRestaurantItem={handleUpdateRestaurantItem}
             />
           )}
 
@@ -2080,8 +2328,11 @@ export default function App() {
               branches={branches}
               regions={regions}
               partners={partners}
+              businessUnits={businessUnits}
+              restaurantInventory={restaurantInventory}
               onCommitTransaction={handleCommitTransaction}
               onPreviewDoc={(d) => setPreviewDoc(d)}
+              onUpdateRestaurantItem={handleUpdateRestaurantItem}
             />
           )}
 
@@ -2179,6 +2430,23 @@ export default function App() {
               regions={regions}
               onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
               onPreviewDoc={(d) => setPreviewDoc(d)}
+            />
+          )}
+
+          {activeModule === 'outlets_restaurants' && (
+            <RestaurantOutletManagement
+              currentUser={currentUser}
+              branches={branches}
+              staffList={staffList}
+              products={products}
+              businessUnits={businessUnits}
+              restaurantInventory={restaurantInventory}
+              onCreateBusinessUnit={handleCreateBusinessUnit}
+              onUpdateBusinessUnit={handleUpdateBusinessUnit}
+              onDeleteBusinessUnit={handleDeleteBusinessUnit}
+              onCreateRestaurantItem={handleCreateRestaurantItem}
+              onUpdateRestaurantItem={handleUpdateRestaurantItem}
+              onDeleteRestaurantItem={handleDeleteRestaurantItem}
             />
           )}
         </main>

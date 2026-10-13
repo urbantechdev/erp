@@ -83,3 +83,25 @@ const safeSignInWithPopup = async (authInstance = auth, provider = googleProvide
 };
 
 export { safeSignInWithPopup as signInWithPopup, signOut };
+
+/**
+ * Recursively strips `undefined` fields from an object or array.
+ * Prevents Firestore "Function setDoc() called with invalid data. Unsupported field value: undefined" errors.
+ */
+export function cleanFirestoreData<T>(obj: T): T {
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj
+      .filter((v) => v !== undefined)
+      .map((v) => cleanFirestoreData(v)) as unknown as T;
+  }
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = typeof value === 'object' && value !== null ? cleanFirestoreData(value) : value;
+    }
+  }
+  return result as T;
+}

@@ -44,6 +44,7 @@ import {
   exportCommercialDocumentPDF,
   formatKes,
 } from '../erpUtils';
+import { cleanFirestoreData } from '../firebase';
 import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
 
 // ---------------------------------------------------------------------------
@@ -1371,28 +1372,30 @@ export const HrAndRbacModule: React.FC<{
 
     const isCasualSalesRep = effectiveRole === 'Affiliate Sales Representative';
 
-    await onCreateStaff({
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      role: effectiveRole,
-      authMethod: effectiveAuthMethod,
-      pin: effectiveAuthMethod === 'pin' ? pin : undefined,
-      branchId: assignedBranch?.id || '',
-      branchName: assignedBranch?.name || 'Main Branch',
-      status: 'Active',
-      createdBy: currentUser.name,
-      createdByRole: currentUser.role,
-      baseSalaryKes: Number(baseSalary),
-      deductionsKes: Number(deductions),
-      penaltiesKes: Number(penalties),
-      deductionsBreakdown: deductionsBreakdown.trim(),
-      penaltiesReason: penaltiesReason.trim(),
-      kraPin: kraPin.trim(),
-      nssfNo: nssfNo.trim(),
-      nhifNo: nhifNo.trim(),
-      isCasual: isCasualSalesRep || isCasual,
-      agreedCommissionPct: isCasualSalesRep ? Number(agreedCommissionPct) : undefined,
-    });
+    await onCreateStaff(
+      cleanFirestoreData({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        role: effectiveRole,
+        authMethod: effectiveAuthMethod,
+        pin: effectiveAuthMethod === 'pin' ? pin : undefined,
+        branchId: assignedBranch?.id || '',
+        branchName: assignedBranch?.name || 'Main Branch',
+        status: 'Active',
+        createdBy: currentUser.name,
+        createdByRole: currentUser.role,
+        baseSalaryKes: Number(baseSalary),
+        deductionsKes: Number(deductions),
+        penaltiesKes: Number(penalties),
+        deductionsBreakdown: deductionsBreakdown.trim(),
+        penaltiesReason: penaltiesReason.trim(),
+        kraPin: kraPin.trim(),
+        nssfNo: nssfNo.trim(),
+        nhifNo: nhifNo.trim(),
+        isCasual: isCasualSalesRep || isCasual,
+        agreedCommissionPct: isCasualSalesRep ? Number(agreedCommissionPct) : undefined,
+      })
+    );
 
     setFeedback(
       isCasualSalesRep
@@ -1477,26 +1480,29 @@ export const HrAndRbacModule: React.FC<{
     const branch = branches.find((b) => b.id === editBranchId) || branches[0];
     const effectiveAuth = editRole === 'Admin' || editRole === 'Accountant' ? 'google' : 'pin';
 
-    await onUpdateStaff(editingStaff.id, {
-      name: editName.trim(),
-      email: editEmail.trim().toLowerCase(),
-      role: editRole,
-      authMethod: effectiveAuth,
-      branchId: branch?.id || editingStaff.branchId,
-      branchName: branch?.name || editingStaff.branchName,
-      status: editStatus,
-      pin: effectiveAuth === 'pin' ? (editPin.length === 6 ? editPin : editingStaff.pin) : undefined,
-      baseSalaryKes: Number(editBaseSalary),
-      deductionsKes: Number(editDeductions),
-      penaltiesKes: Number(editPenalties),
-      deductionsBreakdown: editDeductionsBreakdown.trim(),
-      penaltiesReason: editPenaltiesReason.trim(),
-      kraPin: editKraPin.trim(),
-      nssfNo: editNssfNo.trim(),
-      nhifNo: editNhifNo.trim(),
-      isCasual: editIsCasual || editRole === 'Affiliate Sales Representative',
-      agreedCommissionPct: (editIsCasual || editRole === 'Affiliate Sales Representative') ? Number(editAgreedCommissionPct) : undefined,
-    });
+    await onUpdateStaff(
+      editingStaff.id,
+      cleanFirestoreData({
+        name: editName.trim(),
+        email: editEmail.trim().toLowerCase(),
+        role: editRole,
+        authMethod: effectiveAuth,
+        branchId: branch?.id || editingStaff.branchId,
+        branchName: branch?.name || editingStaff.branchName,
+        status: editStatus,
+        pin: effectiveAuth === 'pin' ? (editPin.length === 6 ? editPin : editingStaff.pin) : undefined,
+        baseSalaryKes: Number(editBaseSalary),
+        deductionsKes: Number(editDeductions),
+        penaltiesKes: Number(editPenalties),
+        deductionsBreakdown: editDeductionsBreakdown.trim(),
+        penaltiesReason: editPenaltiesReason.trim(),
+        kraPin: editKraPin.trim(),
+        nssfNo: editNssfNo.trim(),
+        nhifNo: editNhifNo.trim(),
+        isCasual: editIsCasual || editRole === 'Affiliate Sales Representative',
+        agreedCommissionPct: (editIsCasual || editRole === 'Affiliate Sales Representative') ? Number(editAgreedCommissionPct) : undefined,
+      })
+    );
 
     setFeedback(`Updated staff account for ${editName.trim()} successfully.`);
     setEditingStaff(null);

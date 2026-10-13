@@ -342,7 +342,18 @@ export interface LineItem {
   productId: string;
   sku: string;
   name: string;
-  unitMode: 'Bottle' | 'Case' | 'Portion' | 'Plate' | 'Glass' | 'Cup' | 'Stick' | 'Head' | 'Serving';
+  unitMode:
+    | 'Bottle'
+    | 'Case'
+    | 'Portion'
+    | 'Plate'
+    | 'Glass'
+    | 'Cup'
+    | 'Stick'
+    | 'Head'
+    | 'Serving'
+    | 'Basket'
+    | 'Platter';
   bottlesPerCase: number;
   quantityUnits: number;
   totalBottles: number;

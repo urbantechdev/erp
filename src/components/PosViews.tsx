@@ -732,40 +732,42 @@ export const PosViews: React.FC<PosViewsProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* VAAIRO Signature Yellow Hero Banner */}
-      <div className="bg-[#FFDE00] hover-card-lift border-2 border-[#0A006E] rounded-2xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative overflow-hidden">
+    <div className="space-y-3.5">
+      {/* Minimized Cashier Header Bar - Ultra Streamlined & Space-Saving */}
+      <div className="bg-[#FFDE00] border-2 border-[#0A006E] rounded-xl sm:rounded-2xl px-3.5 py-2 sm:px-4 sm:py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 relative overflow-hidden shadow-xs">
         <div className="silent-scanner-beam-dark" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+        
+        {/* Terminal Title & Active Zone Pill */}
+        <div className="relative z-10 flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-xs">
             {mode === 'retail' ? (
-              <>
-                <Store className="w-4 h-4" />
-                Retail Counter Checkout Terminal (IPS & LPS)
-              </>
+              <Store className="w-4 h-4" />
             ) : (
-              <>
-                <Briefcase className="w-4 h-4" />
-                B2B Wholesale, Suburb/Regional Distribution & Affiliate Sales POS
-              </>
+              <Briefcase className="w-4 h-4" />
             )}
           </div>
-          <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
-            {mode === 'retail'
-              ? 'Walk-In Bottle & Counter Checkout POS'
-              : 'Distributor Case & Geo-Regional Sales Terminal'}
-          </h2>
-          <p className="text-xs font-medium text-slate-900 mt-0.5">
-            Prices automatically adapt to the selected Geo-Location Zone ({activeRegion?.name}) to enforce suburb vs. lower-region alcohol pricing rules.
-          </p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xs sm:text-sm font-montserrat font-black italic text-[#0A006E] tracking-tight">
+                {mode === 'retail' ? 'Retail Cashier Checkout' : 'Wholesale Distribution POS'}
+              </h2>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-montserrat font-bold bg-[#0A006E]/10 text-[#0A006E] border border-[#0A006E]/15">
+                <MapPin className="w-2.5 h-2.5 text-[#0A006E]" />
+                {activeRegion?.name || 'Default Zone'}
+              </span>
+            </div>
+            <p className="text-[10px] sm:text-[11px] font-semibold text-[#0A006E]/80 truncate">
+              {branches.find((b) => b.id === activeBranch?.id)?.name || 'Central Outlet'} · Suburb vs. Lower-Region Geo-Pricing Active
+            </p>
+          </div>
         </div>
 
-        {/* Branch & Geo-Zone Selectors */}
-        <div className="flex flex-wrap items-center gap-3 relative z-10">
-          <div className="bg-white border-2 border-[#0A006E] rounded-xl px-3 py-2">
-            <label className="block text-[10px] font-montserrat font-black text-slate-500 uppercase">
-              Operating Branch
-            </label>
+        {/* Compact Branch & Geo-Pricing Dropdowns */}
+        <div className="flex items-center gap-2 relative z-10 shrink-0 flex-wrap">
+          <div className="flex items-center bg-white border border-[#0A006E]/30 rounded-lg px-2 py-1 shadow-xs">
+            <span className="text-[9px] font-montserrat font-black text-slate-500 uppercase mr-1 hidden sm:inline">
+              Branch:
+            </span>
             <select
               disabled={isScopedBranch}
               value={activeBranch?.id || ''}
@@ -774,7 +776,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
                 const br = branches.find((b) => b.id === e.target.value);
                 if (br) setSelectedRegionId(br.regionId);
               }}
-              className="text-xs font-montserrat font-black text-[#0A006E] bg-transparent focus:outline-none mt-0.5"
+              className="text-[11px] font-montserrat font-black text-[#0A006E] bg-transparent focus:outline-none cursor-pointer"
             >
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -784,15 +786,13 @@ export const PosViews: React.FC<PosViewsProps> = ({
             </select>
           </div>
 
-          <div className="bg-[#0A006E] text-white border-2 border-[#0A006E] rounded-xl px-3 py-2">
-            <label className="block text-[10px] font-montserrat font-black text-[#FFDE00] uppercase flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-[#FFDE00]" />
-              Geo-Pricing Zone (Suburb / Lower Region)
-            </label>
+          <div className="flex items-center bg-[#0A006E] text-white border border-[#0A006E] rounded-lg px-2 py-1 shadow-xs">
+            <MapPin className="w-3 h-3 text-[#FFDE00] mr-1 shrink-0" />
             <select
               value={activeRegion?.id || ''}
               onChange={(e) => setSelectedRegionId(e.target.value)}
-              className="text-xs font-montserrat font-black text-white bg-[#0A006E] focus:outline-none mt-0.5"
+              className="text-[11px] font-montserrat font-bold text-white bg-[#0A006E] focus:outline-none cursor-pointer"
+              title="Geo-Pricing Zone"
             >
               {regions.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -805,25 +805,25 @@ export const PosViews: React.FC<PosViewsProps> = ({
       </div>
 
       {/* RETAIL CHECKOUT BARCODE SCANNER STATION (Phone Camera + Desktop USB + Bluetooth Scanners) */}
-      <div className="bg-white border-2 border-[#0A006E] rounded-3xl p-5 shadow-lg space-y-4 relative overflow-hidden">
+      <div className="bg-white border-2 border-[#0A006E] rounded-2xl p-3.5 sm:p-4 shadow-sm space-y-3 relative overflow-hidden">
         <div className="silent-scanner-beam" />
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3 relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-md shrink-0">
-              <Barcode className="w-7 h-7 stroke-[2.2]" />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs shrink-0">
+              <Barcode className="w-5 h-5 stroke-[2.2]" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-montserrat font-black text-base text-[#0A006E]">
-                  Retail Barcode Scanner Checkout Station
+                <h3 className="font-montserrat font-black text-sm text-[#0A006E]">
+                  Barcode Scanner Checkout Station
                 </h3>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Desktop & Bluetooth Scanners Active
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-montserrat font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Scanner Active
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Scan with phone camera, desktop USB laser gun, or Bluetooth handheld barcode scanner — automatically adds to checkout.
+              <p className="text-[11px] text-slate-500 font-medium">
+                Phone camera, desktop USB laser gun, or Bluetooth scanner adds items instantly.
               </p>
             </div>
           </div>

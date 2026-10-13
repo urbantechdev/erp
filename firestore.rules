@@ -180,8 +180,9 @@ service cloud.firestore {
     match /business_units/{unitId} {
       allow get: if isValidId(unitId) && resource.data.createdAt >= '';
       allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(unitId) && isValidBusinessUnit(incoming());
-      allow delete: if isValidId(unitId) && resource.data.createdAt >= '';
+      allow create: if isValidId(unitId) && isValidBusinessUnit(incoming());
+      allow update: if isValidId(unitId) && (isValidBusinessUnit(incoming()) || resource.data.createdAt >= '');
+      allow delete: if isValidId(unitId);
     }
 
     match /restaurant_inventory/{itemId} {

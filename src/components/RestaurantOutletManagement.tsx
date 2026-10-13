@@ -104,8 +104,9 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
     return found || businessUnits[0] || null;
   }, [businessUnits, selectedUnitId, isPrivilegedManager, currentUser.businessUnitId]);
 
-  // Modal: Create new Business Unit
+  // Modal: Create or Edit Business Unit / Sub-Business
   const [isCreateOutletModalOpen, setIsCreateOutletModalOpen] = useState(false);
+  const [editingOutlet, setEditingOutlet] = useState<BusinessUnit | null>(null);
   const [newOutletBranchId, setNewOutletBranchId] = useState(branches[0]?.id || '');
   const [newOutletName, setNewOutletName] = useState('');
   const [newOutletType, setNewOutletType] = useState<BusinessUnitType>('restaurant_club');
@@ -113,6 +114,57 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
   const [newOutletManager, setNewOutletManager] = useState('');
   const [newOutletTableCount, setNewOutletTableCount] = useState<number>(24);
   const [newOutletAllowTopup, setNewOutletAllowTopup] = useState(true);
+  const [newOutletStatus, setNewOutletStatus] = useState<'Active' | 'Inactive'>('Active');
+
+  // Instant delete confirmation state
+  const [confirmDeleteUnit, setConfirmDeleteUnit] = useState<BusinessUnit | null>(null);
+  const [isDeletingOutletId, setIsDeletingOutletId] = useState<string | null>(null);
+
+  // Open modal to create a new outlet
+  const handleOpenCreateOutletModal = () => {
+    setEditingOutlet(null);
+    setNewOutletBranchId(branches[0]?.id || '');
+    setNewOutletName('');
+    setNewOutletType('restaurant_club');
+    setNewOutletDesc('');
+    setNewOutletManager('');
+    setNewOutletTableCount(24);
+    setNewOutletAllowTopup(true);
+    setNewOutletStatus('Active');
+    setIsCreateOutletModalOpen(true);
+  };
+
+  // Open modal to edit an existing sub-business
+  const handleOpenEditOutletModal = (unit: BusinessUnit) => {
+    setEditingOutlet(unit);
+    setNewOutletBranchId(unit.branchId || branches[0]?.id || '');
+    setNewOutletName(unit.name || '');
+    setNewOutletType(unit.unitType || 'restaurant_club');
+    setNewOutletDesc(unit.description || '');
+    setNewOutletManager(unit.managerName || '');
+    setNewOutletTableCount(unit.tableCount ?? 20);
+    setNewOutletAllowTopup(unit.allowLiquorTopup ?? true);
+    setNewOutletStatus(unit.status || 'Active');
+    setIsCreateOutletModalOpen(true);
+  };
+
+  // Instant delete handler
+  const handleInstantDeleteOutlet = async (unit: BusinessUnit) => {
+    if (!onDeleteBusinessUnit) return;
+    setIsDeletingOutletId(unit.id);
+    try {
+      await onDeleteBusinessUnit(unit.id);
+      if (selectedUnitId === unit.id) {
+        const remaining = businessUnits.filter((u) => u.id !== unit.id);
+        if (remaining.length > 0) {
+          setSelectedUnitId(remaining[0].id);
+        }
+      }
+      setConfirmDeleteUnit(null);
+    } finally {
+      setIsDeletingOutletId(null);
+    }
+  };
 
   // Modal: Add or Edit Food Item
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -197,33 +249,58 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
     };
   }, [activeUnitInventory]);
 
-  // Handle Create Business Unit
-  const handleCreateOutletSubmit = async (e: React.FormEvent) => {
+  // Handle Create or Edit Business Unit
+  const handleOutletFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newOutletName.trim() || !newOutletBranchId) return;
 
     const branch = branches.find((b) => b.id === newOutletBranchId) || branches[0];
-    const code = `OUT-${newOutletName.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
 
-    await onCreateBusinessUnit({
-      code,
-      name: newOutletName.trim(),
-      branchId: branch?.id || 'br-main',
-      branchName: branch?.name || 'Main Branch',
-      unitType: newOutletType,
-      description: newOutletDesc.trim() || (newOutletType === 'restaurant_club' ? 'Club dining and lounge service' : 'Liquor supermarket merchant outlet'),
-      managerName: newOutletManager.trim() || currentUser.name,
-      status: 'Active',
-      foodCategories: newOutletType === 'restaurant_club' ? [...DEFAULT_RESTAURANT_FOOD_CATEGORIES] : ['Supermarket Aisles', 'Promotional Displays'],
-      beverageCategories: newOutletType === 'restaurant_club' ? [...DEFAULT_RESTAURANT_BEVERAGE_CATEGORIES] : ['Spirits Aisle', 'Wines Aisle', 'Cold Beers Vault'],
-      allowLiquorTopup: newOutletAllowTopup,
-      tableCount: newOutletType === 'restaurant_club' ? newOutletTableCount : 0,
-      currency: 'KES',
-    });
+    if (editingOutlet) {
+      await onUpdateBusinessUnit(editingOutlet.id, {
+        name: newOutletName.trim(),
+        branchId: branch?.id || editingOutlet.branchId,
+        branchName: branch?.name || editingOutlet.branchName,
+        unitType: newOutletType,
+        description: newOutletDesc.trim(),
+        managerName: newOutletManager.trim(),
+        status: newOutletStatus,
+        allowLiquorTopup: newOutletAllowTopup,
+        tableCount: newOutletType === 'restaurant_club' ? newOutletTableCount : 0,
+      });
+    } else {
+      const code = `OUT-${newOutletName.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
+      await onCreateBusinessUnit({
+        code,
+        name: newOutletName.trim(),
+        branchId: branch?.id || 'br-main',
+        branchName: branch?.name || 'Main Branch',
+        unitType: newOutletType,
+        description:
+          newOutletDesc.trim() ||
+          (newOutletType === 'restaurant_club'
+            ? 'Club dining and lounge service'
+            : 'Liquor supermarket merchant outlet'),
+        managerName: newOutletManager.trim() || currentUser.name,
+        status: newOutletStatus,
+        foodCategories:
+          newOutletType === 'restaurant_club'
+            ? [...DEFAULT_RESTAURANT_FOOD_CATEGORIES]
+            : ['Supermarket Aisles', 'Promotional Displays'],
+        beverageCategories:
+          newOutletType === 'restaurant_club'
+            ? [...DEFAULT_RESTAURANT_BEVERAGE_CATEGORIES]
+            : ['Spirits Aisle', 'Wines Aisle', 'Cold Beers Vault'],
+        allowLiquorTopup: newOutletAllowTopup,
+        tableCount: newOutletType === 'restaurant_club' ? newOutletTableCount : 0,
+        currency: 'KES',
+      });
+    }
 
     setNewOutletName('');
     setNewOutletDesc('');
     setIsCreateOutletModalOpen(false);
+    setEditingOutlet(null);
   };
 
   // Handle Add Category to current unit
@@ -539,7 +616,7 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
 
             <button
               type="button"
-              onClick={() => setIsCreateOutletModalOpen(true)}
+              onClick={handleOpenCreateOutletModal}
               className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
@@ -591,10 +668,42 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                         </span>
                       </span>
 
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        {unit.status}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            unit.status === 'Active'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-300'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              unit.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                            }`}
+                          />
+                          {unit.status}
+                        </span>
+
+                        {/* Quick Edit Sub-Business */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditOutletModal(unit)}
+                          className="p-1.5 text-slate-500 hover:text-[#0A006E] hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                          title="Edit Sub-Business"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Instant Delete Sub-Business */}
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteUnit(unit)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="Instant Delete Sub-Business"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Outlet Title */}
@@ -715,17 +824,18 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                   </div>
 
                   {/* Actions Row */}
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5 flex-wrap">
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedUnitId(unit.id);
                         setActiveTab('food_menu');
                       }}
-                      className="flex-1 py-2 px-3 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition"
+                      className="flex-1 min-w-[90px] py-2 px-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-bold flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-95 transition"
+                      title="Manage Menu"
                     >
                       <ChefHat className="w-3.5 h-3.5" />
-                      <span>Manage Menu</span>
+                      <span>Menu</span>
                     </button>
 
                     <button
@@ -734,18 +844,40 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                         setSelectedUnitId(unit.id);
                         setActiveTab('inventory');
                       }}
-                      className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-montserrat font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+                      className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-montserrat font-bold flex items-center justify-center gap-1 cursor-pointer transition"
                       title="View Separate Kitchen Inventory"
                     >
                       <Package className="w-3.5 h-3.5" />
                       <span>Inventory</span>
                     </button>
 
+                    {/* Edit button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditOutletModal(unit)}
+                      className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-[#0A006E] rounded-xl text-xs font-montserrat font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+                      title="Edit Sub-Business Details"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+
+                    {/* Instant Delete button */}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteUnit(unit)}
+                      className="py-2 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-montserrat font-bold flex items-center justify-center gap-1 cursor-pointer transition"
+                      title="Instant Delete Sub-Business"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+
                     {onNavigateToPos && (
                       <button
                         type="button"
                         onClick={() => onNavigateToPos(unit.id)}
-                        className="py-2 px-3 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-95 transition"
+                        className="py-2 px-2.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-95 transition"
                         title="Launch Outlet in POS"
                       >
                         <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -790,7 +922,31 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              {activeBusinessUnit && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditOutletModal(activeBusinessUnit)}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#0A006E] rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition"
+                    title="Edit Active Sub-Business"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Outlet</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteUnit(activeBusinessUnit)}
+                    className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition"
+                    title="Instant Delete Active Sub-Business"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                </>
+              )}
+
               <button
                 type="button"
                 onClick={handleOpenAddItemModal}
@@ -1125,6 +1281,30 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                 ))}
               </select>
 
+              {activeBusinessUnit && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditOutletModal(activeBusinessUnit)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-[#0A006E] rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition"
+                    title="Edit Sub-Business details"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Outlet</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteUnit(activeBusinessUnit)}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition"
+                    title="Instant Delete Sub-Business"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                </>
+              )}
+
               <button
                 type="button"
                 onClick={handleExportKitchenInventoryCSV}
@@ -1424,7 +1604,7 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
       )}
 
       {/* =========================================================================
-          MODAL: CREATE NEW BUSINESS UNIT / OUTLET
+          MODAL: CREATE / EDIT BUSINESS UNIT (SUB-BUSINESS)
          ========================================================================= */}
       {isCreateOutletModalOpen && (
         <div
@@ -1440,23 +1620,28 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                 </div>
                 <div>
                   <h3 className="font-montserrat font-black text-base text-slate-900">
-                    Create Sub-Business Under Branch
+                    {editingOutlet ? `Edit Sub-Business: ${editingOutlet.name}` : 'Create Sub-Business Under Branch'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Establish a Restaurant/Club or Merchant Liquor Supermarket
+                    {editingOutlet
+                      ? 'Update commercial details, manager, table capacity, and status'
+                      : 'Establish a Restaurant/Club or Merchant Liquor Supermarket'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsCreateOutletModalOpen(false)}
+                onClick={() => {
+                  setIsCreateOutletModalOpen(false);
+                  setEditingOutlet(null);
+                }}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateOutletSubmit} className="space-y-4 text-xs">
+            <form onSubmit={handleOutletFormSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block font-montserrat font-bold text-slate-700 mb-1">
                   Parent Branch Depot *
@@ -1555,22 +1740,36 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                   />
                 </div>
 
-                {newOutletType === 'restaurant_club' && (
-                  <div>
-                    <label className="block font-montserrat font-bold text-slate-700 mb-1">
-                      Dining Table Count
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={200}
-                      value={newOutletTableCount}
-                      onChange={(e) => setNewOutletTableCount(Number(e.target.value))}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono font-bold"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block font-montserrat font-bold text-slate-700 mb-1">
+                    Operational Status
+                  </label>
+                  <select
+                    value={newOutletStatus}
+                    onChange={(e) => setNewOutletStatus(e.target.value as 'Active' | 'Inactive')}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-semibold cursor-pointer"
+                  >
+                    <option value="Active">Active (Open for business)</option>
+                    <option value="Inactive">Inactive (Suspended)</option>
+                  </select>
+                </div>
               </div>
+
+              {newOutletType === 'restaurant_club' && (
+                <div>
+                  <label className="block font-montserrat font-bold text-slate-700 mb-1">
+                    Dining Table Count
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={newOutletTableCount}
+                    onChange={(e) => setNewOutletTableCount(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono font-bold"
+                  />
+                </div>
+              )}
 
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
                 <div>
@@ -1592,7 +1791,10 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
               <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsCreateOutletModalOpen(false)}
+                  onClick={() => {
+                    setIsCreateOutletModalOpen(false);
+                    setEditingOutlet(null);
+                  }}
                   className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-bold cursor-pointer hover:bg-slate-100"
                 >
                   Cancel
@@ -1601,10 +1803,61 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                   type="submit"
                   className="px-5 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl font-montserrat font-black cursor-pointer shadow-md"
                 >
-                  Create Outlet
+                  {editingOutlet ? 'Save Sub-Business Changes' : 'Create Outlet'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: INSTANT DELETE SUB-BUSINESS CONFIRMATION
+         ========================================================================= */}
+      {confirmDeleteUnit && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in"
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border-2 border-rose-600 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-montserrat font-black text-base text-slate-900">
+                  Instant Delete Sub-Business
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Permanent removal of outlet &amp; configuration
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete <strong className="text-slate-900">{confirmDeleteUnit.name}</strong> ({confirmDeleteUnit.code})? 
+              This will instantly remove this sub-business from the directory and unassign staff members.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteUnit(null)}
+                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-bold cursor-pointer hover:bg-slate-100 text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingOutletId === confirmDeleteUnit.id}
+                onClick={() => handleInstantDeleteOutlet(confirmDeleteUnit)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-montserrat font-black cursor-pointer shadow-md text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isDeletingOutletId === confirmDeleteUnit.id ? 'Deleting...' : 'Confirm Instant Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
