@@ -55,6 +55,13 @@ import { ProductImage } from './ProductImage';
 import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
 import { PhoneBarcodeScannerModal } from './PhoneBarcodeScannerModal';
 import { playPosBeep, triggerScanHaptic, isAudioMuted, toggleAudioMuted } from '../utils/audioBeep';
+import QRCode from 'qrcode';
+import {
+  syncPosCartToFirestore,
+  subscribeToActivePosCart,
+  clearActivePosCart,
+} from '../utils/posCartSync';
+import { PhoneScannerCompanion } from './PhoneScannerCompanion';
 
 interface PosViewsProps {
   mode: 'retail' | 'wholesale';
@@ -207,6 +214,109 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const [cashTendered, setCashTendered] = useState<number>(0);
   const [lastScannedBarcode, setLastScannedBarcode] = useState<string>('');
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  // Real-time Phone-to-Desktop Cashier Sync State under Cashier Account
+  const [isPhoneSyncActive, setIsPhoneSyncActive] = useState(false);
+  const [isPhonePairModalOpen, setIsPhonePairModalOpen] = useState(false);
+  const [pairingQrDataUrl, setPairingQrDataUrl] = useState<string>('');
+  const [pairingUrl, setPairingUrl] = useState<string>('');
+  const [isPhoneCompanionModalOpen, setIsPhoneCompanionModalOpen] = useState(false);
+  const [mpesaCustomerPhone, setMpesaCustomerPhone] = useState('');
+  const [mpesaReceiptCode, setMpesaReceiptCode] = useState('');
+  const isApplyingRemoteSyncRef = useRef(false);
+
+  // Generate pairing QR code whenever pairing modal opens
+  useEffect(() => {
+    if (isPhonePairModalOpen) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const url = `${origin}/?phone_scanner=true&staffId=${encodeURIComponent(currentUser.id)}&staffName=${encodeURIComponent(currentUser.name)}&staffRole=${encodeURIComponent(currentUser.role)}&staffEmail=${encodeURIComponent(currentUser.email || '')}`;
+      setPairingUrl(url);
+      QRCode.toDataURL(url, { width: 280, margin: 2, color: { dark: '#0A006E', light: '#FFFFFF' } })
+        .then((dataUrl) => setPairingQrDataUrl(dataUrl))
+        .catch((err) => console.warn('QR Code generation error:', err));
+    }
+  }, [isPhonePairModalOpen, currentUser]);
+
+  const localCartRef = useRef(cart);
+  localCartRef.current = cart;
+
+  // Real-time listener: receive instant scans from phone under currentUser's account
+  useEffect(() => {
+    const staffKey = currentUser.id || currentUser.email;
+    if (!staffKey) return;
+
+    const unsub = subscribeToActivePosCart(staffKey, (remote) => {
+      // Enrich remote items with catalog product details for accurate pricing, taxes, and images
+      const enrichedCart = remote.cart.map((item) => {
+        if (item.kind === 'bonded_product' && item.product?.id) {
+          const fullProd = products.find((p) => p.id === item.product!.id) || item.product;
+          return { ...item, product: fullProd };
+        }
+        return item;
+      });
+
+      const remoteSummary = enrichedCart.map((it) => `${it.id}:${it.quantityUnits}:${it.unitMode}`).join('|');
+      const localSummary = localCartRef.current.map((it) => `${it.id}:${it.quantityUnits}:${it.unitMode}`).join('|');
+
+      if (remoteSummary !== localSummary) {
+        isApplyingRemoteSyncRef.current = true;
+        setCart(enrichedCart as any);
+        if (remote.activatedProductIds && remote.activatedProductIds.length > 0) {
+          setActivatedProductIds((prev) => Array.from(new Set([...prev, ...remote.activatedProductIds])));
+        }
+        setIsPhoneSyncActive(true);
+
+        if (remote.lastScannedProductName) {
+          playPosBeep('success');
+          triggerScanHaptic();
+          setScanNotification({
+            type: 'success',
+            text: `📱 Phone Scanned: ${remote.lastScannedProductName} (+1 item) · New Total: ${formatKes(remote.grandTotal)}`,
+            productName: remote.lastScannedProductName,
+            price: remote.cart[remote.cart.length - 1]?.unitPrice || 0,
+            qtyInCart: remote.cart.find((it) => it.name === remote.lastScannedProductName)?.quantityUnits || 1,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    });
+
+    return () => unsub();
+  }, [currentUser.id, currentUser.email, products]);
+
+  // Synchronize local desktop cart updates to Firestore
+  useEffect(() => {
+    if (isApplyingRemoteSyncRef.current) {
+      isApplyingRemoteSyncRef.current = false;
+      return;
+    }
+    const staffKey = currentUser.id || currentUser.email;
+    if (!staffKey) return;
+
+    let sub = 0;
+    let units = 0;
+    for (const it of cart) {
+      units += it.quantityUnits;
+      sub += Math.round((it.unitPrice || 0) * it.quantityUnits);
+    }
+    const tax = Math.round(sub * (activeRegion?.regionalTaxRate ?? 0.16));
+
+    syncPosCartToFirestore({
+      staffId: currentUser.id,
+      staffName: currentUser.name,
+      staffEmail: currentUser.email || '',
+      staffRole: currentUser.role,
+      branchId: activeBranch?.id || '',
+      cart,
+      activatedProductIds,
+      totalUnits: units,
+      subtotal: sub,
+      exciseAndTax: tax,
+      grandTotal: sub + tax,
+      lastScannedBarcode,
+      sourceDevice: 'desktop',
+    }).catch(() => {});
+  }, [cart, activatedProductIds, currentUser, activeBranch, activeRegion, lastScannedBarcode]);
 
   const handleScanBarcode = useCallback(
     (rawBarcode: string): { success: boolean; product?: Product; message?: string } => {
@@ -736,6 +846,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
       setCart([]);
       setActivatedProductIds([]);
+      clearActivePosCart(currentUser.id || currentUser.email).catch(() => {});
       setStatusMessage(`${docTypeToIssue} ${docNumber} committed and ready to print.`);
       if (createdTx) {
         onPreviewDoc(createdTx);
@@ -844,14 +955,30 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
           {/* Scanner Controls & Modalities */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Scan with My Phone QR / Pair Button */}
+            <button
+              type="button"
+              onClick={() => setIsPhonePairModalOpen(true)}
+              className="px-3.5 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-sm transition hover:scale-[1.02]"
+              title="Point phone camera at QR code to pair and scan into this cashier register"
+            >
+              <Smartphone className="w-4 h-4 text-[#0A006E]" />
+              <span>📱 Scan with My Phone</span>
+              {isPhoneSyncActive ? (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+              ) : (
+                <span className="px-1.5 py-0.2 rounded text-[9px] bg-[#0A006E] text-[#FFDE00] font-mono">LINK</span>
+              )}
+            </button>
+
             {/* Phone Camera Scanner Launcher */}
             <button
               type="button"
               onClick={() => setIsPhoneScannerOpen(true)}
-              className="px-4 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-2 cursor-pointer shadow-md transition hover:scale-[1.02]"
+              className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition hover:scale-[1.02]"
             >
               <Camera className="w-4 h-4 text-[#FFDE00]" />
-              Phone / Camera Scanner
+              <span>Webcam Scanner</span>
             </button>
 
             {/* Sound Mute/Unmute Toggle */}
@@ -1051,11 +1178,19 @@ export const PosViews: React.FC<PosViewsProps> = ({
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 <button
                   type="button"
+                  onClick={() => setIsPhonePairModalOpen(true)}
+                  className="px-5 py-3 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] border-2 border-[#FFDE00] rounded-2xl font-montserrat font-black text-xs flex items-center gap-2 cursor-pointer shadow-md transition hover:scale-105"
+                >
+                  <Smartphone className="w-4 h-4 text-[#FFDE00]" />
+                  Scan with Phone (Instant Desktop Link)
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsPhoneScannerOpen(true)}
-                  className="px-5 py-3 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-2xl font-montserrat font-black text-xs flex items-center gap-2 cursor-pointer shadow-md transition hover:scale-105"
+                  className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-montserrat font-black text-xs flex items-center gap-2 cursor-pointer shadow-md transition hover:scale-105"
                 >
                   <Camera className="w-4 h-4 text-[#FFDE00]" />
-                  Open Phone / Camera Scanner
+                  Open Camera Scanner
                 </button>
                 <button
                   type="button"
@@ -1237,164 +1372,205 @@ export const PosViews: React.FC<PosViewsProps> = ({
           )}
         </div>
 
-        {/* Right 5 Columns: Active Order Register & Document Generator */}
-        <div className="lg:col-span-5 bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4 sticky top-20">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+        {/* Right 5 Columns: Active Order Register & Document Generator with Permanently Floating Total */}
+        <div className="lg:col-span-5 bg-[#F0F2F0] border border-slate-200 rounded-2xl flex flex-col sticky top-20 max-h-[calc(100vh-6rem)] overflow-hidden shadow-sm">
+          {/* Fixed Register Header */}
+          <div className="p-4 border-b border-slate-200 bg-white/90 backdrop-blur-xs flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <ShoppingCart className="w-4 h-4 text-[#0A006E]" />
               <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
                 {mode === 'retail' ? 'Retail Counter Register' : 'B2B Dispatch & Document Register'}
               </h3>
             </div>
-            <span className="text-xs font-mono-tabular font-bold text-[#0A006E]">
-              {computedLineItems.length} Line Item(s)
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono-tabular font-bold text-[#0A006E] bg-[#F0F2F0] px-2 py-0.5 rounded-md border border-slate-200">
+                {computedLineItems.length} Line Item{computedLineItems.length === 1 ? '' : 's'}
+              </span>
+            </div>
           </div>
 
-          {statusMessage && (
-            <div className="p-3.5 rounded-2xl bg-emerald-50 border-2 border-[#34D186] text-xs text-[#0A006E] font-montserrat font-black flex items-center gap-3 animate-success-pop shadow-md">
-              <AnimatedSuccessTickIcon size="sm" />
-              <span>{statusMessage}</span>
-            </div>
-          )}
-
-          {/* Customer / Retailer Selection */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3.5 rounded-xl border border-slate-200">
-            {mode === 'wholesale' && retailers.length > 0 && (
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                  Quick-Select Onboarded Retailer
-                </label>
-                <select
-                  onChange={(e) => {
-                    const found = retailers.find((r) => r.id === e.target.value);
-                    if (found) {
-                      setCustomerName(found.companyName);
-                      setCustomerLicense(found.liquorLicenseNo);
-                      if (found.regionId) setSelectedRegionId(found.regionId);
-                    }
-                  }}
-                  className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs text-slate-900 font-semibold"
-                >
-                  <option value="">-- Choose Licensed Retailer or Type Below --</option>
-                  {retailers.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.companyName} ({r.regionName} · Lic: {r.liquorLicenseNo})
-                    </option>
-                  ))}
-                </select>
+          {/* Scrollable Register Content: Customer Details, Simplified M-Pesa, and Line Items */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5">
+            {statusMessage && (
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border-2 border-[#34D186] text-xs text-[#0A006E] font-montserrat font-black flex items-center gap-3 animate-success-pop shadow-md">
+                <AnimatedSuccessTickIcon size="sm" />
+                <span>{statusMessage}</span>
               </div>
             )}
 
-            <div>
-              <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                Customer / Business Name
-              </label>
-              <input
-                type="text"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                Liquor License / Age ID
-              </label>
-              <input
-                type="text"
-                value={customerLicense}
-                onChange={(e) => setCustomerLicense(e.target.value)}
-                className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs font-mono-tabular text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                Document to Generate
-              </label>
-              <select
-                value={docTypeToIssue}
-                onChange={(e) => setDocTypeToIssue(e.target.value as DocType)}
-                className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs font-montserrat font-black text-[#0A006E]"
-              >
-                {mode === 'retail' ? (
-                  <>
-                    <option value="Receipt">Fiscal POS Receipt</option>
-                    <option value="Invoice">Tax Invoice</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="Invoice">B2B Tax Invoice</option>
-                    <option value="Quote">Commercial Proforma Quote</option>
-                    <option value="Packing List">Warehouse Packing List</option>
-                    <option value="Delivery Note">Bonded Delivery Note</option>
-                    <option value="Receipt">Wholesale Cash Receipt</option>
-                  </>
-                )}
-              </select>
-            </div>
-
-            <div className="sm:col-span-2 space-y-2">
-              <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                Payment Method & Checkout Settlement
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                {[
-                  { id: 'M-Pesa Till / Instant Card', label: 'M-Pesa / Card', icon: Smartphone },
-                  { id: 'Cash Till Settlement', label: 'Cash Till', icon: Coins },
-                  { id: 'Corporate Bank EFT / M-Pesa Paybill', label: 'Bank / Paybill', icon: CreditCard },
-                  { id: 'Distributor Credit Line', label: 'Credit Line', icon: Zap },
-                ].map((pm) => {
-                  const IconC = pm.icon;
-                  const isSel = paymentMethod === pm.id;
-                  return (
-                    <button
-                      key={pm.id}
-                      type="button"
-                      onClick={() => setPaymentMethod(pm.id)}
-                      className={`py-2 px-2.5 rounded-xl border text-[11px] font-montserrat font-bold flex items-center justify-center gap-1.5 cursor-pointer transition ${
-                        isSel
-                          ? 'bg-[#0A006E] text-white border-[#0A006E] shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      <IconC className={`w-3.5 h-3.5 ${isSel ? 'text-[#FFDE00]' : 'text-slate-500'}`} />
-                      <span className="truncate">{pm.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Quick Cash Tendered & Change Calculator for Counter Cashiers */}
-            {paymentMethod === 'Cash Till Settlement' && (
-              <div className="sm:col-span-2 bg-amber-50/80 border border-amber-300 rounded-2xl p-3.5 space-y-2.5">
-                <div className="flex items-center justify-between text-xs font-montserrat font-black text-amber-950">
-                  <span className="flex items-center gap-1.5">
-                    <Coins className="w-4 h-4 text-amber-600" />
-                    Cash Tendered & Change Due Calculator
-                  </span>
-                  <span className="font-mono-tabular text-[#0A006E]">
-                    Payable: <strong>{formatKes(grandTotal)}</strong>
-                  </span>
+            {/* Customer / Retailer Selection */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-white p-3.5 rounded-xl border border-slate-200">
+              {mode === 'wholesale' && retailers.length > 0 && (
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-montserrat font-bold text-slate-600">
+                    Quick-Select Onboarded Retailer
+                  </label>
+                  <select
+                    onChange={(e) => {
+                      const found = retailers.find((r) => r.id === e.target.value);
+                      if (found) {
+                        setCustomerName(found.companyName);
+                        setCustomerLicense(found.liquorLicenseNo);
+                        if (found.regionId) setSelectedRegionId(found.regionId);
+                      }
+                    }}
+                    className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs text-slate-900 font-semibold"
+                  >
+                    <option value="">-- Choose Licensed Retailer or Type Below --</option>
+                    {retailers.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.companyName} ({r.regionName} · Lic: {r.liquorLicenseNo})
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Cash Tendered (KES)</label>
-                    <input
-                      type="number"
-                      value={cashTendered || ''}
-                      onChange={(e) => setCashTendered(Number(e.target.value))}
-                      placeholder={String(grandTotal)}
-                      className="w-full mt-1 px-3 py-2 bg-white border-2 border-amber-300 focus:border-[#0A006E] rounded-xl text-xs font-mono-tabular font-black text-slate-900 focus:outline-none"
-                    />
+              <div>
+                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
+                  Customer / Business Name
+                </label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
+                  Liquor License / Age ID
+                </label>
+                <input
+                  type="text"
+                  value={customerLicense}
+                  onChange={(e) => setCustomerLicense(e.target.value)}
+                  className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs font-mono-tabular text-slate-900"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
+                  Document to Generate
+                </label>
+                <select
+                  value={docTypeToIssue}
+                  onChange={(e) => setDocTypeToIssue(e.target.value as DocType)}
+                  className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs font-montserrat font-black text-[#0A006E]"
+                >
+                  {mode === 'retail' ? (
+                    <>
+                      <option value="Receipt">Fiscal POS Receipt</option>
+                      <option value="Invoice">Tax Invoice</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Invoice">B2B Tax Invoice</option>
+                      <option value="Quote">Commercial Proforma Quote</option>
+                      <option value="Packing List">Warehouse Packing List</option>
+                      <option value="Delivery Note">Bonded Delivery Note</option>
+                      <option value="Receipt">Wholesale Cash Receipt</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* Payment Method Selector */}
+              <div className="sm:col-span-2 space-y-1.5 pt-1">
+                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
+                  Payment Method
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {[
+                    { id: 'M-Pesa Till / Instant Card', label: 'Lipa M-Pesa', icon: Smartphone },
+                    { id: 'Cash Till Settlement', label: 'Cash Till', icon: Coins },
+                    { id: 'Corporate Bank EFT / M-Pesa Paybill', label: 'Bank / Paybill', icon: CreditCard },
+                    { id: 'Distributor Credit Line', label: 'Credit Line', icon: Zap },
+                  ].map((pm) => {
+                    const IconC = pm.icon;
+                    const isSel = paymentMethod === pm.id;
+                    return (
+                      <button
+                        key={pm.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(pm.id)}
+                        className={`py-2 px-2 rounded-xl border text-[11px] font-montserrat font-bold flex items-center justify-center gap-1.5 cursor-pointer transition ${
+                          isSel
+                            ? 'bg-[#0A006E] text-white border-[#0A006E] shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <IconC className={`w-3.5 h-3.5 ${isSel ? 'text-[#FFDE00]' : 'text-slate-500'}`} />
+                        <span className="truncate">{pm.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SIMPLIFIED M-PESA UI */}
+              {paymentMethod === 'M-Pesa Till / Instant Card' && (
+                <div className="sm:col-span-2 bg-emerald-50/95 border-2 border-emerald-400 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-montserrat font-black text-emerald-950">
+                    <span className="flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4 text-[#1E9E60]" />
+                      Lipa Na M-Pesa (Till 4082211)
+                    </span>
+                    <span className="font-mono-tabular text-emerald-900 bg-white px-2 py-0.5 rounded-md border border-emerald-200 font-bold">
+                      Payable: {formatKes(grandTotal)}
+                    </span>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Change Due (KES)</label>
-                    <div className="mt-1 px-3 py-2 bg-white border-2 border-amber-300 rounded-xl text-xs font-mono-tabular font-black flex items-center justify-between">
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="tel"
+                        placeholder="Customer Phone (07XX XXX XXX)"
+                        value={mpesaCustomerPhone}
+                        onChange={(e) => setMpesaCustomerPhone(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-emerald-300 focus:border-[#0A006E] rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusMessage(`📲 M-Pesa STK Prompt sent to customer handset for ${formatKes(grandTotal)}!`);
+                      }}
+                      className="px-3.5 py-2 bg-[#1E9E60] hover:bg-emerald-700 text-[#FFDE00] rounded-xl text-[11px] font-montserrat font-black flex items-center gap-1 cursor-pointer transition shadow-xs shrink-0"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      Prompt Handset
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Cash Calculator */}
+              {paymentMethod === 'Cash Till Settlement' && (
+                <div className="sm:col-span-2 bg-amber-50/80 border border-amber-300 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-montserrat font-black text-amber-950">
+                    <span className="flex items-center gap-1.5">
+                      <Coins className="w-4 h-4 text-amber-600" />
+                      Cash Tendered & Change
+                    </span>
+                    <span className="font-mono-tabular text-[#0A006E]">
+                      Payable: <strong>{formatKes(grandTotal)}</strong>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <input
+                        type="number"
+                        value={cashTendered || ''}
+                        onChange={(e) => setCashTendered(Number(e.target.value))}
+                        placeholder={`Tendered (${grandTotal})`}
+                        className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none"
+                      />
+                    </div>
+                    <div className="px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-mono font-black flex items-center justify-between">
+                      <span className="text-slate-500 text-[10px]">Change:</span>
                       <span className={cashTendered >= grandTotal ? 'text-emerald-700' : 'text-amber-700'}>
                         {cashTendered >= grandTotal
                           ? formatKes(cashTendered - grandTotal)
@@ -1405,158 +1581,161 @@ export const PosViews: React.FC<PosViewsProps> = ({
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
 
-                {/* Quick Cash Bill Shortcuts */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                  <span className="text-[10px] font-montserrat font-bold text-slate-500 mr-1">Quick Bills:</span>
+            {/* Cart Items List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-slate-500 px-1">
+                <span>Items in Register</span>
+                <span className="font-mono">{computedLineItems.reduce((s, it) => s + it.quantityUnits, 0)} units</span>
+              </div>
+
+              {computedLineItems.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-xl p-5 text-center text-xs text-slate-500">
+                  Select IPS/LPS liquor products on the left or scan with your phone to populate this register.
+                </div>
+              ) : (
+                computedLineItems.map((item, idx) => (
+                  <div
+                    key={`${item.productId}-${item.unitMode}`}
+                    className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-2 shadow-2xs hover:border-[#0A006E] transition"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-mono-tabular text-[#0A006E] font-bold">
+                        {item.sku}
+                      </div>
+                      <div className="text-xs font-montserrat font-bold text-slate-900 truncate">
+                        {item.name}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono-tabular mt-0.5">
+                        {formatKes(item.unitPrice)} / {item.unitMode} ({item.totalBottles} btls)
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleUnitMode(idx)}
+                        className="px-2 py-1 rounded bg-[#F0F2F0] hover:bg-[#FFDE00] border border-slate-200 text-[10px] font-montserrat font-black text-[#0A006E] cursor-pointer"
+                        title="Switch between Bottle and Case"
+                      >
+                        {item.unitMode}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateQty(idx, -1)}
+                        className="w-7 h-7 rounded bg-[#F0F2F0] hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="w-6 text-center font-mono-tabular text-xs font-bold">
+                        {item.quantityUnits}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateQty(idx, 1)}
+                        className="w-7 h-7 rounded bg-[#F0F2F0] hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* FLOATING CART TOTAL & SETTLEMENT BAR - PERMANENTLY FLOATS AT THE BOTTOM, NEVER SCROLLS */}
+          <div className="p-4 bg-slate-950 text-white border-t-2 border-[#0A006E] space-y-2.5 shrink-0 shadow-[0_-8px_25px_rgba(0,0,0,0.18)] z-20">
+            <div className="flex items-center justify-between text-xs font-mono-tabular">
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <ShoppingCart className="w-3.5 h-3.5 text-[#FFDE00]" />
+                <span>
+                  Items: <strong>{computedLineItems.length}</strong> ({computedLineItems.reduce((s, it) => s + it.quantityUnits, 0)} units)
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {isPhoneSyncActive ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-montserrat font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    Phone Linked &amp; Live
+                  </span>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => setCashTendered(grandTotal)}
-                    className="px-2.5 py-1 bg-white hover:bg-amber-100 border border-amber-300 text-[10px] font-montserrat font-bold text-amber-900 rounded-lg cursor-pointer transition shadow-2xs"
+                    onClick={() => setIsPhonePairModalOpen(true)}
+                    className="text-[10px] text-[#FFDE00] hover:underline font-montserrat font-bold flex items-center gap-1 cursor-pointer"
                   >
-                    Exact Amount
+                    <Smartphone className="w-3 h-3" />
+                    <span>Link Phone</span>
                   </button>
-                  {[1000, 2000, 3000, 5000, 10000, 20000].map((amt) => (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => setCashTendered(amt)}
-                      className="px-2 py-1 bg-white hover:bg-amber-100 border border-amber-300 text-[10px] font-mono-tabular font-bold text-amber-900 rounded-lg cursor-pointer transition shadow-2xs"
-                    >
-                      {amt.toLocaleString()}
-                    </button>
-                  ))}
-                </div>
+                )}
               </div>
-            )}
-
-            {mode === 'wholesale' && (
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                  Affiliate Sales Representative Code (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={affiliateCode}
-                  onChange={(e) => setAffiliateCode(e.target.value)}
-                  placeholder="e.g. AFF-REP-204"
-                  className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs font-mono-tabular text-slate-900"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Cart Items */}
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {computedLineItems.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-xs text-slate-500">
-                Select IPS/LPS liquor products on the left to populate the checkout register.
-              </div>
-            ) : (
-              computedLineItems.map((item, idx) => (
-                <div
-                  key={`${item.productId}-${item.unitMode}`}
-                  className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-2"
-                >
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-mono-tabular text-[#0A006E] font-bold">
-                      {item.sku}
-                    </div>
-                    <div className="text-xs font-montserrat font-bold text-slate-900 truncate">
-                      {item.name}
-                    </div>
-                    <div className="text-[11px] text-slate-500 font-mono-tabular mt-0.5">
-                      {formatKes(item.unitPrice)} / {item.unitMode} ({item.totalBottles} btls)
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleUnitMode(idx)}
-                      className="px-2 py-1 rounded bg-[#F0F2F0] hover:bg-[#FFDE00] border border-slate-200 text-[10px] font-montserrat font-black text-[#0A006E] cursor-pointer"
-                      title="Switch between Bottle and Case"
-                    >
-                      {item.unitMode}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateQty(idx, -1)}
-                      className="w-7 h-7 rounded bg-[#F0F2F0] hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="w-6 text-center font-mono-tabular text-xs font-bold">
-                      {item.quantityUnits}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateQty(idx, 1)}
-                      className="w-7 h-7 rounded bg-[#F0F2F0] hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Totals Box */}
-          <div className="bg-slate-950 text-white border-2 border-[#0A006E] rounded-2xl p-4 space-y-1.5 font-mono-tabular text-xs">
-            <div className="flex justify-between text-slate-300">
-              <span>Geo-Pricing Zone:</span>
-              <span className="font-montserrat font-bold text-[#FFDE00]">{activeRegion?.name}</span>
             </div>
-            <div className="flex justify-between text-slate-300">
-              <span>Subtotal:</span>
-              <span>{formatKes(subtotal)}</span>
+
+            <div className="flex justify-between text-[11px] text-slate-400 font-mono-tabular">
+              <span>Subtotal: {formatKes(subtotal)}</span>
+              <span>Regional Tax ({(taxRate * 100).toFixed(0)}%): {formatKes(exciseAndTax)}</span>
             </div>
-            <div className="flex justify-between text-slate-300">
-              <span>Regional Excise & VAT ({(taxRate * 100).toFixed(0)}%):</span>
-              <span>{formatKes(exciseAndTax)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-montserrat font-black text-[#FFDE00] pt-2 border-t border-slate-800">
+
+            <div className="flex justify-between items-baseline text-lg sm:text-xl font-montserrat font-black text-[#FFDE00] pt-1.5 border-t border-slate-800 font-mono-tabular">
               <span>Total Charge:</span>
-              <span>{formatKes(grandTotal)}</span>
+              <span className="text-xl sm:text-2xl text-emerald-400">{formatKes(grandTotal)}</span>
             </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (!canVoidOrder) return;
-                setCart([]);
-                setActivatedProductIds([]);
-              }}
-              disabled={cart.length === 0 || !canVoidOrder}
-              className={`min-h-[44px] px-3.5 py-2.5 border rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 transition-colors ${
-                !canVoidOrder
-                  ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
-                  : 'bg-white hover:bg-red-50 text-red-600 border-slate-200 cursor-pointer disabled:opacity-40'
-              }`}
-              title={
-                !canVoidOrder
-                  ? 'Order void authorization stripped by Administrator'
-                  : 'Clear active cart'
-              }
-            >
-              <Trash2 className="w-4 h-4" />
-              {canVoidOrder ? 'Clear' : 'Void Locked'}
-            </button>
-            <button
-              type="button"
-              disabled={cart.length === 0 || isProcessing}
-              onClick={handleCompleteCheckout}
-              className="flex-1 min-h-[44px] py-2.5 px-4 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] disabled:opacity-40 text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-md"
-            >
-              <Printer className="w-4 h-4" />
-              {isProcessing
-                ? 'Issuing Document...'
-                : `Commit & Print ${docTypeToIssue} (${formatKes(grandTotal)})`}
-            </button>
+            {/* Floating Action Buttons */}
+            <div className="flex items-center gap-2 pt-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!canVoidOrder) return;
+                  setCart([]);
+                  setActivatedProductIds([]);
+                  clearActivePosCart(currentUser.id || currentUser.email).catch(() => {});
+                }}
+                disabled={cart.length === 0 || !canVoidOrder}
+                className={`min-h-[42px] px-3.5 py-2 border rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 transition-colors ${
+                  !canVoidOrder
+                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                    : 'bg-white hover:bg-red-50 text-red-600 border-slate-200 cursor-pointer disabled:opacity-40'
+                }`}
+                title={
+                  !canVoidOrder
+                    ? 'Order void authorization stripped by Administrator'
+                    : 'Clear active cart'
+                }
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{canVoidOrder ? 'Clear' : 'Locked'}</span>
+              </button>
+              <button
+                type="button"
+                disabled={cart.length === 0 || isProcessing}
+                onClick={handleCompleteCheckout}
+                className="flex-1 min-h-[42px] py-2 px-4 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] disabled:opacity-40 text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-md"
+              >
+                {paymentMethod === 'M-Pesa Till / Instant Card' ? (
+                  <>
+                    <Smartphone className="w-4 h-4" />
+                    <span>
+                      {isProcessing
+                        ? 'Processing Settlement...'
+                        : `Lipa M-Pesa & Print (${formatKes(grandTotal)})`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Printer className="w-4 h-4" />
+                    <span>
+                      {isProcessing
+                        ? 'Issuing Document...'
+                        : `Commit & Print (${formatKes(grandTotal)})`}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1567,6 +1746,108 @@ export const PosViews: React.FC<PosViewsProps> = ({
         onClose={() => setIsPhoneScannerOpen(false)}
         onBarcodeScanned={handleScanBarcode}
       />
+
+      {/* Instant Phone Barcode Scanner QR Pairing Modal */}
+      {isPhonePairModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border-2 border-[#0A006E] animate-in fade-in zoom-in-95">
+            <div className="bg-[#0A006E] text-white p-4.5 flex items-center justify-between border-b-2 border-[#FFDE00]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center font-black">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-montserrat font-black text-sm text-[#FFDE00]">
+                    Instant Phone Barcode Scanner Link
+                  </h3>
+                  <p className="text-[11px] text-slate-300">
+                    Beam bottle barcodes from your phone directly into this cashier register
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPhonePairModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 text-center space-y-4">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between text-xs">
+                <span className="text-slate-600">Active Cashier Account:</span>
+                <span className="font-montserrat font-black text-[#0A006E]">
+                  {currentUser.name} ({currentUser.role})
+                </span>
+              </div>
+
+              {/* QR Code Container */}
+              <div className="p-4 bg-white border-2 border-dashed border-[#0A006E]/30 rounded-2xl inline-block shadow-inner">
+                {pairingQrDataUrl ? (
+                  <img
+                    src={pairingQrDataUrl}
+                    alt="Pairing QR Code"
+                    className="w-56 h-56 mx-auto rounded-lg"
+                  />
+                ) : (
+                  <div className="w-56 h-56 flex items-center justify-center text-xs text-slate-400">
+                    Generating QR code...
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5 text-xs text-slate-600">
+                <p className="font-montserrat font-bold text-slate-800">
+                  📱 How to Scan Bottles with Your Phone:
+                </p>
+                <ol className="text-left text-[11px] space-y-1 list-decimal list-inside bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-700">
+                  <li>Open the Camera app on your mobile phone.</li>
+                  <li>Scan the QR code above to launch the Mobile Scanner Station.</li>
+                  <li>Aim at any bottle barcode — it will <strong>instant show on this desktop cashier</strong> and the total increases automatically!</li>
+                </ol>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsPhoneCompanionModalOpen(true)}
+                  className="flex-1 py-2.5 px-3 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Launch Scanner on this Screen</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(pairingUrl);
+                    setStatusMessage('Phone pairing link copied to clipboard!');
+                  }}
+                  className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer"
+                  title="Copy direct pairing link"
+                >
+                  Copy Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Embedded Phone Scanner Companion Modal */}
+      {isPhoneCompanionModalOpen && (
+        <PhoneScannerCompanion
+          products={products}
+          staffId={currentUser.id}
+          staffName={currentUser.name}
+          staffEmail={currentUser.email || ''}
+          staffRole={currentUser.role}
+          branchId={activeBranch?.id}
+          branches={branches}
+          regions={regions}
+          onClose={() => setIsPhoneCompanionModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

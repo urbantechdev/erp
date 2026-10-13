@@ -107,6 +107,7 @@ import { UserFeatureAccessModal } from './components/UserFeatureAccessModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
+import { PhoneScannerCompanion } from './components/PhoneScannerCompanion';
 import { hashPin, isPinHashed, verifyPin } from './utils/security';
 
 const MODULE_META: Record<
@@ -159,6 +160,27 @@ export default function App() {
   // Active User Session State
   const [currentUser, setCurrentUser] = useState<StaffMember | null>(null);
   const [standaloneCustomerPortal, setStandaloneCustomerPortal] = useState(false);
+  const [phoneScannerSession, setPhoneScannerSession] = useState<{
+    isOpen: boolean;
+    staffId: string;
+    staffName: string;
+    staffEmail: string;
+    staffRole: string;
+  }>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('phone_scanner') === 'true') {
+        return {
+          isOpen: true,
+          staffId: p.get('staffId') || '',
+          staffName: p.get('staffName') || 'Counter Cashier',
+          staffEmail: p.get('staffEmail') || '',
+          staffRole: p.get('staffRole') || 'Counter Cashier',
+        };
+      }
+    }
+    return { isOpen: false, staffId: '', staffName: '', staffEmail: '', staffRole: '' };
+  });
   const [activeModule, setActiveModule] = useState<ERPModuleId>('overview');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -1840,6 +1862,34 @@ export default function App() {
     );
   }
 
+  if (phoneScannerSession.isOpen) {
+    return (
+      <PhoneScannerCompanion
+        products={products}
+        staffId={phoneScannerSession.staffId || currentUser?.id || 'staff_cashier'}
+        staffName={phoneScannerSession.staffName || currentUser?.name || 'Counter Cashier'}
+        staffEmail={phoneScannerSession.staffEmail || currentUser?.email || ''}
+        staffRole={phoneScannerSession.staffRole || currentUser?.role || 'Counter Cashier'}
+        branchId={branches[0]?.id}
+        branches={branches}
+        regions={regions}
+        isStandaloneMobile={true}
+        onClose={() => {
+          setPhoneScannerSession((prev) => ({ ...prev, isOpen: false }));
+          if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('phone_scanner');
+            url.searchParams.delete('staffId');
+            url.searchParams.delete('staffName');
+            url.searchParams.delete('staffRole');
+            url.searchParams.delete('staffEmail');
+            window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+          }
+        }}
+      />
+    );
+  }
+
   if (!currentUser) {
     return (
       <>
@@ -1851,6 +1901,15 @@ export default function App() {
           onGoogleLogin={handleGoogleLogin}
           onPinLogin={handlePinLogin}
           onOpenCustomerPortal={() => setStandaloneCustomerPortal(true)}
+          onOpenPhoneScanner={() =>
+            setPhoneScannerSession({
+              isOpen: true,
+              staffId: 'staff_cashier',
+              staffName: 'Counter Cashier',
+              staffEmail: '',
+              staffRole: 'Counter Cashier',
+            })
+          }
           authError={authError}
           isSubmitting={isAuthenticating}
         />

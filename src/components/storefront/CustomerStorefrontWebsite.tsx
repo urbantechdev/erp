@@ -3378,8 +3378,8 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
               </button>
             </div>
 
-            {/* Cart Items & Delivery Form */}
-            <div className={webCart.length === 0 ? 'flex-1 overflow-y-auto p-5 space-y-5' : 'flex-1 min-h-0 overflow-hidden flex flex-col'}>
+            {/* Cart Items & Delivery Form with Floating Total Bar */}
+            <div className={webCart.length === 0 ? 'flex-1 overflow-y-auto p-5 space-y-5' : 'flex-1 min-h-0 overflow-hidden p-2 sm:p-3 flex flex-col'}>
               {webCart.length === 0 ? (
                 <div className="text-center py-12 space-y-3">
                   <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto" />
@@ -3522,47 +3522,30 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
               </button>
             </div>
 
-            <form onSubmit={handleConfirmStkPromptPayment} className="p-6 space-y-4">
+            <form onSubmit={handleConfirmStkPromptPayment} className="p-5 space-y-3.5">
               <div
-                className={`p-4 rounded-2xl border space-y-2 text-xs ${
+                className={`p-3.5 rounded-2xl border space-y-1.5 text-xs ${
                   isAirtelStk
                     ? 'bg-rose-50 border-rose-200'
                     : 'bg-emerald-50 border-emerald-200'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={`text-[10px] font-mono font-bold uppercase ${
-                      isAirtelStk ? 'text-rose-800' : 'text-emerald-800'
-                    }`}
-                  >
-                    Lipa Na M-Pesa Online (Daraja v2)
+                <div className="flex items-center justify-between">
+                  <span className="font-montserrat font-black text-xs text-emerald-950 flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-[#1E9E60]" />
+                    Lipa Na M-Pesa Online
                   </span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full font-montserrat font-black text-[9px] uppercase text-white ${
-                      isAirtelStk ? 'bg-red-600' : 'bg-[#34D186]'
-                    }`}
-                  >
-                    {isAirtelStk ? 'Airtel Identified' : 'Safaricom Identified'}
+                  <span className="font-mono font-bold text-xs text-[#1E9E60]">
+                    {formatKes(activeStkPromptOrder.totalCompanyPriceKes)}
                   </span>
                 </div>
-                <p className="text-slate-800 font-medium leading-relaxed">
-                  Dispatch an authoritative Safaricom Daraja STK Push for{' '}
-                  <strong className="text-[#1E9E60] font-mono">
-                    {formatKes(activeStkPromptOrder.totalCompanyPriceKes)}
-                  </strong>{' '}
-                  (Order <strong className="font-mono">{activeStkPromptOrder.orderNumber}</strong>) to{' '}
-                  <strong className="font-mono">
+                <p className="text-slate-700 text-[11px] leading-relaxed">
+                  A payment prompt will appear on{' '}
+                  <strong className="text-slate-900 font-mono">
                     {stkCarrierInfo.formattedDisplay || stkPromptPhone}
                   </strong>
-                  . You will enter your M-Pesa PIN directly on your physical phone handset.
+                  . Enter your M-Pesa PIN on your phone handset to authorize.
                 </p>
-                <div className="text-[11px] text-slate-500 pt-1 border-t border-emerald-200/80 flex justify-between">
-                  <span>Paybill / ShortCode:</span>
-                  <strong className="text-[#0A006E] font-mono">
-                    4082211 • Ref: {activeStkPromptOrder.orderNumber}
-                  </strong>
-                </div>
               </div>
 
               {stkGatewayStatusMessage && (
@@ -3580,14 +3563,9 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
               )}
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[11px] font-montserrat font-bold text-slate-700">
-                    10-Digit Mobile Money Number (Safaricom / Airtel):
-                  </label>
-                  <span className="font-mono font-bold text-[10px] text-[#0A006E]">
-                    {stkCarrierInfo.digitsCount}/10 Digits
-                  </span>
-                </div>
+                <label className="block text-[11px] font-montserrat font-bold text-slate-700 mb-1">
+                  M-Pesa Mobile Number:
+                </label>
                 <div className="relative">
                   <input
                     type="tel"
@@ -3595,24 +3573,20 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                     maxLength={10}
                     value={stkCarrierInfo.cleanDigits}
                     onChange={e => setStkPromptPhone(sanitizeAndControlKenyanMobileInput(e.target.value))}
-                    placeholder="0712345678 or 0733123456"
-                    className={`w-full px-3.5 py-2.5 pr-28 rounded-xl bg-white border-2 font-mono font-black text-sm text-[#0A006E] focus:outline-none ${
+                    placeholder="07XX XXX XXX"
+                    className={`w-full px-3.5 py-2.5 rounded-xl bg-white border-2 font-mono font-black text-sm text-[#0A006E] focus:outline-none transition ${
                       isAirtelStk ? 'border-rose-400' : 'border-[#34D186]'
                     }`}
                   />
-                  <span
-                    className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-montserrat font-black uppercase px-2 py-0.5 rounded text-white ${
-                      isAirtelStk ? 'bg-red-600' : 'bg-[#34D186]'
-                    }`}
-                  >
-                    {isAirtelStk ? 'Airtel Line' : 'Safaricom Line'}
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-montserrat font-bold text-[#1E9E60]">
+                    {stkCarrierInfo.isValid ? 'Valid' : '10 digits'}
                   </span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-montserrat font-bold text-slate-700 mb-1">
-                  Already Paid via Paybill / Till? Enter Verified M-Pesa Receipt Code (Optional):
+                <label className="block text-[11px] font-montserrat font-semibold text-slate-600 mb-1">
+                  Already paid via Till/Paybill? (Optional M-Pesa Code):
                 </label>
                 <input
                   type="text"
@@ -3621,35 +3595,35 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                   onChange={e =>
                     setStkReceiptInput(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())
                   }
-                  placeholder="e.g. QKA84X92LM (Leave blank to send STK Push)"
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold text-xs uppercase text-slate-900 focus:border-[#0A006E] focus:outline-none"
+                  placeholder="e.g. QKA84X92LM"
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-300 font-mono text-xs uppercase text-slate-900 focus:border-[#0A006E] focus:outline-none"
                 />
               </div>
 
-              <div className="flex items-center gap-2.5 pt-2">
+              <div className="flex items-center gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => fadeOutAndCloseStkModal(0)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-montserrat font-bold text-xs hover:bg-slate-100 transition cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-montserrat font-bold text-xs hover:bg-slate-100 transition cursor-pointer"
                 >
-                  Close
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isProcessingStk || (!stkCarrierInfo.isValid && stkReceiptInput.trim().length < 6)}
-                  className={`flex-2 py-2.5 px-4 rounded-xl text-white font-montserrat font-black text-xs flex items-center justify-center gap-2 shadow-md transition cursor-pointer disabled:opacity-50 ${
+                  className={`flex-1 py-2.5 px-4 rounded-xl text-white font-montserrat font-black text-xs flex items-center justify-center gap-2 shadow-md transition cursor-pointer disabled:opacity-50 ${
                     isAirtelStk
                       ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-[#34D186] hover:bg-[#1E9E60]'
+                      : 'bg-[#1E9E60] hover:bg-emerald-700'
                   }`}
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
                     {isProcessingStk
-                      ? 'Connecting to Daraja...'
+                      ? 'Sending prompt...'
                       : stkReceiptInput.trim().length >= 6
-                      ? `Verify Receipt (${stkReceiptInput.trim()})`
-                      : `Send STK Push (${formatKes(activeStkPromptOrder.totalCompanyPriceKes)})`}
+                      ? `Verify Receipt`
+                      : `Send M-Pesa Prompt (${formatKes(activeStkPromptOrder.totalCompanyPriceKes)})`}
                   </span>
                 </button>
               </div>
