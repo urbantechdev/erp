@@ -22,6 +22,12 @@ import {
   ArrowRight,
   ShieldCheck,
   RefreshCw,
+  Coins,
+  Eye,
+  Building2,
+  Tag,
+  Package,
+  FileText,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -51,12 +57,17 @@ import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
 // 5. SUPPLIERS, LICENSED RETAILERS & LOGISTICS ONBOARDING MODULE
 // ---------------------------------------------------------------------------
 export const PartnersOnboardingModule: React.FC<{
+  currentUser: StaffMember;
   partners: Partner[];
   regions: GeoRegion[];
   onCreatePartner: (p: Omit<Partner, 'id' | 'createdAt'>) => Promise<void>;
   onUpdatePartner?: (partnerId: string, updates: Partial<Partner>) => Promise<void>;
   onDeletePartner?: (partnerId: string) => Promise<void>;
-}> = ({ partners, regions, onCreatePartner, onUpdatePartner, onDeletePartner }) => {
+}> = ({ currentUser, partners, regions, onCreatePartner, onUpdatePartner, onDeletePartner }) => {
+  const isAccountant = currentUser.role === 'Accountant';
+  const isBranchManager = currentUser.role === 'Branch Manager';
+  const canManagePartners = currentUser.role === 'Admin' || currentUser.role === 'Sales Manager' || currentUser.role === 'Inventory Controller' || isBranchManager;
+
   const [partnerType, setPartnerType] = useState<Partner['partnerType']>('Supplier');
   const [companyName, setCompanyName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
@@ -238,7 +249,45 @@ export const PartnersOnboardingModule: React.FC<{
         </div>
       </div>
 
-      {/* Onboarding Form */}
+      {/* Role Boundary Callout Banner */}
+      {isAccountant ? (
+        <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 flex items-center justify-between gap-3 text-indigo-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Coins className="w-5 h-5 text-indigo-700 shrink-0" />
+            <div>
+              <div className="text-xs font-montserrat font-black uppercase text-indigo-900">
+                Chief Financial Accountant Oversight · Credit Limits &amp; Receivables Monitoring
+              </div>
+              <p className="text-xs text-indigo-800">
+                Financial access permitted to audit trade partner credit ceilings, tax compliance PINs, and accounts receivables. Onboarding and contract terms modifications are governed by Commercial Sales and Inventory Management.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-lg bg-indigo-200/80 text-indigo-900 text-[11px] font-bold shrink-0">
+            Financial View Only
+          </span>
+        </div>
+      ) : isBranchManager ? (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-amber-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Building2 className="w-5 h-5 text-amber-700 shrink-0" />
+            <div>
+              <div className="text-xs font-montserrat font-black uppercase text-amber-900">
+                Branch Manager Scope · Partners in {currentUser.branchName}
+              </div>
+              <p className="text-xs text-amber-800">
+                Managing local commercial retailers and regional logistics carriers within your branch territory.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-lg bg-amber-200/80 text-amber-900 text-[11px] font-bold shrink-0">
+            Branch Scope
+          </span>
+        </div>
+      ) : null}
+
+      {/* Onboarding Form (Hidden for Accountant) */}
+      {!isAccountant && canManagePartners && (
       <form
         onSubmit={handleAddPartner}
         className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
@@ -360,6 +409,7 @@ export const PartnersOnboardingModule: React.FC<{
           Verify License & Onboard {partnerType}
         </button>
       </form>
+      )}
 
       {/* Directory Table */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-3">
@@ -429,26 +479,30 @@ export const PartnersOnboardingModule: React.FC<{
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditPartner(p)}
-                          className="p-1.5 bg-slate-100 hover:bg-[#0A006E] hover:text-[#FFDE00] text-slate-700 rounded-lg transition-colors cursor-pointer"
-                          title="Edit Partner"
-                          aria-label="Edit Partner"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeletingPartner(p)}
-                          className="p-1.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 rounded-lg transition-colors cursor-pointer"
-                          title="Delete Partner"
-                          aria-label="Delete Partner"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {!isAccountant ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditPartner(p)}
+                            className="p-1.5 bg-slate-100 hover:bg-[#0A006E] hover:text-[#FFDE00] text-slate-700 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Partner"
+                            aria-label="Edit Partner"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingPartner(p)}
+                            className="p-1.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Partner"
+                            aria-label="Delete Partner"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Audited</span>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -655,11 +709,69 @@ export const DocumentsAndCreditNotesModule: React.FC<{
     products[0]?.wholesalePriceKes || products[0]?.baseWholesalePrice || 0
   );
 
+  const canIssueCreditNote =
+    currentUser.role === 'Admin' ||
+    currentUser.role === 'Accountant' ||
+    currentUser.role === 'Branch Manager';
+
+  // Role-scoped documents based on Target Access Model
   const visibleDocs = useMemo(() => {
+    let docs = transactions;
+    const role = currentUser.role;
+
+    if (role === 'Accountant') {
+      // Financial documents: invoices, credit notes, receipts
+      docs = docs.filter(
+        (t) =>
+          t.docType === 'Invoice' ||
+          t.docType === 'Credit Note' ||
+          t.docType === 'Receipt'
+      );
+    } else if (role === 'Sales Manager') {
+      // Commercial sales documents
+      docs = docs.filter(
+        (t) =>
+          t.channel.includes('Wholesale') ||
+          t.channel.includes('Sales') ||
+          t.docType === 'Invoice' ||
+          t.docType === 'Quote'
+      );
+    } else if (role === 'Branch Manager') {
+      // Branch scoped documents
+      docs = docs.filter(
+        (t) =>
+          t.branchName === currentUser.branchName ||
+          t.branchId === currentUser.branchId
+      );
+    } else if (role === 'Inventory Controller') {
+      // Delivery documents: Delivery Notes, Packing Lists, Credit returns
+      docs = docs.filter(
+        (t) =>
+          t.docType === 'Delivery Note' ||
+          t.docType === 'Packing List' ||
+          t.docType === 'Credit Note'
+      );
+    } else if (role === 'Counter Cashier') {
+      // Own POS docs
+      docs = docs.filter(
+        (t) =>
+          t.createdBy === currentUser.name ||
+          (t.channel === 'Retail Counter POS' && t.branchName === currentUser.branchName)
+      );
+    } else if (role === 'Affiliate Sales Representative') {
+      // Own sales docs
+      docs = docs.filter(
+        (t) =>
+          t.createdBy === currentUser.name ||
+          t.docNumber.includes('AFF')
+      );
+    }
+    // Admin has Full access to all docs
+
     return filterDocType === 'All'
-      ? transactions
-      : transactions.filter((t) => t.docType === filterDocType);
-  }, [transactions, filterDocType]);
+      ? docs
+      : docs.filter((t) => t.docType === filterDocType);
+  }, [transactions, filterDocType, currentUser]);
 
   const handleCreateCreditNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -797,87 +909,108 @@ export const DocumentsAndCreditNotesModule: React.FC<{
         </div>
       </div>
 
-      {/* Issue Credit Note Form */}
-      <form
-        onSubmit={handleCreateCreditNote}
-        className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
-      >
-        <h3 className="text-sm font-montserrat font-black text-[#0A006E] border-b border-slate-200 pb-3">
-          Issue Official Credit Note (Breakage, Excise Return, or Regional Tariff Rebate)
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Ref Invoice Number *</label>
-            <input
-              required
-              type="text"
-              value={refInvoiceNo}
-              onChange={(e) => setRefInvoiceNo(e.target.value)}
-              placeholder="e.g. INV-849201"
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
-            />
+      {/* Issue Credit Note Form / RBAC Boundary Banner */}
+      {canIssueCreditNote ? (
+        <form
+          onSubmit={handleCreateCreditNote}
+          className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 flex-wrap gap-2">
+            <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+              Issue Official Credit Note (Breakage, Excise Return, or Regional Tariff Rebate)
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-montserrat font-black bg-[#0A006E] text-[#FFDE00]">
+              Authorized: {currentUser.role} Scope
+            </span>
           </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Customer / Retailer *</label>
-            <input
-              required
-              type="text"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="e.g. Kilimani Sapphire Lounge"
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-            />
-          </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Liquor Auto-SKU</label>
-            <select
-              value={selectedProdId}
-              onChange={(e) => setSelectedProdId(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold"
-            >
-              {products.slice(0, 120).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.sku} · {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Bottles & Unit Credit (KES)</label>
-            <div className="grid grid-cols-2 gap-2 mt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Ref Invoice Number *</label>
               <input
-                type="number"
-                min={1}
-                value={creditBottles}
-                onChange={(e) => setCreditBottles(Number(e.target.value))}
-                className="px-2 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                required
+                type="text"
+                value={refInvoiceNo}
+                onChange={(e) => setRefInvoiceNo(e.target.value)}
+                placeholder="e.g. INV-849201"
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
               />
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Customer / Retailer *</label>
               <input
-                type="number"
-                value={creditUnitPrice}
-                onChange={(e) => setCreditUnitPrice(Number(e.target.value))}
-                className="px-2 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                required
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="e.g. Kilimani Sapphire Lounge"
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Liquor Auto-SKU</label>
+              <select
+                value={selectedProdId}
+                onChange={(e) => setSelectedProdId(e.target.value)}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold"
+              >
+                {products.slice(0, 120).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.sku} · {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Bottles & Unit Credit (KES)</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <input
+                  type="number"
+                  min={1}
+                  value={creditBottles}
+                  onChange={(e) => setCreditBottles(Number(e.target.value))}
+                  className="px-2 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                />
+                <input
+                  type="number"
+                  value={creditUnitPrice}
+                  onChange={(e) => setCreditUnitPrice(Number(e.target.value))}
+                  className="px-2 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Credit Reason</label>
+              <input
+                type="text"
+                value={creditReason}
+                onChange={(e) => setCreditReason(e.target.value)}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
               />
             </div>
           </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Credit Reason</label>
-            <input
-              type="text"
-              value={creditReason}
-              onChange={(e) => setCreditReason(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-            />
+          <button
+            type="submit"
+            className="px-4 py-2.5 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Issue & Print Official Credit Note
+          </button>
+        </form>
+      ) : (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-amber-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Lock className="w-5 h-5 text-amber-700 shrink-0" />
+            <div>
+              <div className="text-xs font-montserrat font-black uppercase text-amber-900">
+                Credit Note Issuance Restricted · {currentUser.role} Scope
+              </div>
+              <p className="text-xs text-amber-800">
+                In accordance with ERP security boundaries, issuing credit notes and financial offsets requires approved Accounting, Branch Manager, or Administrator authorization. You have read/print access to documents in your authorized scope below.
+              </p>
+            </div>
           </div>
         </div>
-        <button
-          type="submit"
-          className="px-4 py-2.5 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Issue & Print Official Credit Note
-        </button>
-      </form>
+      )}
 
       {/* Document Filter & Table */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
@@ -981,17 +1114,32 @@ export const DocumentsAndCreditNotesModule: React.FC<{
 // 7. REGULATORY COMPLIANCE & EXCISE STAMP TRACKING MODULE
 // ---------------------------------------------------------------------------
 export const ComplianceModule: React.FC<{
+  currentUser: StaffMember;
   records: ComplianceRecord[];
   branches: Branch[];
   products: Product[];
   onCreateCompliance: (rec: Omit<ComplianceRecord, 'id' | 'createdAt'>) => Promise<void>;
-}> = ({ records, branches, products, onCreateCompliance }) => {
+}> = ({ currentUser, records, branches, products, onCreateCompliance }) => {
+  const isBranchManager = currentUser.role === 'Branch Manager';
+  const isAccountant = currentUser.role === 'Accountant';
+  const isSalesManager = currentUser.role === 'Sales Manager';
+  const canManageCompliance = currentUser.role === 'Admin' || currentUser.role === 'Inventory Controller';
+
+  const visibleRecords = useMemo(() => {
+    if (isBranchManager) {
+      return records.filter((r) => r.branchName === currentUser.branchName);
+    }
+    return records;
+  }, [records, isBranchManager, currentUser.branchName]);
+
   const [certificateNo, setCertificateNo] = useState(`EX-CERT-${Date.now().toString().slice(-5)}`);
   const [recordType, setRecordType] = useState<ComplianceRecord['recordType']>(
     'Digital Excise Stamp Batch'
   );
   const [skuRef, setSkuRef] = useState(products[0]?.sku || '');
-  const [branchName, setBranchName] = useState(branches[0]?.name || '');
+  const [branchName, setBranchName] = useState(
+    isBranchManager ? currentUser.branchName : branches[0]?.name || ''
+  );
   const [stampStart, setStampStart] = useState('');
   const [stampEnd, setStampEnd] = useState('');
   const [dutyPaid, setDutyPaid] = useState<number>(0);
@@ -1004,11 +1152,12 @@ export const ComplianceModule: React.FC<{
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageCompliance) return;
     await onCreateCompliance({
       certificateNo,
       recordType,
       skuRef,
-      branchName,
+      branchName: isBranchManager ? currentUser.branchName : branchName,
       stampRangeStart: stampStart,
       stampRangeEnd: stampEnd,
       dutyPaidAmount: Number(dutyPaid),
@@ -1030,14 +1179,17 @@ export const ComplianceModule: React.FC<{
           <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
             Regulatory Compliance & Excise Stamp Roll Tracking
           </h2>
+          <p className="text-xs font-medium text-slate-900 mt-0.5">
+            Target Access Model: {currentUser.role} Scope · {visibleRecords.length} Active Records
+          </p>
         </div>
         <button
           onClick={() =>
             exportReportToPDF(
               'Regulatory Compliance & Excise Stamp Audit Statement',
-              'Customs Bonds & Excise Stamp Serial Ranges',
+              `Customs Bonds & Excise Stamp Serial Ranges (${currentUser.role} Scope)`,
               ['Certificate No', 'Type', 'SKU Ref', 'Branch', 'Stamp Range', 'Duty Paid (KES)', 'Expiry', 'Status'],
-              records.map((r) => [
+              visibleRecords.map((r) => [
                 r.certificateNo,
                 r.recordType,
                 r.skuRef,
@@ -1057,117 +1209,155 @@ export const ComplianceModule: React.FC<{
         </button>
       </div>
 
-      <form
-        onSubmit={handleAdd}
-        className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
-      >
-        <h3 className="text-sm font-montserrat font-black text-[#0A006E] border-b border-slate-200 pb-3">
-          Log New Customs Bond Entry or Digital Excise Stamp Batch
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Certificate / Entry No *</label>
-            <input
-              required
-              type="text"
-              value={certificateNo}
-              onChange={(e) => setCertificateNo(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
-            />
+      {/* Role Notice Banner */}
+      {isAccountant && (
+        <div className="bg-indigo-50 border-2 border-indigo-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-indigo-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-indigo-700 shrink-0" />
+            <div>
+              <div className="text-xs font-montserrat font-black uppercase text-indigo-900">
+                Tax & Excise Compliance Oversight · Accounting Financial View
+              </div>
+              <p className="text-xs text-indigo-800">
+                Full tax reports, duty payments, and KRA eTIMS fiscalization data are available for financial reporting and auditing. Digital excise physical roll registration is managed by Inventory Controllers and System Administrators.
+              </p>
+            </div>
           </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Compliance Instrument</label>
-            <select
-              value={recordType}
-              onChange={(e) => setRecordType(e.target.value as ComplianceRecord['recordType'])}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold"
-            >
-              <option value="Digital Excise Stamp Batch">Digital Excise Stamp Batch</option>
-              <option value="Customs Import Bond">Customs Import Bond</option>
-              <option value="Standard Bureau Certificate">Standard Bureau Certificate</option>
-              <option value="Distributor Liquor Permit">Distributor Liquor Permit</option>
-            </select>
+        </div>
+      )}
+
+      {(isSalesManager || isBranchManager) && !canManageCompliance && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-amber-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Building2 className="w-5 h-5 text-amber-700 shrink-0" />
+            <div>
+              <div className="text-xs font-montserrat font-black uppercase text-amber-900">
+                {isBranchManager ? `Branch Compliance View · ${currentUser.branchName}` : 'Sales Management Compliance View'}
+              </div>
+              <p className="text-xs text-amber-800">
+                {isBranchManager
+                  ? `Viewing bonded customs clearances and digital excise stamp batches allocated to ${currentUser.branchName}.`
+                  : 'Viewing regulatory customs clearances and excise verification registers across distribution channels.'}
+              </p>
+            </div>
           </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Target Auto-SKU</label>
-            <select
-              value={skuRef}
-              onChange={(e) => setSkuRef(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
-            >
-              {products.slice(0, 120).map((p) => (
-                <option key={p.id} value={p.sku}>
-                  {p.sku}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Assigned Bonded Branch</label>
-            <select
-              value={branchName}
-              onChange={(e) => setBranchName(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.name}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Stamp Start & End Serial</label>
-            <div className="grid grid-cols-2 gap-2 mt-1">
+        </div>
+      )}
+
+      {/* Register New Batch Form (Inventory Controller & Admin Only) */}
+      {canManageCompliance && (
+        <form
+          onSubmit={handleAdd}
+          className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
+        >
+          <h3 className="text-sm font-montserrat font-black text-[#0A006E] border-b border-slate-200 pb-3">
+            Log New Customs Bond Entry or Digital Excise Stamp Batch
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Certificate / Entry No *</label>
               <input
+                required
                 type="text"
-                value={stampStart}
-                onChange={(e) => setStampStart(e.target.value)}
-                className="px-2 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                value={certificateNo}
+                onChange={(e) => setCertificateNo(e.target.value)}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
               />
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Compliance Instrument</label>
+              <select
+                value={recordType}
+                onChange={(e) => setRecordType(e.target.value as ComplianceRecord['recordType'])}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold"
+              >
+                <option value="Digital Excise Stamp Batch">Digital Excise Stamp Batch</option>
+                <option value="Customs Import Bond">Customs Import Bond</option>
+                <option value="Standard Bureau Certificate">Standard Bureau Certificate</option>
+                <option value="Distributor Liquor Permit">Distributor Liquor Permit</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Target Auto-SKU</label>
+              <select
+                value={skuRef}
+                onChange={(e) => setSkuRef(e.target.value)}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+              >
+                {products.slice(0, 120).map((p) => (
+                  <option key={p.id} value={p.sku}>
+                    {p.sku}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Assigned Bonded Branch</label>
+              <select
+                value={branchName}
+                onChange={(e) => setBranchName(e.target.value)}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.name}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Stamp Start & End Serial</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <input
+                  type="text"
+                  value={stampStart}
+                  onChange={(e) => setStampStart(e.target.value)}
+                  className="px-2 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                />
+                <input
+                  type="text"
+                  value={stampEnd}
+                  onChange={(e) => setStampEnd(e.target.value)}
+                  className="px-2 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Excise Duty Paid (KES)</label>
+              <input
+                type="number"
+                value={dutyPaid}
+                onChange={(e) => setDutyPaid(Number(e.target.value))}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+              />
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Permit Expiry Date</label>
+              <input
+                type="date"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+              />
+            </div>
+            <div>
+              <label className="font-montserrat font-bold text-slate-700">Verifying Inspector</label>
               <input
                 type="text"
-                value={stampEnd}
-                onChange={(e) => setStampEnd(e.target.value)}
-                className="px-2 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                value={inspectorName}
+                onChange={(e) => setInspectorName(e.target.value)}
+                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
               />
             </div>
           </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Excise Duty Paid (KES)</label>
-            <input
-              type="number"
-              value={dutyPaid}
-              onChange={(e) => setDutyPaid(Number(e.target.value))}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
-            />
-          </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Permit Expiry Date</label>
-            <input
-              type="date"
-              value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
-            />
-          </div>
-          <div>
-            <label className="font-montserrat font-bold text-slate-700">Verifying Inspector</label>
-            <input
-              type="text"
-              value={inspectorName}
-              onChange={(e) => setInspectorName(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-            />
-          </div>
-        </div>
-        <button
-          type="submit"
-          className="px-4 py-2.5 bg-[#0A006E] text-[#FFDE00] font-montserrat font-black text-xs rounded-xl cursor-pointer"
-        >
-          Register Compliance Batch
-        </button>
-      </form>
+          <button
+            type="submit"
+            className="px-4 py-2.5 bg-[#0A006E] text-[#FFDE00] font-montserrat font-black text-xs rounded-xl cursor-pointer"
+          >
+            Register Compliance Batch
+          </button>
+        </form>
+      )}
 
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5">
         <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
@@ -1184,7 +1374,7 @@ export const ComplianceModule: React.FC<{
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {records.map((r) => (
+              {visibleRecords.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
                   <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">
                     {r.certificateNo}
@@ -1225,6 +1415,7 @@ export const HrAndRbacModule: React.FC<{
   onDeleteStaff?: (staffId: string) => Promise<void>;
   onExecutePayrollRun?: (runDraft: Omit<PayrollRun, 'id' | 'createdAt'>) => Promise<void>;
   onOpenPayslip?: (record: PayrollRecord) => void;
+  onOpenAccessMatrix?: () => void;
 }> = ({
   currentUser,
   staffList,
@@ -1236,6 +1427,7 @@ export const HrAndRbacModule: React.FC<{
   onDeleteStaff,
   onExecutePayrollRun,
   onOpenPayslip,
+  onOpenAccessMatrix,
 }) => {
   const creatableRoles = ROLE_PERMISSIONS[currentUser.role].canCreateRoles;
   const canManagePayroll = currentUser.role === 'HR' || currentUser.role === 'Admin';
@@ -1639,6 +1831,17 @@ export const HrAndRbacModule: React.FC<{
                 {payrollRuns.length} Runs
               </span>
             )}
+          </button>
+        )}
+
+        {onOpenAccessMatrix && (
+          <button
+            type="button"
+            onClick={onOpenAccessMatrix}
+            className="ml-auto px-3.5 py-2 rounded-xl text-xs font-montserrat font-black bg-[#FFDE00] text-[#0A006E] border-2 border-[#0A006E] hover:bg-amber-400 flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-[#0A006E]" />
+            8-Role Access Matrix
           </button>
         )}
       </div>
@@ -2723,17 +2926,111 @@ export const HrAndRbacModule: React.FC<{
 // 9. USER MONITORING, DEVICE FINGERPRINT & SECURITY AUDIT LOGS MODULE
 // ---------------------------------------------------------------------------
 export const AuditAndSecurityModule: React.FC<{
+  currentUser: StaffMember;
   auditLogs: AuditLog[];
   staffList: StaffMember[];
-}> = ({ auditLogs, staffList }) => {
+  onOpenAccessMatrix?: () => void;
+}> = ({ currentUser, auditLogs, staffList, onOpenAccessMatrix }) => {
   const [severityFilter, setSeverityFilter] = useState<string>('All');
+
+  // Role-scoped audit telemetry matching Target Access Model:
+  // Admin: Full
+  // Accountant: Finance audit
+  // HR: HR audit
+  // Sales Mgr: Sales scope
+  // Branch Mgr: Branch scope
+  // Inventory: Stock scope
+  // Cashier: Own activity
+  // Affiliate: Own activity
+  const scopedLogs = useMemo(() => {
+    const role = currentUser.role;
+    if (role === 'Admin') return auditLogs;
+
+    if (role === 'Accountant') {
+      return auditLogs.filter(
+        (l) =>
+          l.module === 'Financial' ||
+          l.module === 'Compliance' ||
+          l.module.toLowerCase().includes('accounting') ||
+          l.action.toLowerCase().includes('transaction') ||
+          l.action.toLowerCase().includes('credit') ||
+          l.action.toLowerCase().includes('invoice') ||
+          l.action.toLowerCase().includes('payment')
+      );
+    }
+
+    if (role === 'HR') {
+      return auditLogs.filter(
+        (l) =>
+          l.module.toLowerCase().includes('hr') ||
+          l.module.toLowerCase().includes('staff') ||
+          l.module.toLowerCase().includes('payroll') ||
+          l.action.toLowerCase().includes('role') ||
+          l.action.toLowerCase().includes('pin') ||
+          l.action.toLowerCase().includes('session') ||
+          l.action.toLowerCase().includes('login')
+      );
+    }
+
+    if (role === 'Sales Manager') {
+      return auditLogs.filter(
+        (l) =>
+          l.module.toLowerCase().includes('sales') ||
+          l.module.toLowerCase().includes('pos') ||
+          l.module.toLowerCase().includes('retail') ||
+          l.module.toLowerCase().includes('quote') ||
+          l.action.toLowerCase().includes('wholesale') ||
+          l.action.toLowerCase().includes('order')
+      );
+    }
+
+    if (role === 'Branch Manager') {
+      return auditLogs.filter(
+        (l) =>
+          l.branchName === currentUser.branchName ||
+          l.details.toLowerCase().includes(currentUser.branchName.toLowerCase())
+      );
+    }
+
+    if (role === 'Inventory Controller') {
+      return auditLogs.filter(
+        (l) =>
+          l.module.toLowerCase().includes('inventory') ||
+          l.module.toLowerCase().includes('transfer') ||
+          l.action.toLowerCase().includes('sku') ||
+          l.action.toLowerCase().includes('damage') ||
+          l.action.toLowerCase().includes('stock') ||
+          l.action.toLowerCase().includes('spoilage') ||
+          l.action.toLowerCase().includes('barcode')
+      );
+    }
+
+    if (role === 'Counter Cashier') {
+      return auditLogs.filter(
+        (l) =>
+          l.actorName === currentUser.name ||
+          l.actorEmailOrPinId === currentUser.email ||
+          l.actorRole === 'Counter Cashier'
+      );
+    }
+
+    if (role === 'Affiliate Sales Representative') {
+      return auditLogs.filter(
+        (l) =>
+          l.actorName === currentUser.name ||
+          l.actorEmailOrPinId === currentUser.email
+      );
+    }
+
+    return auditLogs;
+  }, [auditLogs, currentUser]);
 
   const filteredLogs = useMemo(
     () =>
       severityFilter === 'All'
-        ? auditLogs
-        : auditLogs.filter((l) => l.severity === severityFilter),
-    [auditLogs, severityFilter]
+        ? scopedLogs
+        : scopedLogs.filter((l) => l.severity === severityFilter),
+    [scopedLogs, severityFilter]
   );
 
   return (
@@ -2742,17 +3039,27 @@ export const AuditAndSecurityModule: React.FC<{
         <div className="silent-scanner-beam-dark" />
         <div className="relative z-10">
           <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-            Zero-Trust Telemetry & Activity Surveillance
+            Zero-Trust Telemetry & Activity Surveillance · {currentUser.role} Scope
           </span>
           <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
             User Monitoring, Device Fingerprints, Last Login Status & Security Audit Trail
           </h2>
           <p className="text-xs font-medium text-slate-900 mt-0.5">
-            Tracks what every user does, the device/browser they use, their last login activity status, and immutable transaction logs.
+            Audit Scope: {currentUser.role} ({filteredLogs.length} Scoped Records) · Device Fingerprints & Verification
           </p>
         </div>
 
-        <div className="flex items-center gap-2 relative z-10">
+        <div className="flex items-center gap-2 relative z-10 flex-wrap">
+          {onOpenAccessMatrix && (
+            <button
+              type="button"
+              onClick={onOpenAccessMatrix}
+              className="px-3.5 py-2 bg-white text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition hover:bg-slate-50"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#0A006E]" />
+              8-Role Access Matrix
+            </button>
+          )}
           <button
             onClick={() =>
               exportReportToPDF(

@@ -100,6 +100,7 @@ import { RestaurantOutletManagement } from './components/RestaurantOutletManagem
 import { DocumentPrintModal } from './components/DocumentPrintModal';
 import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { OnboardItemsModal } from './components/OnboardItemsModal';
+import { AccessModelMatrixModal } from './components/AccessModelMatrixModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
@@ -162,6 +163,7 @@ export default function App() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
+  const [isAccessMatrixOpen, setIsAccessMatrixOpen] = useState(false);
   const isGoogleAuthInProgressRef = useRef(false);
   const [toastStatus, setToastStatus] = useState<{
     type: 'success' | 'error';
@@ -1785,6 +1787,20 @@ export default function App() {
             </span>
           </button>
 
+          {/* 1.5 Target Access Model Matrix button */}
+          <button
+            type="button"
+            onClick={() => setIsAccessMatrixOpen(true)}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-md relative group bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400 border-white"
+            title="Target Access Model & 8-Role RBAC Boundaries"
+            aria-label="Target Access Model & RBAC Boundaries"
+          >
+            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.4]" />
+            <span className="absolute -bottom-9 right-0 hidden group-hover:block bg-slate-900 text-white text-[11px] font-montserrat font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-lg z-50 pointer-events-none">
+              Access Model (8 Roles)
+            </span>
+          </button>
+
           {/* 2. User icon */}
           <button
             type="button"
@@ -2045,6 +2061,31 @@ export default function App() {
                   <ChevronRight className="w-4 h-4 text-slate-400" />
                 </button>
               )}
+
+              {/* View Target Access Model (8 Roles) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileDrawerOpen(false);
+                  setIsAccessMatrixOpen(true);
+                }}
+                className="w-full p-3 rounded-2xl border-2 border-[#0A006E] bg-[#FFDE00]/15 hover:bg-[#FFDE00]/30 flex items-center justify-between cursor-pointer transition shadow-xs active:scale-98"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                    <ShieldCheck className="w-5 h-5 stroke-[2.4]" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs font-montserrat font-black leading-tight text-[#0A006E]">
+                      Target Access Model Matrix
+                    </div>
+                    <div className="text-[10px] text-slate-600">
+                      8-Role security boundaries &amp; permissions
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#0A006E]" />
+              </button>
             </div>
 
             {/* Quick Action: Onboard Items & Barcode Scanner for Branch Managers & Admin */}
@@ -2288,6 +2329,20 @@ export default function App() {
                 );
               })}
             </div>
+
+            {/* Target Access Model Matrix Button */}
+            <button
+              type="button"
+              onClick={() => setIsAccessMatrixOpen(true)}
+              className="w-full min-h-[46px] px-3 py-2 rounded-2xl text-xs font-montserrat flex items-center gap-3 transition-all cursor-pointer whitespace-nowrap border-2 border-[#0A006E] bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] font-black shadow-xs mt-3"
+            >
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-[#0A006E] text-[#FFDE00]">
+                <ShieldCheck className="w-4 h-4 stroke-[2.4]" />
+              </div>
+              <span className="truncate text-xs">
+                Access Model Matrix
+              </span>
+            </button>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-white border border-slate-200 text-[11px] text-slate-600 space-y-1 relative z-10 mt-4">
@@ -2381,6 +2436,7 @@ export default function App() {
 
           {activeModule === 'geo_pricing' && (
             <GeoPricingModule
+              currentUser={currentUser}
               regions={regions}
               products={products}
               onCreateRegion={handleCreateRegion}
@@ -2390,6 +2446,7 @@ export default function App() {
 
           {activeModule === 'partners' && (
             <PartnersOnboardingModule
+              currentUser={currentUser}
               partners={partners}
               regions={regions}
               onCreatePartner={handleCreatePartner}
@@ -2412,6 +2469,7 @@ export default function App() {
 
           {activeModule === 'compliance' && (
             <ComplianceModule
+              currentUser={currentUser}
               records={complianceRecords}
               branches={branches}
               products={products}
@@ -2431,11 +2489,17 @@ export default function App() {
               onDeleteStaff={handleDeleteStaff}
               onExecutePayrollRun={handleExecutePayrollRun}
               onOpenPayslip={(record) => setViewingPayslipRecord(record)}
+              onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
             />
           )}
 
           {activeModule === 'audit_security' && (
-            <AuditAndSecurityModule auditLogs={auditLogs} staffList={staffList} />
+            <AuditAndSecurityModule
+              currentUser={currentUser}
+              auditLogs={auditLogs}
+              staffList={staffList}
+              onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
+            />
           )}
 
           {activeModule === 'customer_portal' && (
@@ -2498,6 +2562,15 @@ export default function App() {
           onActivateProductStock={handleActivateProductStock}
           onShowSuccessFeedback={(title, msg) => triggerToast('success', title, msg)}
           onShowErrorFeedback={(title, msg) => triggerToast('error', title, msg)}
+        />
+      )}
+
+      {/* Target Access Model (8 Roles) Matrix Modal */}
+      {isAccessMatrixOpen && currentUser && (
+        <AccessModelMatrixModal
+          isOpen={isAccessMatrixOpen}
+          onClose={() => setIsAccessMatrixOpen(false)}
+          currentUser={currentUser}
         />
       )}
     </div>

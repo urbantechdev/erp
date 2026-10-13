@@ -32,6 +32,13 @@ import {
   TrendingUp,
   Camera,
   Check,
+  Users,
+  DollarSign,
+  Eye,
+  Briefcase,
+  Tag,
+  Activity,
+  FileText,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -207,6 +214,509 @@ export const OverviewModule: React.FC<{
           payrollRuns={payrollRuns}
           onPreviewDoc={onPreviewDoc}
         />
+      </div>
+    );
+  }
+
+  // Specialized HR KPIs Command Dashboard
+  if (currentUser.role === 'HR') {
+    const activeStaff = staffList.filter((s) => s.status === 'Active');
+    const suspendedStaff = staffList.filter((s) => s.status !== 'Active');
+    const kraCoverage = Math.round(
+      (staffList.filter((s) => Boolean(s.kraPin)).length / Math.max(1, staffList.length)) * 100
+    );
+    const nssfCoverage = Math.round(
+      (staffList.filter((s) => Boolean(s.nssfNo)).length / Math.max(1, staffList.length)) * 100
+    );
+    const latestRun = payrollRuns[0];
+
+    return (
+      <div className="space-y-6">
+        {/* HR Banner */}
+        <div className="bg-[#0A006E] text-white border-2 border-[#FFDE00] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
+          <div>
+            <span className="text-[11px] font-montserrat font-black text-[#FFDE00] uppercase tracking-wider block">
+              Human Resources &amp; Access Controller Command · RBAC Scope
+            </span>
+            <h2 className="text-xl font-montserrat font-black italic text-white mt-1">
+              Personnel Roster, Statutory Compliance &amp; Payroll KPIs
+            </h2>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Approved management of 8-role personnel directory, 6-digit PIN issuance, and statutory deductions.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onNavigateModule?.('hr_rbac')}
+              className="px-4 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition"
+            >
+              Manage Staff Directory
+            </button>
+            <button
+              onClick={() => {
+                const headers = ['Staff Name', 'Role', 'Branch', 'Email', 'Status', 'KRA PIN', 'NSSF'];
+                const rows = staffList.map((s) => [s.name, s.role, s.branchName, s.email, s.status, s.kraPin || '-', s.nssfNo || '-']);
+                exportToCSV('Vaairo_Staff_Roster', headers, rows);
+              }}
+              className="px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+            >
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        {/* HR KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Total Workforce Headcount</div>
+            <div className="text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {staffList.length} Staff
+            </div>
+            <div className="text-xs text-[#1E9E60] font-bold mt-1">
+              {activeStaff.length} Active · {suspendedStaff.length} On Hold
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Statutory Tax Compliance</div>
+            <div className="text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {kraCoverage}%
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              KRA PIN: {kraCoverage}% · NSSF / SHIF: {nssfCoverage}%
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Latest Payroll Cycle</div>
+            <div className="text-2xl font-montserrat font-black text-[#0A006E] truncate mt-1">
+              {latestRun ? latestRun.period : 'Awaiting Run'}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              {latestRun ? `Disbursed: KES ${latestRun.totalDisbursed.toLocaleString()} (${latestRun.totalEmployees} staff)` : 'Ready to prepare current cycle'}
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Regional Branch Deployment</div>
+            <div className="text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {branches.length} Branches
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              All retail &amp; wholesale depots staffed
+            </div>
+          </div>
+        </div>
+
+        {/* Roles Distribution & Branch Deployment Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+            <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#0A006E]" />
+              Staff Distribution Across 8 Roles
+            </h3>
+            <div className="divide-y divide-slate-100">
+              {[
+                'Admin',
+                'Accountant',
+                'Sales Manager',
+                'Branch Manager',
+                'Inventory Controller',
+                'Counter Cashier',
+                'Affiliate Sales Representative',
+              ].map((role) => {
+                const count = staffList.filter((s) => s.role === role).length;
+                return (
+                  <div key={role} className="py-2.5 flex items-center justify-between text-xs">
+                    <span className="font-montserrat font-bold text-slate-800">{role}</span>
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 font-mono-tabular font-bold text-[#0A006E]">
+                      {count} staff
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+            <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-[#0A006E]" />
+              Branch Personnel Deployment
+            </h3>
+            <div className="divide-y divide-slate-100">
+              {branches.map((b) => {
+                const branchStaff = staffList.filter((s) => s.branchId === b.id);
+                return (
+                  <div key={b.id} className="py-2.5 flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-montserrat font-bold text-slate-900">{b.name}</div>
+                      <div className="text-[11px] text-slate-500">{b.regionName} · {b.code}</div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-[#FFDE00]/30 border border-[#FFDE00] font-mono-tabular font-bold text-[#0A006E]">
+                      {branchStaff.length} stationed
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Specialized Sales Manager KPIs Command Dashboard
+  if (currentUser.role === 'Sales Manager') {
+    const wholesaleRevenue = visibleTransactions
+      .filter((t) => t.channel === 'B2B Wholesale POS')
+      .reduce((s, t) => s + t.totalAmount, 0);
+    const retailRevenue = visibleTransactions
+      .filter((t) => t.channel === 'Retail Counter POS')
+      .reduce((s, t) => s + t.totalAmount, 0);
+
+    return (
+      <div className="space-y-6">
+        {/* Sales Manager Banner */}
+        <div className="bg-[#34D186] text-[#0A006E] border-2 border-[#0A006E] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
+          <div>
+            <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider block">
+              National Distribution Sales Manager Command
+            </span>
+            <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
+              Commercial Turnover, Channel Pipeline &amp; Partner Performance
+            </h2>
+            <p className="text-xs text-slate-900 font-semibold mt-0.5">
+              Live tracking of B2B wholesale dispatches, retail counters, and partner accounts.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onNavigateModule?.('sales_pos')}
+              className="px-4 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition"
+            >
+              Wholesale POS
+            </button>
+            <button
+              onClick={() => onNavigateModule?.('geo_pricing')}
+              className="px-3.5 py-2 bg-white border border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+            >
+              Review Pricing
+            </button>
+          </div>
+        </div>
+
+        {/* Sales KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Total Commercial Sales</div>
+            <div className="text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {formatKes(totalRevenue)}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              {visibleTransactions.length} Total Documents Issued
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Wholesale B2B Volume</div>
+            <div className="text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {formatKes(wholesaleRevenue)}
+            </div>
+            <div className="text-xs text-[#1E9E60] font-bold mt-1">
+              Major distributor &amp; retailer orders
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Retail Counter POS Volume</div>
+            <div className="text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {formatKes(retailRevenue)}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              Counter walk-in direct collections
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Commercial Partners</div>
+            <div className="text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {partners.length} Accounts
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              Licensed retail distributors &amp; logistics
+            </div>
+          </div>
+        </div>
+
+        {/* Sales Period Section */}
+        <div id="sales-period-section">
+          <SalesPeriodTracker
+            transactions={visibleTransactions}
+            currentUser={currentUser}
+            onPreviewDoc={onPreviewDoc}
+            onNavigateToPos={(mode) => onNavigateModule?.(mode === 'retail' ? 'retail_pos' : 'sales_pos')}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Specialized Inventory Controller Stock Command Dashboard
+  if (currentUser.role === 'Inventory Controller') {
+    const totalInventoryValue = products.reduce((acc, p) => {
+      const btls = p.totalBottles ?? (p.packSize || 12) * 30;
+      const cost = p.warehouseCostKes ?? p.baseLandedCost ?? (p.baseWholesalePrice ? p.baseWholesalePrice * 0.7 : 2000);
+      return acc + btls * cost;
+    }, 0);
+
+    const damagedCount = products.reduce((acc, p) => acc + (p.damagedBottlesCount || 0), 0);
+    const spoiledCount = products.reduce((acc, p) => acc + (p.spoiledBottlesCount || 0), 0);
+
+    return (
+      <div className="space-y-6">
+        {/* Inventory Controller Banner */}
+        <div className="bg-[#0A006E] text-white border-2 border-[#34D186] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
+          <div>
+            <span className="text-[11px] font-montserrat font-black text-[#34D186] uppercase tracking-wider block">
+              Bonded Warehouse &amp; Inventory Controller Command
+            </span>
+            <h2 className="text-xl font-montserrat font-black italic text-white mt-1">
+              Bonded Inventory Valuation, Barcode Health &amp; Transit Logistics
+            </h2>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Real-time oversight of master liquor batches, customs stamps, and inter-branch movements.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onNavigateModule?.('inventory')}
+              className="px-4 py-2 bg-[#34D186] text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition"
+            >
+              Master Inventory
+            </button>
+            <button
+              onClick={() => onNavigateModule?.('branches_transfers')}
+              className="px-3.5 py-2 bg-white/15 text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+            >
+              Stock Transfers
+            </button>
+          </div>
+        </div>
+
+        {/* Inventory KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Bonded Stock Asset Valuation</div>
+            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {formatKes(totalInventoryValue)}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              {totalBottlesInBond.toLocaleString()} Total Bottles in Warehouses
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">IPS vs LPS Catalog</div>
+            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {products.length} SKUs
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              IPS Imported: <strong>{ipsCount}</strong> · LPS Local: <strong>{lpsCount}</strong>
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Inter-Branch Transfers</div>
+            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {transfers.length} Transfers
+            </div>
+            <div className="text-xs text-[#1E9E60] font-bold mt-1">
+              {transfers.filter((t) => t.status === 'In Transit').length} Currently in Transit
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Damages &amp; Spoilage Loss</div>
+            <div className="text-2xl font-montserrat font-black text-rose-700 font-mono-tabular mt-1">
+              {(damagedCount + spoiledCount)} btls
+            </div>
+            <div className="text-xs text-rose-600 mt-1">
+              {damagedCount} Damaged · {spoiledCount} Spoiled quarantined
+            </div>
+          </div>
+        </div>
+
+        {/* Bonded Stock Distribution by Branch Table */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+          <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
+            <Package className="w-4 h-4 text-[#0A006E]" />
+            Bonded Stock Distribution by Branch Depot
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                  <th className="py-2.5 px-3 font-black">Depot Code</th>
+                  <th className="py-2.5 px-3 font-black">Branch Depot Name</th>
+                  <th className="py-2.5 px-3 font-black">Excise Bond License</th>
+                  <th className="py-2.5 px-3 font-black">Region</th>
+                  <th className="py-2.5 px-3 font-black text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {branches.map((b) => (
+                  <tr key={b.id} className="hover:bg-slate-50">
+                    <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">{b.code}</td>
+                    <td className="py-2.5 px-3 font-montserrat font-bold text-slate-900">{b.name}</td>
+                    <td className="py-2.5 px-3 font-mono-tabular text-slate-700">{b.exciseBondLicense}</td>
+                    <td className="py-2.5 px-3 text-slate-600">{b.regionName}</td>
+                    <td className="py-2.5 px-3 text-right text-[#1E9E60] font-bold">{b.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Specialized Affiliate Sales Representative Personal Command Dashboard
+  if (currentUser.role === 'Affiliate Sales Representative') {
+    const ownTransactions = transactions.filter(
+      (t) =>
+        t.createdBy === currentUser.name ||
+        t.createdBy === currentUser.email ||
+        t.affiliateCode === currentUser.id
+    );
+    const ownSalesTotal = ownTransactions.reduce((acc, t) => acc + t.totalAmount, 0);
+    const commPct = currentUser.agreedCommissionPct || 8;
+    const earnedCommission = Math.round((ownSalesTotal * commPct) / 100);
+
+    return (
+      <div className="space-y-6">
+        {/* Affiliate Banner */}
+        <div className="bg-[#FFDE00] text-[#0A006E] border-2 border-[#0A006E] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
+          <div>
+            <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider block">
+              Field &amp; Affiliate Sales Representative Command
+            </span>
+            <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
+              Personal Sales Volume &amp; Earned Commission Tracker
+            </h2>
+            <p className="text-xs text-slate-900 font-semibold mt-0.5">
+              Authorized to create and track your own wholesale orders and client quotes at approved prices.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onNavigateModule?.('sales_pos')}
+              className="px-4 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition"
+            >
+              New Wholesale Order
+            </button>
+            <button
+              onClick={() => onNavigateModule?.('customer_portal')}
+              className="px-3.5 py-2 bg-white border border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+            >
+              Browse Catalog
+            </button>
+          </div>
+        </div>
+
+        {/* Affiliate Personal KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Personal Sales Volume</div>
+            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {formatKes(ownSalesTotal)}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              {ownTransactions.length} Total Orders Generated
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Earned Commissions</div>
+            <div className="text-2xl font-montserrat font-black text-[#1E9E60] font-mono-tabular mt-1">
+              {formatKes(earnedCommission)}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              Agreed Rate: <strong>{commPct}%</strong> on fulfilled orders
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Assigned Branch &amp; Depot</div>
+            <div className="text-lg font-montserrat font-black text-[#0A006E] truncate mt-1">
+              {currentUser.branchName}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              Regional pickup &amp; delivery base
+            </div>
+          </div>
+
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
+            <div className="text-xs font-montserrat font-bold text-slate-600">Approved Catalog Access</div>
+            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+              {products.length} SKUs
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              Live pricing with case multipliers
+            </div>
+          </div>
+        </div>
+
+        {/* Affiliate Orders Table */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+          <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
+            <FileText className="w-4 h-4 text-[#0A006E]" />
+            My Recent Orders &amp; Commercial Invoices
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                  <th className="py-2.5 px-3 font-black">Document No</th>
+                  <th className="py-2.5 px-3 font-black">Type</th>
+                  <th className="py-2.5 px-3 font-black">Customer</th>
+                  <th className="py-2.5 px-3 font-black text-right">Amount (KES)</th>
+                  <th className="py-2.5 px-3 font-black text-right">Commission (KES)</th>
+                  <th className="py-2.5 px-3 font-black text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {ownTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-500">
+                      You haven&apos;t created any orders yet. Click &ldquo;New Wholesale Order&rdquo; to generate commercial quotes.
+                    </td>
+                  </tr>
+                ) : (
+                  ownTransactions.slice(0, 8).map((tx) => (
+                    <tr key={tx.id} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">{tx.docNumber}</td>
+                      <td className="py-2.5 px-3 font-montserrat font-bold text-slate-900">{tx.docType}</td>
+                      <td className="py-2.5 px-3 text-slate-800">{tx.customerName}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-tabular font-bold">{formatKes(tx.totalAmount)}</td>
+                      <td className="py-2.5 px-3 text-right font-mono-tabular font-bold text-[#1E9E60]">
+                        {formatKes(Math.round((tx.totalAmount * commPct) / 100))}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <button
+                          onClick={() => onPreviewDoc(tx)}
+                          className="px-3 py-1 bg-[#0A006E] text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-black cursor-pointer"
+                        >
+                          View PDF
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }
@@ -2446,8 +2956,20 @@ export const BranchesAndTransfersModule: React.FC<{
   const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const [fromBranchId, setFromBranchId] = useState(branches[0]?.id || '');
-  const [toBranchId, setToBranchId] = useState(branches[1]?.id || branches[0]?.id || '');
+  const isAdmin = currentUser.role === 'Admin';
+  const isBranchManager = currentUser.role === 'Branch Manager';
+  const isSalesManager = currentUser.role === 'Sales Manager';
+  const isInventory = currentUser.role === 'Inventory Controller';
+
+  const canManageBranches = isAdmin; // Only Admin can administer branches
+  const canInitiateTransfer = isAdmin || isInventory || isBranchManager;
+
+  const [fromBranchId, setFromBranchId] = useState(
+    isBranchManager && currentUser.branchId ? currentUser.branchId : branches[0]?.id || ''
+  );
+  const [toBranchId, setToBranchId] = useState(
+    branches.find((b) => b.id !== (isBranchManager && currentUser.branchId ? currentUser.branchId : branches[0]?.id))?.id || branches[1]?.id || branches[0]?.id || ''
+  );
   const [productId, setProductId] = useState(products[0]?.id || '');
   const [qtyBottles, setQtyBottles] = useState<number>(12);
   const [vehicleReg, setVehicleReg] = useState('');
@@ -2461,7 +2983,7 @@ export const BranchesAndTransfersModule: React.FC<{
 
   const handleAddBranch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!branchName.trim()) return;
+    if (!branchName.trim() || !canManageBranches) return;
     const reg = regions.find((r) => r.id === branchRegionId) || regions[0];
     const code = `BR-${branchName.slice(0, 3).toUpperCase()}-00${branches.length + 1}`;
     await onCreateBranch({
@@ -2480,11 +3002,17 @@ export const BranchesAndTransfersModule: React.FC<{
 
   const handleExecuteTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canInitiateTransfer) return;
     if (fromBranchId === toBranchId) return;
     const fromBr = branches.find((b) => b.id === fromBranchId);
     const toBr = branches.find((b) => b.id === toBranchId);
     const prod = products.find((p) => p.id === productId);
     if (!fromBr || !toBr || !prod) return;
+
+    // For Branch Manager, ensure transfer involves their branch
+    if (isBranchManager && fromBr.name !== currentUser.branchName && toBr.name !== currentUser.branchName && fromBr.id !== currentUser.branchId && toBr.id !== currentUser.branchId) {
+      return;
+    }
 
     const fallbackTotal = prod.totalBottles ?? (prod.packSize || 12) * 30;
     let branchStock: Record<string, number> = {};
@@ -2526,17 +3054,18 @@ export const BranchesAndTransfersModule: React.FC<{
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Create New Branch Card */}
-        <form
-          onSubmit={handleAddBranch}
-          className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
-        >
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-            <Building2 className="w-4 h-4 text-[#0A006E]" />
-            <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
-              Establish New Regional Distribution Branch / Depot
-            </h3>
-          </div>
+        {/* Create New Branch Card / Boundary Card */}
+        {canManageBranches ? (
+          <form
+            onSubmit={handleAddBranch}
+            className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
+          >
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+              <Building2 className="w-4 h-4 text-[#0A006E]" />
+              <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+                Establish New Regional Distribution Branch / Depot
+              </h3>
+            </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
@@ -2597,8 +3126,31 @@ export const BranchesAndTransfersModule: React.FC<{
             Commission New Branch
           </button>
         </form>
+      ) : (
+        <div className="bg-[#F0F2F0] border-2 border-slate-200 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+              <Building2 className="w-4 h-4 text-[#0A006E]" />
+              <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+                Branch Governance Scope · {currentUser.role}
+              </h3>
+            </div>
+            <p className="text-xs text-slate-700 mt-3 leading-relaxed">
+              Establishing new regional distribution yards and customs-bonded depots is strictly administered by Executive System Administration.
+              {isBranchManager
+                ? ` Your operational scope is bounded to ${currentUser.branchName} and its assigned commercial units.`
+                : ' Your role grants authorized visibility into branch operational status and stock logistics.'}
+            </p>
+          </div>
+          <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs">
+            <span className="font-bold text-[#0A006E]">Active Assigned Depot:</span>{' '}
+            <span className="font-semibold text-slate-800">{currentUser.branchName}</span>
+          </div>
+        </div>
+      )}
 
-        {/* Inter-Branch Bonded Stock Transfer Card */}
+      {/* Inter-Branch Bonded Stock Transfer Card */}
+      {canInitiateTransfer ? (
         <form
           onSubmit={handleExecuteTransfer}
           className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
@@ -2684,6 +3236,25 @@ export const BranchesAndTransfersModule: React.FC<{
             Authorize Bonded Stock Transfer
           </button>
         </form>
+      ) : (
+        <div className="bg-[#F0F2F0] border-2 border-slate-200 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+              <ArrowLeftRight className="w-4 h-4 text-[#0A006E]" />
+              <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+                Stock Transit Oversight · {currentUser.role} Scope
+              </h3>
+            </div>
+            <p className="text-xs text-slate-700 mt-3 leading-relaxed">
+              Stock transfer dispatches and inter-branch manifests are managed by authorized Inventory Controllers and Branch Managers. You have read-only visibility into transfer history and branch distribution below.
+            </p>
+          </div>
+          <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs">
+            <span className="font-bold text-[#0A006E]">Active Logged Transfers:</span>{' '}
+            <span className="font-semibold text-slate-800">{transfers.length} Recorded Movements</span>
+          </div>
+        </div>
+      )}
       </div>
 
       {/* Genuine Branches Directory */}
@@ -2755,7 +3326,7 @@ export const BranchesAndTransfersModule: React.FC<{
                     </td>
                     <td className="py-3 px-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {!isMainBranch && onSetMainBranch && (
+                        {isAdmin && !isMainBranch && onSetMainBranch && (
                           <button
                             type="button"
                             onClick={() => onSetMainBranch(b.id)}
@@ -2766,7 +3337,7 @@ export const BranchesAndTransfersModule: React.FC<{
                             Set Main
                           </button>
                         )}
-                        {!isMainBranch && onDeleteBranch ? (
+                        {isAdmin && !isMainBranch && onDeleteBranch ? (
                           <button
                             type="button"
                             onClick={() => setBranchToDelete(b)}
@@ -2776,9 +3347,13 @@ export const BranchesAndTransfersModule: React.FC<{
                             <Trash2 className="w-3 h-3" />
                             Delete
                           </button>
-                        ) : (
+                        ) : isMainBranch ? (
                           <span className="text-[10px] font-montserrat font-bold text-slate-400 uppercase tracking-wider">
                             Protected Main
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-montserrat font-semibold text-slate-400">
+                            Managed
                           </span>
                         )}
                       </div>
@@ -2919,6 +3494,7 @@ export const BranchesAndTransfersModule: React.FC<{
 // 4. GEO-LOCATION PRICING ENGINE MODULE (Suburb vs Lower Region Differential)
 // ---------------------------------------------------------------------------
 export const GeoPricingModule: React.FC<{
+  currentUser: StaffMember;
   regions: GeoRegion[];
   products: Product[];
   onCreateRegion: (reg: Omit<GeoRegion, 'id' | 'createdAt'>) => Promise<void>;
@@ -2928,7 +3504,12 @@ export const GeoPricingModule: React.FC<{
     wholesalePrice: number,
     retailPrice: number
   ) => Promise<void>;
-}> = ({ regions, products, onCreateRegion, onUpdateProductGeoOverride }) => {
+}> = ({ currentUser, regions, products, onCreateRegion, onUpdateProductGeoOverride }) => {
+  const canManagePricing = currentUser.role === 'Admin' || currentUser.role === 'Sales Manager';
+  const isBranchManager = currentUser.role === 'Branch Manager';
+  const isInventory = currentUser.role === 'Inventory Controller';
+  const isAffiliate = currentUser.role === 'Affiliate Sales Representative';
+
   const [regionName, setRegionName] = useState('');
   const [tierType, setTierType] = useState<GeoRegion['tierType']>('Suburban Ring');
   const [wholesaleMult, setWholesaleMult] = useState<number>(1.08);
@@ -2943,7 +3524,7 @@ export const GeoPricingModule: React.FC<{
 
   const handleCreateRegion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regionName.trim()) return;
+    if (!regionName.trim() || !canManagePricing) return;
     await onCreateRegion({
       code: `GEO-${regionName.slice(0, 4).toUpperCase()}-0${regions.length + 1}`,
       name: regionName.trim(),
@@ -2959,7 +3540,7 @@ export const GeoPricingModule: React.FC<{
 
   const handleApplyOverride = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProdId || !selectedRegId) return;
+    if (!selectedProdId || !selectedRegId || !canManagePricing) return;
     await onUpdateProductGeoOverride(
       selectedProdId,
       selectedRegId,
@@ -2970,11 +3551,69 @@ export const GeoPricingModule: React.FC<{
 
   return (
     <div className="space-y-6">
+      {/* Role Boundary Callout Banner */}
+      {isBranchManager && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-amber-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Building2 className="w-5 h-5 text-amber-700 shrink-0" />
+            <div>
+              <div className="text-xs font-montserrat font-black uppercase text-amber-900">
+                Branch Manager Scope · {currentUser.branchName}
+              </div>
+              <p className="text-xs text-amber-800">
+                Viewing regional multipliers and approved retail price tables for your branch territory. Master pricing schedules administered by Sales Management and Administration.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-lg bg-amber-200/80 text-amber-900 text-[11px] font-bold shrink-0">
+            View / Approved Edits
+          </span>
+        </div>
+      )}
+
+      {isInventory && (
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-emerald-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Package className="w-5 h-5 text-emerald-700 shrink-0" />
+            <div>
+              <div className="text-xs font-montserrat font-black uppercase text-emerald-900">
+                Inventory Controller Scope · Cost &amp; Stock Valuation Mode
+              </div>
+              <p className="text-xs text-emerald-800">
+                Landed costs, warehouse valuation, and case pack sizes are monitored here. Commercial selling margins and retail multipliers are governed by Sales Management.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-lg bg-emerald-200/80 text-emerald-900 text-[11px] font-bold shrink-0">
+            Cost / Stock Scope
+          </span>
+        </div>
+      )}
+
+      {isAffiliate && (
+        <div className="bg-purple-50 border-2 border-purple-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-purple-950 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Tag className="w-5 h-5 text-purple-700 shrink-0" />
+            <div>
+              <div className="text-xs font-montserrat font-black uppercase text-purple-900">
+                Affiliate Sales Representative Scope · Approved Price Catalogue
+              </div>
+              <p className="text-xs text-purple-800">
+                Standard approved prices for client distribution with your {currentUser.agreedCommissionPct || 8}% commission tier. Cannot alter price schedules.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-lg bg-purple-200/80 text-purple-900 text-[11px] font-bold shrink-0">
+            Approved Prices Only
+          </span>
+        </div>
+      )}
+
       <div className="bg-[#FFDE00] hover-card-lift border-2 border-[#0A006E] rounded-2xl p-5 relative overflow-hidden">
         <div className="silent-scanner-beam-dark" />
         <div className="relative z-10">
           <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-            Regional Tariff & Purchasing Parity Engine
+            Regional Tariff &amp; Purchasing Parity Engine
           </span>
           <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
             Geo-Location Alcohol Pricing Matrix (Affluent Suburb vs. Lower Region vs. Metro)
@@ -2985,6 +3624,7 @@ export const GeoPricingModule: React.FC<{
         </div>
       </div>
 
+      {canManagePricing && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Create Geo Zone */}
         <form
@@ -3131,6 +3771,7 @@ export const GeoPricingModule: React.FC<{
           </button>
         </form>
       </div>
+      )}
 
       {/* Live Comparison Table across Regions */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-3">

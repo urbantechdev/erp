@@ -230,6 +230,264 @@ export function calculateGeoPrice(
   };
 }
 
+// Target Access Model Matrix Definition
+export type AccessLevel =
+  | 'Full'
+  | 'Finance'
+  | 'HR KPIs'
+  | 'Sales KPIs'
+  | 'Branch KPIs'
+  | 'Stock KPIs'
+  | 'Manage'
+  | 'Read-only'
+  | 'Limited'
+  | 'Branch'
+  | 'Cost / stock'
+  | 'Financial view'
+  | 'Financial'
+  | 'Sales scope'
+  | 'Branch scope'
+  | 'Delivery docs'
+  | 'Own POS docs'
+  | 'Own sales docs'
+  | 'Tax reports'
+  | 'View'
+  | 'Branch view'
+  | 'Limited staff operations'
+  | 'Financial reports'
+  | 'Finance audit'
+  | 'HR audit'
+  | 'Stock scope'
+  | 'Own activity'
+  | 'Assigned POS'
+  | 'Approved prices'
+  | 'Own sales'
+  | 'None';
+
+export interface ModuleAccessItem {
+  moduleName: string;
+  moduleId: ERPModuleId;
+  permissions: Record<StaffRole, AccessLevel>;
+  description: string;
+}
+
+export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
+  {
+    moduleName: 'Executive overview',
+    moduleId: 'overview',
+    description: 'Executive dashboards, performance metrics, and operational command views.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'Finance',
+      HR: 'HR KPIs',
+      'Sales Manager': 'Sales KPIs',
+      'Branch Manager': 'Branch KPIs',
+      'Inventory Controller': 'Stock KPIs',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'Own sales',
+    },
+  },
+  {
+    moduleName: 'Retail POS',
+    moduleId: 'retail_pos',
+    description: 'Direct counter retail checkout, barcode scanning, and instant cash/M-Pesa receipting.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'None',
+      HR: 'None',
+      'Sales Manager': 'Manage',
+      'Branch Manager': 'Manage',
+      'Inventory Controller': 'None',
+      'Counter Cashier': 'Limited',
+      'Affiliate Sales Representative': 'None',
+    },
+  },
+  {
+    moduleName: 'Wholesale / sales POS',
+    moduleId: 'sales_pos',
+    description: 'Commercial B2B distributor invoicing, quote generation, and bulk sales dispatch.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'None',
+      HR: 'None',
+      'Sales Manager': 'Manage',
+      'Branch Manager': 'Limited',
+      'Inventory Controller': 'None',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'Own sales',
+    },
+  },
+  {
+    moduleName: 'Inventory',
+    moduleId: 'inventory',
+    description: 'Master IPS/LPS liquor stock, batch expiry, barcode governance, and spoilage tracking.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'None',
+      HR: 'None',
+      'Sales Manager': 'Read-only',
+      'Branch Manager': 'Branch',
+      'Inventory Controller': 'Manage',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'None',
+    },
+  },
+  {
+    moduleName: 'Transfers',
+    moduleId: 'branches_transfers',
+    description: 'Bonded inter-branch stock transfers, dispatch permits, transit logistics, and receiving.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'None',
+      HR: 'None',
+      'Sales Manager': 'Read-only',
+      'Branch Manager': 'Branch',
+      'Inventory Controller': 'Manage',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'None',
+    },
+  },
+  {
+    moduleName: 'Pricing',
+    moduleId: 'geo_pricing',
+    description: 'Geo-regional pricing multipliers, wholesale margins, freight levies, and price tiers.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'None',
+      HR: 'None',
+      'Sales Manager': 'Manage',
+      'Branch Manager': 'Branch scope',
+      'Inventory Controller': 'Cost / stock',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'Approved prices',
+    },
+  },
+  {
+    moduleName: 'Suppliers / partners',
+    moduleId: 'partners',
+    description: 'Bonded distillers, commercial importers, licensed retail partners, and fleet logistics.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'Financial view',
+      HR: 'None',
+      'Sales Manager': 'Manage',
+      'Branch Manager': 'Branch scope',
+      'Inventory Controller': 'Manage',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'None',
+    },
+  },
+  {
+    moduleName: 'Invoices / credits',
+    moduleId: 'documents_credit',
+    description: 'Commercial tax invoices, delivery notes, packing lists, quotes, and credit notes.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'Financial',
+      HR: 'None',
+      'Sales Manager': 'Sales scope',
+      'Branch Manager': 'Branch scope',
+      'Inventory Controller': 'Delivery docs',
+      'Counter Cashier': 'Own POS docs',
+      'Affiliate Sales Representative': 'Own sales docs',
+    },
+  },
+  {
+    moduleName: 'Tax / excise compliance',
+    moduleId: 'compliance',
+    description: 'KRA eTIMS fiscalization, customs bonded warehouse licenses, and digital excise stamps.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'Tax reports',
+      HR: 'None',
+      'Sales Manager': 'View',
+      'Branch Manager': 'Branch view',
+      'Inventory Controller': 'Manage',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'None',
+    },
+  },
+  {
+    moduleName: 'HR / staff / roles',
+    moduleId: 'hr_rbac',
+    description: 'Staff directory, credential provisioning, PIN access, and role assignment boundaries.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'None',
+      HR: 'Manage',
+      'Sales Manager': 'None',
+      'Branch Manager': 'Limited staff operations',
+      'Inventory Controller': 'None',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'None',
+    },
+  },
+  {
+    moduleName: 'Payroll',
+    moduleId: 'hr_rbac',
+    description: 'Salary computations, statutory deductions (PAYE, NSSF, SHIF, Housing Levy), and payslips.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'Financial reports',
+      HR: 'Manage',
+      'Sales Manager': 'None',
+      'Branch Manager': 'None',
+      'Inventory Controller': 'None',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'None',
+    },
+  },
+  {
+    moduleName: 'Audit / security',
+    moduleId: 'audit_security',
+    description: 'Zero-trust security logs, device fingerprints, auth traces, and tamper-evident audit trails.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'Finance audit',
+      HR: 'HR audit',
+      'Sales Manager': 'Sales scope',
+      'Branch Manager': 'Branch scope',
+      'Inventory Controller': 'Stock scope',
+      'Counter Cashier': 'Own activity',
+      'Affiliate Sales Representative': 'Own activity',
+    },
+  },
+  {
+    moduleName: 'Restaurant / merchant outlets',
+    moduleId: 'outlets_restaurants',
+    description: 'Bars, restaurant clubs, and merchant shops with kitchen/pantry and central liquor top-ups.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'Financial reports',
+      HR: 'None',
+      'Sales Manager': 'Manage',
+      'Branch Manager': 'Branch scope',
+      'Inventory Controller': 'Stock scope',
+      'Counter Cashier': 'Assigned POS',
+      'Affiliate Sales Representative': 'None',
+    },
+  },
+];
+
+export const ROLE_DISTINCTIONS: Record<StaffRole, string> = {
+  Accountant:
+    'Financial access must not automatically permit editing inventory, staff, product costs, or transaction histories. Allows approved accounting actions, reconciliation, financial reporting, and credit-note workflows according to policy.',
+  HR:
+    'Can manage employee records and approved role assignments, but cannot change financial records or access unrestricted business data.',
+  'Branch Manager':
+    'Access must be limited to the assigned branch and explicitly assigned business units.',
+  'Inventory Controller':
+    'Can manage stock, batches, expiry, damages, spoilage, and transfers according to their authorized warehouse or branch scope. Cannot edit sales totals or finalize payroll.',
+  'Counter Cashier':
+    'Can process permitted checkout transactions, issue receipts, and view their own permitted transaction history. Refunds, voids, and credits require supervisor approval.',
+  'Affiliate Sales Representative':
+    'Can create and track their own permitted sales and orders. Must not access another representative\'s customer records or the full company customer database.',
+  Admin:
+    'Has broad administrative access, but sensitive actions should still be audited, with strong authentication and additional confirmation for destructive operations.',
+  'Sales Manager':
+    'Oversees commercial wholesale and retail sales channels, national pricing, partner retailers, with read-only oversight of bonded inventory.',
+};
+
 // Strict Role-Based Access Control Matrix
 export const ROLE_PERMISSIONS: Record<
   StaffRole,
@@ -257,16 +515,19 @@ export const ROLE_PERMISSIONS: Record<
       'customer_portal',
       'outlets_restaurants',
     ],
-    canCreateRoles: ['HR'], // Per requirement: "just the admin to create HR then HR can create other roles"
+    canCreateRoles: ['HR'], // Admin provisions HR, who then manages other operational roles
     badgeTitle: 'Executive System Administrator (Google Auth)',
     authRequirement: 'google',
     scopeToAssignedBranch: false,
   },
   Accountant: {
-    // Per requirement: "Accountant portal should only be able to deal with accounting issues"
     allowedModules: [
       'overview',
+      'partners',
       'documents_credit',
+      'compliance',
+      'audit_security',
+      'outlets_restaurants',
     ],
     canCreateRoles: [],
     badgeTitle: 'Chief Financial Accountant (Google Auth)',
@@ -274,7 +535,7 @@ export const ROLE_PERMISSIONS: Record<
     scopeToAssignedBranch: false,
   },
   HR: {
-    allowedModules: ['overview', 'hr_rbac', 'branches_transfers', 'audit_security'],
+    allowedModules: ['overview', 'hr_rbac', 'audit_security'],
     canCreateRoles: [
       'Accountant',
       'Sales Manager',
@@ -290,13 +551,17 @@ export const ROLE_PERMISSIONS: Record<
   'Sales Manager': {
     allowedModules: [
       'overview',
-      'sales_pos',
       'retail_pos',
+      'sales_pos',
+      'inventory',
+      'branches_transfers',
       'geo_pricing',
       'partners',
       'documents_credit',
-      'customer_portal',
+      'compliance',
+      'audit_security',
       'outlets_restaurants',
+      'customer_portal',
     ],
     canCreateRoles: [],
     badgeTitle: 'National Distribution Sales Manager (6-Digit PIN)',
@@ -310,11 +575,14 @@ export const ROLE_PERMISSIONS: Record<
       'sales_pos',
       'inventory',
       'branches_transfers',
+      'geo_pricing',
+      'partners',
       'documents_credit',
+      'compliance',
       'hr_rbac',
+      'audit_security',
       'outlets_restaurants',
     ],
-    // Per requirement: "Branch manager should have capacity to also create sales persons and their cashier"
     canCreateRoles: ['Counter Cashier', 'Affiliate Sales Representative'],
     badgeTitle: 'Regional Branch Manager (6-Digit PIN)',
     authRequirement: 'pin',
@@ -325,9 +593,11 @@ export const ROLE_PERMISSIONS: Record<
       'overview',
       'inventory',
       'branches_transfers',
+      'geo_pricing',
       'partners',
-      'compliance',
       'documents_credit',
+      'compliance',
+      'audit_security',
       'outlets_restaurants',
     ],
     canCreateRoles: [],
@@ -336,20 +606,26 @@ export const ROLE_PERMISSIONS: Record<
     scopeToAssignedBranch: false,
   },
   'Counter Cashier': {
-    allowedModules: ['retail_pos', 'documents_credit'],
+    allowedModules: ['retail_pos', 'documents_credit', 'audit_security', 'outlets_restaurants'],
     canCreateRoles: [],
     badgeTitle: 'Retail Checkout Counter Cashier (6-Digit PIN)',
     authRequirement: 'pin',
     scopeToAssignedBranch: true,
   },
   'Affiliate Sales Representative': {
-    allowedModules: ['sales_pos', 'documents_credit', 'customer_portal'],
+    allowedModules: ['overview', 'sales_pos', 'geo_pricing', 'documents_credit', 'audit_security', 'customer_portal'],
     canCreateRoles: [],
     badgeTitle: 'Field & Affiliate Sales Representative (6-Digit PIN)',
     authRequirement: 'pin',
     scopeToAssignedBranch: true,
   },
 };
+
+export function getRoleAccessLevel(role: StaffRole, moduleId: ERPModuleId): AccessLevel {
+  const item = TARGET_ACCESS_MATRIX.find((m) => m.moduleId === moduleId);
+  if (!item) return 'None';
+  return item.permissions[role] || 'None';
+}
 
 // Export any dataset to CSV
 export function exportToCSV(filename: string, headers: string[], rows: (string | number)[][]): void {
