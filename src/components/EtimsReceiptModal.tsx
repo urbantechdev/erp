@@ -45,8 +45,8 @@ export const EtimsReceiptModal: React.FC<Props> = ({ receipt, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[92vh] overflow-y-auto border border-slate-300 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-none sm:rounded-2xl shadow-2xl max-w-none sm:max-w-md w-full h-full sm:h-auto sm:max-h-[92vh] overflow-y-auto border-0 sm:border border-slate-300 animate-in fade-in zoom-in-95 duration-200">
         {/* Receipt Header Banner */}
         <div className="bg-[#0A006E] text-white p-4 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center space-x-2.5">

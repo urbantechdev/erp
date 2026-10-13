@@ -277,8 +277,12 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
           wholesalePriceKes: wholesale,
           baseRetailPrice: retail,
           retailPriceKes: retail,
-          totalBottles: stock,
-          branchStockSummary: JSON.stringify(branchMap),
+          // Newly uploaded CSV products become unavailable on all dashboards until scanned by Branch Manager
+          isOnboarded: false,
+          status: 'Pending Onboarding',
+          pendingActivationBottles: stock,
+          totalBottles: 0,
+          branchStockSummary: JSON.stringify({}),
           geoPriceOverrides: JSON.stringify({}),
           rowNumber: r,
           isValid: true,
@@ -302,16 +306,15 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
     setImportProgress(10);
 
     try {
-      // Re-map target branch if selected branch changed
       const productsToSave = validProducts.map((p) => {
-        const branchMap: Record<string, number> = {};
-        branches.forEach((b) => {
-          branchMap[b.id] = b.id === targetBranchId ? (p.totalBottles ?? 0) : 0;
-        });
         const { rowNumber, isValid, validationError, ...rest } = p;
         return {
           ...rest,
-          branchStockSummary: JSON.stringify(branchMap),
+          isOnboarded: false,
+          status: 'Pending Onboarding' as const,
+          pendingActivationBottles: p.pendingActivationBottles ?? 12,
+          totalBottles: 0,
+          branchStockSummary: JSON.stringify({}),
         };
       });
 
@@ -322,7 +325,7 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
       const targetBranchName = branches.find((b) => b.id === targetBranchId)?.name || 'HQ - Main Branch';
       setImportSummary({
         count: importedCount,
-        message: `Successfully imported ${importedCount} authentic liquor products into Bonded Master Inventory allocated to ${targetBranchName}.`,
+        message: `Successfully uploaded ${importedCount} products as Pending Onboarding. In compliance with branch inventory governance, all items remain unavailable on dashboards until the Branch Manager scans barcodes in "Onboard Items" to activate stock and branch assets.`,
       });
 
       // Clear file after short delay
@@ -343,8 +346,8 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-0 sm:p-5 overflow-y-auto">
+      <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-4xl w-full h-full sm:h-auto sm:max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Modal Header */}
         <div className="bg-[#0A006E] text-white px-6 py-4 flex items-center justify-between border-b border-slate-700">
           <div className="flex items-center gap-3">

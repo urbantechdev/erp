@@ -69,10 +69,19 @@ body {
   font-family: 'Raleway', sans-serif;
 }
 
-.font-mono-tabular {
-  font-family: 'JetBrains Mono', monospace;
+.font-mono-tabular,
+.dashboard-digits,
+.stat-digits,
+.font-digits,
+.font-mono,
+.tabular-nums,
+[data-digit],
+.stat-value {
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   font-variant-numeric: tabular-nums;
+  font-weight: 700 !important;
 }
+
 
 /* Custom scrollbars for high density ERP data */
 ::-webkit-scrollbar {
@@ -328,3 +337,25 @@ div.bg-white.rounded-xl:not(.fixed *):hover,
     border: none !important;
   }
 }
+
+/* Requirement 3: Ensure any window/modal opening on mobile phone goes full screen */
+@media (max-width: 639px) {
+  /* Outer modal containers reset padding on mobile */
+  .fixed.inset-0.z-50:not([role="alertdialog"]):not([role="status"]),
+  .fixed.inset-0.z-\[9999\]:not([role="alertdialog"]):not([role="status"]) {
+    padding: 0 !important;
+  }
+
+  /* Inner modal dialog windows take full screen on mobile phones */
+  .fixed.inset-0:not([role="alertdialog"]):not([role="status"]) > div:not(.animate-backdrop-auto-lifecycle):not(.feedback-dialog):not(.silent-scanner-beam):not(.silent-scanner-beam-dark) {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    margin: 0 !important;
+  }
+}
+

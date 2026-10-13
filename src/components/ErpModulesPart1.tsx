@@ -27,6 +27,9 @@ import {
   PackageX,
   BarChart3,
   Scale,
+  Barcode,
+  ShoppingCart,
+  TrendingUp,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -57,6 +60,7 @@ import { CsvInventoryImportModal } from './CsvInventoryImportModal';
 import { AccountantFinancialDashboard } from './AccountantFinancialDashboard';
 import { StockThresholdsGovernanceModal } from './StockThresholdsGovernanceModal';
 import { LogDamageSpoilageModal } from './LogDamageSpoilageModal';
+import { SalesPeriodTracker } from './SalesPeriodTracker';
 
 // ---------------------------------------------------------------------------
 // 1. OVERVIEW DASHBOARD
@@ -74,6 +78,8 @@ export const OverviewModule: React.FC<{
   payrollRuns?: PayrollRun[];
   onOpenPayslip?: (record: PayrollRecord) => void;
   onPreviewDoc: (doc: TransactionDoc) => void;
+  onOpenOnboardItems?: () => void;
+  onNavigateModule?: (module: any) => void;
 }> = ({
   currentUser,
   products,
@@ -87,6 +93,8 @@ export const OverviewModule: React.FC<{
   payrollRuns = [],
   onOpenPayslip,
   onPreviewDoc,
+  onOpenOnboardItems,
+  onNavigateModule,
 }) => {
   const isAccountant = currentUser.role === 'Accountant';
   const [adminOverviewView, setAdminOverviewView] = useState<'executive' | 'accounting'>('executive');
@@ -202,28 +210,180 @@ export const OverviewModule: React.FC<{
 
   return (
     <div className="space-y-6">
-      {/* VAAIRO Signature Yellow Hero Banner */}
-      <div className="bg-[#FFDE00] hover-card-lift border-2 border-[#0A006E] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden">
+      {/* 1. Mobile Only: Native App-Style Action Buttons Grid (ZERO bulky hero covering the screen) */}
+      <div className="block sm:hidden space-y-2">
+        {/* Mobile App Quick-Action Touch Grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {/* Button 1: Retail POS */}
+          <button
+            type="button"
+            onClick={() => onNavigateModule?.('retail_pos')}
+            className="p-3 bg-white border-2 border-[#0A006E] active:bg-[#FFDE00]/20 rounded-2xl flex flex-col justify-between text-left cursor-pointer shadow-xs active:scale-95 transition-all min-h-[76px]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                <ShoppingCart className="w-4 h-4 stroke-[2.4]" />
+              </div>
+              <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase">Counter</span>
+            </div>
+            <div>
+              <div className="text-xs font-montserrat font-black text-[#0A006E] leading-tight">Retail POS</div>
+              <div className="text-[10px] text-slate-500">Fast checkout</div>
+            </div>
+          </button>
+
+          {/* Button 2: Wholesale POS */}
+          <button
+            type="button"
+            onClick={() => onNavigateModule?.('sales_pos')}
+            className="p-3 bg-white border-2 border-[#0A006E] active:bg-[#34D186]/20 rounded-2xl flex flex-col justify-between text-left cursor-pointer shadow-xs active:scale-95 transition-all min-h-[76px]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shadow-xs">
+                <Building2 className="w-4 h-4 stroke-[2.4]" />
+              </div>
+              <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase">B2B</span>
+            </div>
+            <div>
+              <div className="text-xs font-montserrat font-black text-[#0A006E] leading-tight">Wholesale POS</div>
+              <div className="text-[10px] text-slate-500">Bulk Invoicing</div>
+            </div>
+          </button>
+
+          {/* Button 3: Onboard Items & Barcode Scanner (Branch Manager / Inventory / Admin) */}
+          {onOpenOnboardItems && (currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || currentUser.role === 'Inventory Controller') && (
+            <button
+              type="button"
+              onClick={onOpenOnboardItems}
+              className="p-3 bg-[#34D186] border-2 border-[#0A006E] active:bg-[#28B873] text-[#0A006E] rounded-2xl flex flex-col justify-between text-left cursor-pointer shadow-xs active:scale-95 transition-all min-h-[76px]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#34D186] flex items-center justify-center shadow-xs">
+                  <Barcode className="w-4 h-4 stroke-[2.4]" />
+                </div>
+                <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase">Scanner</span>
+              </div>
+              <div>
+                <div className="text-xs font-montserrat font-black text-[#0A006E] leading-tight">Onboard Items</div>
+                <div className="text-[10px] text-slate-900 font-semibold">Scan &amp; activate stock</div>
+              </div>
+            </button>
+          )}
+
+          {/* Button 4: Sales Reports (Scroll to Today / Week / Month / Year) */}
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById('sales-period-section');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="p-3 bg-[#FFDE00] border-2 border-[#0A006E] active:bg-amber-400 text-[#0A006E] rounded-2xl flex flex-col justify-between text-left cursor-pointer shadow-xs active:scale-95 transition-all min-h-[76px]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                <TrendingUp className="w-4 h-4 stroke-[2.4]" />
+              </div>
+              <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase">Live</span>
+            </div>
+            <div>
+              <div className="text-xs font-montserrat font-black text-[#0A006E] leading-tight">Sales Ledger</div>
+              <div className="text-[10px] text-slate-900 font-semibold">Today · Week · Month</div>
+            </div>
+          </button>
+
+          {/* Button 5: Financial Oversight (Admin only) */}
+          {currentUser.role === 'Admin' && (
+            <button
+              type="button"
+              onClick={() => setAdminOverviewView('accounting')}
+              className="p-3 bg-white border-2 border-[#0A006E] active:bg-slate-100 text-[#0A006E] rounded-2xl flex flex-col justify-between text-left cursor-pointer shadow-xs active:scale-95 transition-all min-h-[76px]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-white flex items-center justify-center shadow-xs">
+                  <BarChart3 className="w-4 h-4 stroke-[2.4]" />
+                </div>
+                <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase">Ledger</span>
+              </div>
+              <div>
+                <div className="text-xs font-montserrat font-black text-[#0A006E] leading-tight">Financials</div>
+                <div className="text-[10px] text-slate-500">P&amp;L oversight</div>
+              </div>
+            </button>
+          )}
+
+          {/* Button 6: Thermal Payslip / Statement */}
+          {latestPayrollRecord ? (
+            <button
+              type="button"
+              onClick={() => onOpenPayslip?.(latestPayrollRecord)}
+              className="p-3 bg-white border-2 border-[#0A006E] active:bg-[#FFDE00]/20 text-[#0A006E] rounded-2xl flex flex-col justify-between text-left cursor-pointer shadow-xs active:scale-95 transition-all min-h-[76px]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                  <Printer className="w-4 h-4 stroke-[2.2]" />
+                </div>
+                <span className="text-[10px] font-montserrat font-black text-[#1E9E60] uppercase">Paid</span>
+              </div>
+              <div>
+                <div className="text-xs font-montserrat font-black text-[#0A006E] leading-tight">My Payslip</div>
+                <div className="text-[10px] font-mono-tabular font-bold text-slate-800">
+                  KES {latestPayrollRecord.netSalary.toLocaleString()}
+                </div>
+              </div>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleDownloadStatementPDF}
+              className="p-3 bg-white border-2 border-[#0A006E] active:bg-slate-100 text-[#0A006E] rounded-2xl flex flex-col justify-between text-left cursor-pointer shadow-xs active:scale-95 transition-all min-h-[76px]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                  <Download className="w-4 h-4 stroke-[2.2]" />
+                </div>
+                <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase">Export</span>
+              </div>
+              <div>
+                <div className="text-xs font-montserrat font-black text-[#0A006E] leading-tight">PDF Statement</div>
+                <div className="text-[10px] text-slate-500">Full audit print</div>
+              </div>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Desktop/Tablet: Streamlined Hero Bar (Hidden on Mobile) */}
+      <div className="hidden sm:flex bg-[#FFDE00] border-2 border-[#0A006E] rounded-2xl py-3.5 px-5 items-center justify-between gap-4 relative overflow-hidden shadow-xs">
         <div className="silent-scanner-beam-dark" />
-        <div className="relative z-10">
-          <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+        <div className="relative z-10 min-w-0">
+          <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider block">
             {ROLE_PERMISSIONS[currentUser.role].badgeTitle}
           </span>
-          <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
+          <h2 className="text-base lg:text-lg font-montserrat font-black italic text-[#0A006E] truncate mt-0.5">
             {scopedBranchId
               ? `Regional Branch Command · ${currentUser.branchName}`
               : 'National Importer & Multi-Branch Operations Center'}
           </h2>
-          <p className="text-xs font-medium text-slate-900 mt-0.5">
+          <p className="text-[11px] font-medium text-slate-900 truncate">
             Real-time IPS/LPS excise inventory valuation, regional price governance, and commercial ledger monitoring.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 relative z-10 flex-wrap">
+        <div className="flex items-center gap-2 relative z-10 shrink-0">
+          {onOpenOnboardItems && (currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || currentUser.role === 'Inventory Controller') && (
+            <button
+              type="button"
+              onClick={onOpenOnboardItems}
+              className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-md transition active:scale-95"
+            >
+              <Barcode className="w-3.5 h-3.5 text-[#0A006E]" />
+              Onboard Items
+            </button>
+          )}
           {currentUser.role === 'Admin' && (
             <button
               onClick={() => setAdminOverviewView('accounting')}
-              className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-md"
+              className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-md"
             >
               <BarChart3 className="w-3.5 h-3.5 text-[#FFDE00]" />
               Financial Analysis
@@ -231,14 +391,14 @@ export const OverviewModule: React.FC<{
           )}
           <button
             onClick={handleDownloadStatementPDF}
-            className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-md"
+            className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-md"
           >
             <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
-            Export PDF Statement
+            PDF Statement
           </button>
           <button
             onClick={handleDownloadStatementCSV}
-            className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] hover:bg-slate-50 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+            className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] hover:bg-slate-50 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5 text-[#0A006E]" />
             Export CSV
@@ -246,8 +406,8 @@ export const OverviewModule: React.FC<{
         </div>
       </div>
 
-      {/* Employee Remuneration & Thermal Payslip Card */}
-      <div className="bg-white border-2 border-[#0A006E]/20 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
+      {/* 3. Desktop Only: Employee Remuneration & Thermal Payslip Card (Hidden on Mobile) */}
+      <div className="hidden sm:flex bg-white border-2 border-[#0A006E]/20 rounded-2xl p-4 sm:p-5 flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
         <div className="flex items-start sm:items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-md">
             <Receipt className="w-6 h-6 stroke-[2.2]" />
@@ -255,7 +415,7 @@ export const OverviewModule: React.FC<{
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-                Employee Compensation & Thermal Payslip
+                Employee Compensation &amp; Thermal Payslip
               </span>
               {latestPayrollRecord ? (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#34D186]/25 text-[#1E9E60] border border-[#34D186]/60">
@@ -295,6 +455,16 @@ export const OverviewModule: React.FC<{
             </div>
           )}
         </div>
+      </div>
+
+      {/* 4. SALES FOR TODAY, THIS WEEK, THIS MONTH, THIS YEAR & CSV/PDF EXPORT */}
+      <div id="sales-period-section">
+        <SalesPeriodTracker
+          transactions={visibleTransactions}
+          currentUser={currentUser}
+          onPreviewDoc={onPreviewDoc}
+          onNavigateToPos={(mode) => onNavigateModule?.(mode === 'retail' ? 'retail_pos' : 'sales_pos')}
+        />
       </div>
 
       {/* 4 KPI Blocks on Bright Grey (#F0F2F0) */}
@@ -481,6 +651,7 @@ export const InventoryModule: React.FC<{
   onBatchCreateProducts?: (prods: Omit<Product, 'id' | 'createdAt'>[]) => Promise<number>;
   onUpdateProduct?: (productId: string, updates: Partial<Product>) => Promise<void>;
   onLogStockIncident?: (incident: DamageSpoilageIncident) => Promise<void>;
+  onOpenOnboardItems?: () => void;
 }> = ({
   currentUser,
   products,
@@ -489,6 +660,7 @@ export const InventoryModule: React.FC<{
   onBatchCreateProducts,
   onUpdateProduct,
   onLogStockIncident,
+  onOpenOnboardItems,
 }) => {
   const isInventoryPerson =
     currentUser.role === 'Inventory Controller' ||
@@ -912,46 +1084,104 @@ export const InventoryModule: React.FC<{
 
   return (
     <div className="space-y-6">
-      {/* VAAIRO Yellow Hero Banner */}
-      <div className="bg-[#FFDE00] hover-card-lift border-2 border-[#0A006E] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden">
+      {/* Mobile Only: Action Buttons Row (Hero banner removed on mobile) */}
+      <div className="flex sm:hidden items-center gap-2 overflow-x-auto pb-1 pt-1">
+        {onOpenOnboardItems && (
+          <button
+            type="button"
+            onClick={onOpenOnboardItems}
+            className="flex-1 min-w-[130px] px-3 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition active:scale-95 whitespace-nowrap"
+          >
+            <Barcode className="w-3.5 h-3.5 text-[#0A006E]" />
+            Onboard Items
+          </button>
+        )}
+        {canEditProduct && (
+          <button
+            type="button"
+            onClick={() => setIsCsvModalOpen(true)}
+            className="flex-1 min-w-[120px] px-3 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition active:scale-95 whitespace-nowrap"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Upload CSV
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleExportInventoryPDF}
+          className="flex-1 min-w-[110px] px-3 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition active:scale-95 whitespace-nowrap"
+        >
+          <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
+          PDF Export
+        </button>
+        <button
+          type="button"
+          onClick={handleExportInventoryCSV}
+          className="flex-1 min-w-[110px] px-3 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition active:scale-95 whitespace-nowrap"
+        >
+          <Download className="w-3.5 h-3.5 text-[#0A006E]" />
+          CSV Export
+        </button>
+      </div>
+
+      {/* Desktop/Tablet: Minimalized Streamlined Hero Bar (Hidden on Mobile) */}
+      <div className="hidden sm:flex bg-[#FFDE00] border-2 border-[#0A006E] rounded-2xl py-3 px-5 items-center justify-between gap-4 relative overflow-hidden shadow-xs">
         <div className="silent-scanner-beam-dark" />
-        <div className="relative z-10">
-          <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-            Bonded Warehouse & Auto-SKU Controller ({products.length} Master SKUs Imported)
-          </span>
-          <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
-            IPS (Imported) & LPS (Local) Liquor Inventory + Auto-SKU Engine
-          </h2>
-          <p className="text-xs font-medium text-slate-900 mt-0.5">
-            Complete with all 12 Liquor Categories from the VAAIRO catalog and deterministic Auto-SKU generation for new products.
-          </p>
+        <div className="relative z-10 flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-xs">
+            <Package className="w-5 h-5 stroke-[2.2]" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-montserrat font-black italic text-[#0A006E] truncate">
+                Liquor Inventory &amp; Auto-SKU Controller
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-montserrat font-black bg-[#0A006E] text-[#FFDE00] whitespace-nowrap">
+                {products.length} SKUs
+              </span>
+            </div>
+            <p className="text-[11px] font-medium text-slate-900 truncate">
+              IPS imported &amp; LPS local stock valuation, excise bond registers, and deterministic catalog.
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 relative z-10 flex-wrap">
+
+        <div className="flex items-center gap-2 relative z-10 shrink-0">
+          {onOpenOnboardItems && (
+            <button
+              type="button"
+              onClick={onOpenOnboardItems}
+              className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] border border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap"
+            >
+              <Barcode className="w-3.5 h-3.5 text-[#FFDE00]" />
+              Onboard Items
+            </button>
+          )}
           {canEditProduct && (
             <button
               type="button"
               onClick={() => setIsCsvModalOpen(true)}
-              className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition"
+              className="px-3 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap"
             >
               <Upload className="w-3.5 h-3.5" />
-              Upload CSV Inventory
+              Upload CSV
             </button>
           )}
           <button
             type="button"
             onClick={handleExportInventoryPDF}
-            className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md"
+            className="px-3 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
-            Download PDF
+            PDF
           </button>
           <button
             type="button"
             onClick={handleExportInventoryCSV}
-            className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-2 bg-white hover:bg-slate-50 border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer transition whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5 text-[#0A006E]" />
-            Download CSV
+            CSV
           </button>
         </div>
       </div>
@@ -1649,8 +1879,8 @@ export const InventoryModule: React.FC<{
 
       {/* Product Edit & Image Upload Modal (Strictly for Inventory Controller & Admin) */}
       {editingProduct && canEditProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/80 backdrop-blur-xs overflow-y-auto">
+          <div className="relative w-full max-w-none sm:max-w-2xl h-full sm:h-auto bg-white rounded-none sm:rounded-3xl border-0 sm:border border-slate-200 shadow-2xl overflow-hidden my-0 sm:my-auto sm:max-h-[92vh] flex flex-col">
             {/* Modal Header */}
             <div className="px-6 py-4 bg-[#0A006E] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
@@ -2449,8 +2679,8 @@ export const BranchesAndTransfersModule: React.FC<{
 
       {/* Delete Branch Confirmation Modal */}
       {branchToDelete && (
-        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border-2 border-[#0A006E] p-6 max-w-md w-full shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-none sm:rounded-2xl border-0 sm:border-2 border-[#0A006E] p-6 max-w-none sm:max-w-md w-full h-full sm:h-auto shadow-2xl space-y-4 flex flex-col justify-between sm:justify-start">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
                 <Trash2 className="w-5 h-5 text-rose-600" />

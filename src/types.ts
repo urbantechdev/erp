@@ -36,6 +36,8 @@ export interface StaffMember {
   pin?: string;
   branchId: string;
   branchName: string;
+  businessUnitId?: string;
+  businessUnitName?: string;
   status: 'Active' | 'Suspended' | 'Terminated';
   createdBy: string;
   createdByRole: string;
@@ -52,6 +54,11 @@ export interface StaffMember {
   kraPin?: string;
   nssfNo?: string;
   nhifNo?: string;
+
+  // Casual Sales Representative specific attributes
+  isCasual?: boolean;
+  agreedCommissionPct?: number; // e.g. 5, 8, 10%
+  casualDailyRateKes?: number;
 }
 
 export interface PayrollRecord {
@@ -98,6 +105,51 @@ export interface Branch {
   exciseBondLicense: string;
   status: 'Operational' | 'Audit Hold' | 'Closed';
   isMain?: boolean;
+  createdAt: string;
+}
+
+export type BusinessUnitType = 'restaurant_club' | 'merchant_shop' | 'bar_lounge';
+
+export interface BusinessUnit {
+  id: string;
+  code: string;
+  name: string;
+  branchId: string;
+  branchName: string;
+  unitType: BusinessUnitType;
+  description?: string;
+  managerName?: string;
+  managerStaffId?: string;
+  assignedStaffIds?: string[];
+  status: 'Active' | 'Inactive';
+  foodCategories: string[]; // Custom food categories for restaurant
+  beverageCategories: string[]; // Custom beverage categories
+  allowLiquorTopup: boolean; // allow adding liquor/cigar/shisha topups from central bonded inventory
+  tableCount?: number;
+  currency?: string; // 'KES'
+  createdAt: string;
+}
+
+export type RestaurantItemType = 'food' | 'beverage' | 'club_amenity' | 'tobacco_sigger' | 'shisha';
+
+export interface RestaurantInventoryItem {
+  id: string;
+  businessUnitId: string;
+  businessUnitName: string;
+  branchId: string;
+  name: string;
+  category: string; // One of the businessUnit food or beverage categories
+  itemType: RestaurantItemType;
+  portionUnit: string; // 'Plate' | 'Portion' | 'Glass' | 'Cup' | 'Stick' | 'Head' | 'Bottle' | 'Serving'
+  costPriceKes: number;
+  sellingPriceKes: number;
+  portionsAvailable: number; // Current live kitchen/pantry stock
+  minStockAlert: number;
+  prepTimeMinutes?: number;
+  isAvailable: boolean;
+  description?: string;
+  allergens?: string;
+  image?: string;
   createdAt: string;
 }
 
@@ -188,6 +240,14 @@ export interface Product {
   spoiledBottlesCount?: number;
   lastStockMovementDate?: string;
   stockIncidentsJson?: string;
+
+  // Onboarding & Activation by Branch Manager
+  isOnboarded?: boolean;
+  status?: 'Active' | 'Pending Onboarding' | 'Inactive';
+  pendingActivationBottles?: number;
+  onboardedAt?: string;
+  onboardedBy?: string;
+  onboardedBranchId?: string;
 }
 
 export interface DamageSpoilageIncident {
@@ -282,21 +342,27 @@ export interface LineItem {
   productId: string;
   sku: string;
   name: string;
-  unitMode: 'Bottle' | 'Case';
+  unitMode: 'Bottle' | 'Case' | 'Portion' | 'Plate' | 'Glass' | 'Cup' | 'Stick' | 'Head' | 'Serving';
   bottlesPerCase: number;
   quantityUnits: number;
   totalBottles: number;
   unitPrice: number;
   lineTotal: number;
+  isTopup?: boolean;
+  topupType?: 'liquor' | 'sigger' | 'shisha' | 'amenity';
+  businessUnitId?: string;
 }
 
 export interface TransactionDoc {
   id: string;
   docNumber: string;
   docType: DocType;
-  channel: 'Retail Counter POS' | 'B2B Wholesale POS' | 'Customer Online Portal' | 'Affiliate Rep';
+  channel: 'Retail Counter POS' | 'B2B Wholesale POS' | 'Customer Online Portal' | 'Affiliate Rep' | 'Restaurant & Club POS' | 'Merchant Shop POS';
   branchId: string;
   branchName: string;
+  businessUnitId?: string;
+  businessUnitName?: string;
+  tableNumber?: string;
   regionId: string;
   regionName: string;
   customerName: string;
@@ -356,4 +422,5 @@ export type ERPModuleId =
   | 'compliance'
   | 'hr_rbac'
   | 'audit_security'
-  | 'customer_portal';
+  | 'customer_portal'
+  | 'outlets_restaurants';

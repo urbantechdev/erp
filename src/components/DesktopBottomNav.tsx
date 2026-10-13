@@ -19,6 +19,7 @@ import {
   Maximize2,
   Minimize2,
   Calendar,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { ERPModuleId, StaffMember } from '../types';
 
@@ -50,6 +51,7 @@ const MODULE_NAV_DEFINITIONS: Record<
   hr_rbac: { label: 'HR & Role Provisioning', shortLabel: 'HR & Roles', icon: UserPlus },
   audit_security: { label: 'Security & Audit Logs', shortLabel: 'Security', icon: Activity },
   customer_portal: { label: 'Customer Online Store', shortLabel: 'Online Store', icon: ShoppingBag },
+  outlets_restaurants: { label: 'Branch Outlets & Restaurants', shortLabel: 'Outlets', icon: UtensilsCrossed },
 };
 
 export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
@@ -265,11 +267,11 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
       {isMobileModulesSheetOpen && (
         <div
           onClick={() => setIsMobileModulesSheetOpen(false)}
-          className="md:hidden fixed inset-0 z-[47] bg-black/65 backdrop-blur-xs flex flex-col justify-end pb-[6.5rem] animate-in fade-in"
+          className="md:hidden fixed inset-0 z-[47] bg-black/65 backdrop-blur-xs flex flex-col justify-end animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-t-3xl max-h-[74vh] flex flex-col overflow-hidden border-t-4 border-[#FFDE00] shadow-2xl"
+            className="bg-white rounded-none sm:rounded-t-3xl h-full sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden border-t-0 sm:border-t-4 border-[#FFDE00] shadow-2xl"
           >
             <div className="w-10 h-1.5 bg-slate-300 rounded-full mx-auto mt-2.5" />
             <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">

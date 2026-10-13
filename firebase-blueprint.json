@@ -220,6 +220,52 @@
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["period", "runDate", "runBy", "totalDisbursed", "totalEmployees", "status", "recordsJson", "createdAt"]
+    },
+    "BusinessUnit": {
+      "title": "BusinessUnit",
+      "description": "Sub-business unit or commercial outlet under a branch, such as a restaurant/club or merchant liquor supermarket",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 48 },
+        "name": { "type": "string", "maxLength": 160 },
+        "branchId": { "type": "string", "maxLength": 128 },
+        "branchName": { "type": "string", "maxLength": 120 },
+        "unitType": { "type": "string", "enum": ["restaurant_club", "merchant_shop", "bar_lounge"] },
+        "description": { "type": "string", "maxLength": 300 },
+        "managerName": { "type": "string", "maxLength": 120 },
+        "assignedStaffIds": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] },
+        "foodCategories": { "type": "array", "items": { "type": "string" } },
+        "beverageCategories": { "type": "array", "items": { "type": "string" } },
+        "allowLiquorTopup": { "type": "boolean" },
+        "tableCount": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["code", "name", "branchId", "branchName", "unitType", "status", "createdAt"]
+    },
+    "RestaurantInventoryItem": {
+      "title": "RestaurantInventoryItem",
+      "description": "Separate pantry, kitchen, or club inventory item for restaurant outlets with custom pricing and categories",
+      "type": "object",
+      "properties": {
+        "businessUnitId": { "type": "string", "maxLength": 128 },
+        "businessUnitName": { "type": "string", "maxLength": 160 },
+        "branchId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 180 },
+        "category": { "type": "string", "maxLength": 80 },
+        "itemType": { "type": "string", "enum": ["food", "beverage", "club_amenity", "tobacco_sigger", "shisha"] },
+        "portionUnit": { "type": "string", "maxLength": 40 },
+        "costPriceKes": { "type": "number" },
+        "sellingPriceKes": { "type": "number" },
+        "portionsAvailable": { "type": "number" },
+        "minStockAlert": { "type": "number" },
+        "prepTimeMinutes": { "type": "number" },
+        "isAvailable": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 400 },
+        "allergens": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["businessUnitId", "branchId", "name", "category", "itemType", "portionUnit", "costPriceKes", "sellingPriceKes", "portionsAvailable", "createdAt"]
     }
   },
   "firestore": {
@@ -234,6 +280,14 @@
     "/branches/{branchId}": {
       "schema": { "$ref": "#/entities/Branch" },
       "description": "Distribution branches and warehouses"
+    },
+    "/business_units/{unitId}": {
+      "schema": { "$ref": "#/entities/BusinessUnit" },
+      "description": "Commercial outlets (restaurants, clubs, liquor supermarkets) operating under a branch"
+    },
+    "/restaurant_inventory/{itemId}": {
+      "schema": { "$ref": "#/entities/RestaurantInventoryItem" },
+      "description": "Separate food, beverage, and club amenity inventory items scoped to restaurant outlets"
     },
     "/geo_regions/{regionId}": {
       "schema": { "$ref": "#/entities/GeoRegion" },

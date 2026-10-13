@@ -167,8 +167,8 @@ export const ThermalPayslipModal: React.FC<ThermalPayslipModalProps> = ({ record
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-[420px] bg-slate-900 rounded-3xl border border-slate-700 shadow-2xl overflow-hidden my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/80 backdrop-blur-xs overflow-y-auto">
+      <div className="relative w-full max-w-none sm:max-w-[420px] h-full sm:h-auto bg-slate-900 rounded-none sm:rounded-3xl border-0 sm:border border-slate-700 shadow-2xl overflow-y-auto my-0 sm:my-auto flex flex-col">
         {/* Modal Top Bar */}
         <div className="px-5 py-3.5 bg-slate-800 border-b border-slate-700 flex items-center justify-between text-white">
           <div className="flex items-center gap-2">

@@ -42,7 +42,7 @@ interface AccountantFinancialDashboardProps {
   onPreviewDoc?: (doc: TransactionDoc) => void;
 }
 
-type DateFilter = 'ALL' | '30D' | '7D' | 'TODAY';
+type DateFilter = 'ALL' | 'YEAR' | 'MONTH' | 'WEEK' | 'TODAY';
 type ActiveFinanceTab = 'summary' | 'sales' | 'stock' | 'deadstock_damages' | 'tax_credit';
 
 export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboardProps> = ({
@@ -61,18 +61,25 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
   // Filter transactions based on date filter
   const filteredTransactions = useMemo(() => {
     const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const dayOfWeek = now.getDay();
+    const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday, 0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const startOfYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+
     return transactions.filter((tx) => {
       if (selectedBranchFilter !== 'ALL' && tx.branchId !== selectedBranchFilter) {
         return false;
       }
       if (dateFilter === 'ALL') return true;
       const txDate = new Date(tx.createdAt);
-      const diffMs = now.getTime() - txDate.getTime();
-      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      if (isNaN(txDate.getTime())) return false;
 
-      if (dateFilter === 'TODAY') return diffDays <= 1;
-      if (dateFilter === '7D') return diffDays <= 7;
-      if (dateFilter === '30D') return diffDays <= 30;
+      if (dateFilter === 'TODAY') return txDate >= startOfToday && txDate <= now;
+      if (dateFilter === 'WEEK') return txDate >= startOfWeek && txDate <= now;
+      if (dateFilter === 'MONTH') return txDate >= startOfMonth && txDate <= now;
+      if (dateFilter === 'YEAR') return txDate >= startOfYear && txDate <= now;
       return true;
     });
   }, [transactions, dateFilter, selectedBranchFilter]);
@@ -398,8 +405,49 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
 
   return (
     <div className="space-y-6">
-      {/* ACCOUNTANT COMMAND HEADER */}
-      <div className="bg-[#0A006E] text-white border-2 border-[#FFDE00] rounded-2xl p-5 relative overflow-hidden shadow-xl">
+      {/* Mobile Only: Compact App Action Dock (Bulky Hero Removed) */}
+      <div className="flex sm:hidden items-center gap-2 overflow-x-auto pb-1 pt-0.5">
+        <div className="bg-slate-100 p-1 rounded-xl border border-slate-300 flex items-center text-xs shrink-0">
+          {(['ALL', 'YEAR', 'MONTH', 'WEEK', 'TODAY'] as DateFilter[]).map((period) => (
+            <button
+              key={period}
+              onClick={() => setDateFilter(period)}
+              className={`px-2.5 py-1.5 rounded-lg font-montserrat font-bold text-xs transition cursor-pointer ${
+                dateFilter === period
+                  ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs'
+                  : 'text-slate-600 active:text-slate-900'
+              }`}
+            >
+              {period === 'ALL'
+                ? 'All'
+                : period === 'YEAR'
+                ? 'Year'
+                : period === 'MONTH'
+                ? 'Month'
+                : period === 'WEEK'
+                ? 'Week'
+                : 'Today'}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={handleExportComprehensiveFinancialPDF}
+          className="px-3.5 py-2.5 bg-[#FFDE00] active:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
+        >
+          <Download className="w-4 h-4 stroke-[2.4]" />
+          <span>Financial PDF</span>
+        </button>
+        <button
+          onClick={handleExportFinancialLedgerCSV}
+          className="px-3.5 py-2.5 bg-white active:bg-slate-100 border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
+        >
+          <Download className="w-4 h-4 stroke-[2.4]" />
+          <span>CSV Ledger</span>
+        </button>
+      </div>
+
+      {/* Desktop/Tablet: ACCOUNTANT COMMAND HEADER */}
+      <div className="hidden sm:block bg-[#0A006E] text-white border-2 border-[#FFDE00] rounded-2xl p-5 relative overflow-hidden shadow-xl">
         <div className="silent-scanner-beam" />
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
           <div>
@@ -408,11 +456,11 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
                 Chief Financial Accountant Portal
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/15 text-[#FFDE00] border border-white/20">
-                Live Sales & Stock Synchronization Active
+                Live Sales &amp; Stock Synchronization Active
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-montserrat font-black italic text-white mt-1.5">
-              Financial Analysis & Commercial Accounting Center
+              Financial Analysis &amp; Commercial Accounting Center
             </h2>
             <p className="text-xs text-white/80 max-w-2xl mt-0.5">
               Strict accounting governance: Live sales ledger, real-time stock valuation, Cost of Goods Sold (COGS), gross margins, stock write-offs (damages/spoiled), and KRA tax schedules.
@@ -422,7 +470,7 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
           <div className="flex items-center gap-2.5 flex-wrap">
             {/* Date filter pills */}
             <div className="bg-white/10 p-1 rounded-xl border border-white/20 flex items-center text-xs">
-              {(['ALL', '30D', '7D', 'TODAY'] as DateFilter[]).map((period) => (
+              {(['ALL', 'YEAR', 'MONTH', 'WEEK', 'TODAY'] as DateFilter[]).map((period) => (
                 <button
                   key={period}
                   onClick={() => setDateFilter(period)}
@@ -432,7 +480,15 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
                       : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  {period === 'ALL' ? 'All Time' : period === '30D' ? '30 Days' : period === '7D' ? '7 Days' : 'Today'}
+                  {period === 'ALL'
+                    ? 'All Time'
+                    : period === 'YEAR'
+                    ? 'This Year'
+                    : period === 'MONTH'
+                    ? 'This Month'
+                    : period === 'WEEK'
+                    ? 'This Week'
+                    : 'Today'}
                 </button>
               ))}
             </div>

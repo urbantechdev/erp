@@ -23,6 +23,12 @@ import {
   ScanLine,
   X,
   AlertCircle,
+  UtensilsCrossed,
+  Flame,
+  Cigarette,
+  Wine,
+  ChefHat,
+  Layers,
 } from 'lucide-react';
 import {
   Product,
@@ -34,9 +40,17 @@ import {
   DocType,
   LineItem,
   StockCategory,
+  BusinessUnit,
+  RestaurantInventoryItem,
 } from '../types';
 import { calculateGeoPrice, formatKes } from '../erpUtils';
 import { NAIROBI_DRINKS_SUB_CATEGORIES } from '../data/nairobiDrinksCatalog';
+import {
+  PRESET_SIGGER_ITEMS,
+  PRESET_SHISHA_ITEMS,
+  PRESET_AMENITY_ITEMS,
+  ClubTopupItem,
+} from '../data/clubTopupsData';
 import { ProductImage } from './ProductImage';
 import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
 import { PhoneBarcodeScannerModal } from './PhoneBarcodeScannerModal';
@@ -49,11 +63,14 @@ interface PosViewsProps {
   branches: Branch[];
   regions: GeoRegion[];
   partners: Partner[];
+  businessUnits?: BusinessUnit[];
+  restaurantInventory?: RestaurantInventoryItem[];
   onCommitTransaction: (
     txDraft: Omit<TransactionDoc, 'id' | 'createdAt'>,
     updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[]
   ) => Promise<TransactionDoc | null>;
   onPreviewDoc: (doc: TransactionDoc) => void;
+  onUpdateRestaurantItem?: (itemId: string, updates: Partial<RestaurantInventoryItem>) => Promise<void>;
 }
 
 export const PosViews: React.FC<PosViewsProps> = ({
@@ -63,8 +80,11 @@ export const PosViews: React.FC<PosViewsProps> = ({
   branches,
   regions,
   partners,
+  businessUnits = [],
+  restaurantInventory = [],
   onCommitTransaction,
   onPreviewDoc,
+  onUpdateRestaurantItem,
 }) => {
   const isScopedBranch =
     currentUser.role === 'Branch Manager' ||
@@ -99,11 +119,48 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('ALL');
   const [visibleLimit, setVisibleLimit] = useState<number>(36);
 
+  // Outlets under current active branch
+  const branchOutlets = useMemo(() => {
+    if (!activeBranch) return [];
+    return businessUnits.filter((u) => u.branchId === activeBranch.id);
+  }, [businessUnits, activeBranch]);
+
+  // Priority outlet selection: if staff is assigned to a specific businessUnit, default to it!
+  const [selectedOutletId, setSelectedOutletId] = useState<string>(() => {
+    if (currentUser.businessUnitId) return currentUser.businessUnitId;
+    return 'BONDED_CENTRAL';
+  });
+
+  const activeOutlet = useMemo(() => {
+    if (selectedOutletId === 'BONDED_CENTRAL') return null;
+    return businessUnits.find((u) => u.id === selectedOutletId) || null;
+  }, [businessUnits, selectedOutletId]);
+
+  const isRestaurantMode = activeOutlet?.unitType === 'restaurant_club';
+  const isMerchantShopMode = activeOutlet?.unitType === 'merchant_shop';
+
+  // Restaurant Food Category filter
+  const [restaurantCategoryFilter, setRestaurantCategoryFilter] = useState<string>('ALL');
+  const [activeTableNumber, setActiveTableNumber] = useState<string>('Table 01');
+  const [guestCount, setGuestCount] = useState<number>(2);
+
+  // Club Topup Modal State (Liquor, Cigars/Sigger, Shisha)
+  const [isTopupModalOpen, setIsTopupModalOpen] = useState(false);
+  const [topupTab, setTopupTab] = useState<'liquor' | 'sigger' | 'shisha' | 'amenity'>('liquor');
+  const [topupLiquorSearch, setTopupLiquorSearch] = useState('');
+
   const [cart, setCart] = useState<
     {
-      product: Product;
-      unitMode: 'Bottle' | 'Case';
+      id: string;
+      kind: 'bonded_product' | 'restaurant_food' | 'topup_item';
+      product?: Product;
+      restaurantItem?: RestaurantInventoryItem;
+      topupItem?: ClubTopupItem;
+      unitMode: 'Bottle' | 'Case' | 'Portion' | 'Plate' | 'Platter' | 'Glass' | 'Cup' | 'Stick' | 'Head' | 'Serving' | 'Basket';
       quantityUnits: number;
+      unitPrice: number;
+      name: string;
+      category: string;
     }[]
   >([]);
 
@@ -208,7 +265,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
       let updatedQty = 1;
       setCart((prev) => {
         const existingIdx = prev.findIndex(
-          (item) => item.product.id === matched!.id && item.unitMode === targetUnit
+          (item) => item.product?.id === matched!.id && item.unitMode === targetUnit && item.kind === 'bonded_product'
         );
         if (existingIdx >= 0) {
           updatedQty = prev[existingIdx].quantityUnits + 1;
@@ -219,7 +276,19 @@ export const PosViews: React.FC<PosViewsProps> = ({
           };
           return updated;
         }
-        return [...prev, { product: matched!, unitMode: targetUnit, quantityUnits: 1 }];
+        return [
+          ...prev,
+          {
+            id: `scan-${matched!.id}-${Date.now()}`,
+            kind: 'bonded_product',
+            product: matched!,
+            unitMode: targetUnit,
+            quantityUnits: 1,
+            unitPrice: 0,
+            name: matched!.name,
+            category: matched!.category,
+          },
+        ];
       });
 
       const geoPrice = calculateGeoPrice(
@@ -358,17 +427,100 @@ export const PosViews: React.FC<PosViewsProps> = ({
     const defaultUnitMode: 'Bottle' | 'Case' = mode === 'wholesale' ? 'Case' : 'Bottle';
     setCart((prev) => {
       const existing = prev.find(
-        (item) => item.product.id === product.id && item.unitMode === defaultUnitMode
+        (item) => item.product?.id === product.id && item.unitMode === defaultUnitMode && item.kind === 'bonded_product'
       );
       if (existing) {
         return prev.map((item) =>
-          item.product.id === product.id && item.unitMode === defaultUnitMode
+          item.product?.id === product.id && item.unitMode === defaultUnitMode && item.kind === 'bonded_product'
             ? { ...item, quantityUnits: item.quantityUnits + 1 }
             : item
         );
       }
-      return [...prev, { product, unitMode: defaultUnitMode, quantityUnits: 1 }];
+      return [
+        ...prev,
+        {
+          id: `prod-${product.id}-${Date.now()}`,
+          kind: 'bonded_product',
+          product,
+          unitMode: defaultUnitMode,
+          quantityUnits: 1,
+          unitPrice: 0,
+          name: product.name,
+          category: product.category,
+        },
+      ];
     });
+  };
+
+  // Add Restaurant Food / Drink dish to order
+  const handleAddRestaurantDish = (dish: RestaurantInventoryItem) => {
+    if (dish.portionsAvailable <= 0) {
+      playPosBeep('error');
+      setScanNotification({
+        type: 'error',
+        text: `"${dish.name}" is sold out in kitchen inventory!`,
+        timestamp: Date.now(),
+      });
+      return;
+    }
+    playPosBeep('success');
+    triggerScanHaptic();
+    setCart((prev) => {
+      const existing = prev.find(
+        (item) => item.restaurantItem?.id === dish.id && item.kind === 'restaurant_food'
+      );
+      if (existing) {
+        return prev.map((item) =>
+          item === existing ? { ...item, quantityUnits: item.quantityUnits + 1 } : item
+        );
+      }
+      const unitMode = (dish.portionUnit || 'Plate') as any;
+      return [
+        ...prev,
+        {
+          id: `dish-${dish.id}-${Date.now()}`,
+          kind: 'restaurant_food',
+          restaurantItem: dish,
+          unitMode,
+          quantityUnits: 1,
+          unitPrice: dish.sellingPriceKes,
+          name: dish.name,
+          category: dish.category,
+        },
+      ];
+    });
+  };
+
+  // Add Club Topup (Bonded Liquor, Cigars/Sigger, Shisha, Amenities)
+  const handleAddClubTopup = (topup: ClubTopupItem, linkedProduct?: Product) => {
+    playPosBeep('case');
+    triggerScanHaptic();
+    setCart((prev) => {
+      const existing = prev.find(
+        (item) => item.topupItem?.id === topup.id && item.kind === 'topup_item'
+      );
+      if (existing) {
+        return prev.map((item) =>
+          item === existing ? { ...item, quantityUnits: item.quantityUnits + 1 } : item
+        );
+      }
+      const unitMode = (topup.portionUnit || 'Stick') as any;
+      return [
+        ...prev,
+        {
+          id: `topup-${topup.id}-${Date.now()}`,
+          kind: 'topup_item',
+          topupItem: topup,
+          product: linkedProduct,
+          unitMode,
+          quantityUnits: 1,
+          unitPrice: topup.priceKes,
+          name: topup.name,
+          category: topup.category,
+        },
+      ];
+    });
+    setIsTopupModalOpen(false);
   };
 
   const handleUpdateQty = (index: number, delta: number) => {
@@ -383,41 +535,84 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
   const handleToggleUnitMode = (index: number) => {
     setCart((prev) =>
-      prev.map((item, idx) =>
-        idx === index
-          ? { ...item, unitMode: item.unitMode === 'Bottle' ? 'Case' : 'Bottle' }
-          : item
-      )
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        if (item.kind === 'bonded_product') {
+          return { ...item, unitMode: item.unitMode === 'Bottle' ? 'Case' : 'Bottle' };
+        }
+        return item;
+      })
     );
   };
 
   const computedLineItems: LineItem[] = useMemo(() => {
     return cart.map((entry) => {
-      const packSize = entry.product.packSize || entry.product.bottlesPerCase || 12;
-      const geoPricing = calculateGeoPrice(
-        entry.product,
-        activeRegion,
-        mode === 'wholesale' ? 'wholesale' : 'retail'
-      );
-      const unitPrice =
-        entry.unitMode === 'Case' ? geoPricing.casePrice : geoPricing.unitBottlePrice;
-      const totalBottles =
-        entry.unitMode === 'Case'
-          ? entry.quantityUnits * packSize
-          : entry.quantityUnits;
-      const lineTotal = Math.round(unitPrice * entry.quantityUnits);
+      if (entry.kind === 'bonded_product' && entry.product) {
+        const packSize = entry.product.packSize || entry.product.bottlesPerCase || 12;
+        const geoPricing = calculateGeoPrice(
+          entry.product,
+          activeRegion,
+          mode === 'wholesale' ? 'wholesale' : 'retail'
+        );
+        const unitPrice =
+          entry.unitMode === 'Case' ? geoPricing.casePrice : geoPricing.unitBottlePrice;
+        const totalBottles =
+          entry.unitMode === 'Case'
+            ? entry.quantityUnits * packSize
+            : entry.quantityUnits;
+        const lineTotal = Math.round(unitPrice * entry.quantityUnits);
 
-      return {
-        productId: entry.product.id,
-        sku: entry.product.sku,
-        name: entry.product.name,
-        unitMode: entry.unitMode,
-        bottlesPerCase: packSize,
-        quantityUnits: entry.quantityUnits,
-        totalBottles,
-        unitPrice,
-        lineTotal,
-      };
+        return {
+          productId: entry.product.id,
+          sku: entry.product.sku,
+          name: entry.product.name,
+          unitMode: entry.unitMode,
+          bottlesPerCase: packSize,
+          quantityUnits: entry.quantityUnits,
+          totalBottles,
+          unitPrice,
+          lineTotal,
+        };
+      } else if (entry.kind === 'restaurant_food' && entry.restaurantItem) {
+        const unitPrice = entry.unitPrice ?? entry.restaurantItem.sellingPriceKes;
+        const lineTotal = Math.round(unitPrice * entry.quantityUnits);
+        return {
+          productId: entry.restaurantItem.id,
+          sku: `FOOD-${entry.restaurantItem.id.slice(-4)}`,
+          name: `[FOOD] ${entry.restaurantItem.name}`,
+          unitMode: entry.unitMode,
+          bottlesPerCase: 1,
+          quantityUnits: entry.quantityUnits,
+          totalBottles: 0,
+          unitPrice,
+          lineTotal,
+          businessUnitId: entry.restaurantItem.businessUnitId,
+        };
+      } else {
+        const unitPrice = entry.unitPrice ?? entry.topupItem?.priceKes ?? 0;
+        const lineTotal = Math.round(unitPrice * entry.quantityUnits);
+        const topupTag =
+          entry.topupItem?.category === 'liquor'
+            ? '[LIQUOR TOPUP]'
+            : entry.topupItem?.category === 'sigger'
+            ? '[SIGGER TOPUP]'
+            : entry.topupItem?.category === 'shisha'
+            ? '[SHISHA TOPUP]'
+            : '[CLUB AMENITY]';
+        return {
+          productId: entry.product?.id || entry.topupItem?.id || `topup-${Date.now()}`,
+          sku: `TOP-${(entry.topupItem?.category || 'gen').slice(0, 3).toUpperCase()}`,
+          name: `${topupTag} ${entry.name || entry.topupItem?.name}`,
+          unitMode: entry.unitMode,
+          bottlesPerCase: 1,
+          quantityUnits: entry.quantityUnits,
+          totalBottles: entry.topupItem?.category === 'liquor' ? entry.quantityUnits : 0,
+          unitPrice,
+          lineTotal,
+          isTopup: true,
+          topupType: entry.topupItem?.category || 'liquor',
+        };
+      }
     });
   }, [cart, activeRegion, mode]);
 
@@ -448,10 +643,11 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
       const updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[] = [];
 
+      // Deduct central liquor bottles for bonded or topup items
       if (docTypeToIssue !== 'Quote') {
         for (const line of computedLineItems) {
           const prod = products.find((p) => p.id === line.productId);
-          if (prod) {
+          if (prod && line.totalBottles > 0) {
             const fallbackTotal = prod.totalBottles ?? (prod.packSize || 12) * 30;
             let branchMap: Record<string, number> = {};
             try {
@@ -471,23 +667,46 @@ export const PosViews: React.FC<PosViewsProps> = ({
             });
           }
         }
+
+        // Deduct portions from separate kitchen inventory for restaurant items
+        if (onUpdateRestaurantItem) {
+          for (const item of cart) {
+            if (item.kind === 'restaurant_food' && item.restaurantItem) {
+              const currentPortions = item.restaurantItem.portionsAvailable || 0;
+              const remaining = Math.max(0, currentPortions - item.quantityUnits);
+              await onUpdateRestaurantItem(item.restaurantItem.id, {
+                portionsAvailable: remaining,
+                isAvailable: remaining > 0,
+              }).catch(() => {});
+            }
+          }
+        }
       }
 
+      const isRestaurantPos = isRestaurantMode && activeOutlet;
       const createdTx = await onCommitTransaction(
         {
           docNumber,
           docType: docTypeToIssue,
-          channel:
-            currentUser.role === 'Affiliate Sales Representative'
-              ? 'Affiliate Rep'
-              : mode === 'retail'
-              ? 'Retail Counter POS'
-              : 'B2B Wholesale POS',
+          channel: isRestaurantPos
+            ? 'Restaurant & Club POS'
+            : isMerchantShopMode
+            ? 'Merchant Shop POS'
+            : currentUser.role === 'Affiliate Sales Representative'
+            ? 'Affiliate Rep'
+            : mode === 'retail'
+            ? 'Retail Counter POS'
+            : 'B2B Wholesale POS',
           branchId: activeBranch.id,
           branchName: activeBranch.name,
+          businessUnitId: isRestaurantPos ? activeOutlet.id : undefined,
+          businessUnitName: isRestaurantPos ? activeOutlet.name : undefined,
+          tableNumber: isRestaurantPos ? activeTableNumber : undefined,
           regionId: activeRegion.id,
           regionName: activeRegion.name,
-          customerName: customerName.trim() || 'Walk-in Customer',
+          customerName: isRestaurantPos
+            ? `${activeTableNumber ? `${activeTableNumber} · ` : ''}${customerName.trim() || 'Dine-In Guest'}`
+            : customerName.trim() || 'Walk-in Customer',
           customerLicenseNo: customerLicense.trim() || 'VERIFIED-21',
           itemsSummary: JSON.stringify(computedLineItems),
           subtotal,

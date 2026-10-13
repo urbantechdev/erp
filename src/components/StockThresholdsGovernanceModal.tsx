@@ -40,8 +40,8 @@ export const StockThresholdsGovernanceModal: React.FC<StockThresholdsGovernanceM
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0A006E]/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-lg w-full overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-[#0A006E]/70 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-lg w-full h-full sm:h-auto overflow-y-auto flex flex-col">
         {/* Header */}
         <div className="bg-[#0A006E] p-5 text-white flex items-center justify-between relative overflow-hidden">
           <div className="silent-scanner-beam" />

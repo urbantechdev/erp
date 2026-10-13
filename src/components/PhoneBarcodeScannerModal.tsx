@@ -258,8 +258,8 @@ export const PhoneBarcodeScannerModal: React.FC<PhoneBarcodeScannerModalProps> =
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-      <div className="bg-slate-900 border-2 border-[#0A006E] rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-5">
+      <div className="bg-slate-900 border-0 sm:border-2 border-[#0A006E] rounded-none sm:rounded-3xl max-w-none sm:max-w-lg w-full h-full sm:h-auto overflow-hidden shadow-2xl flex flex-col sm:max-h-[92vh]">
         {/* Header Bar */}
         <div className="bg-[#0A006E] text-white px-5 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">

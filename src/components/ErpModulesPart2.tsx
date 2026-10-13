@@ -35,6 +35,7 @@ import {
   Product,
   PayrollRun,
   PayrollRecord,
+  BusinessUnit,
 } from '../types';
 import {
   ROLE_PERMISSIONS,
@@ -458,8 +459,8 @@ export const PartnersOnboardingModule: React.FC<{
 
       {/* Edit Partner Modal */}
       {editingPartner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-lg w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-lg w-full h-full sm:h-auto overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-montserrat font-black text-[#0A006E]">
                 Edit {editingPartner.partnerType}: {editingPartner.code}
@@ -579,8 +580,8 @@ export const PartnersOnboardingModule: React.FC<{
 
       {/* Delete Partner Confirmation Modal */}
       {deletingPartner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border-2 border-rose-600 shadow-2xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-rose-600 shadow-2xl max-w-none sm:max-w-md w-full h-full sm:h-auto overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
             <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-7 h-7" />
             </div>
@@ -1262,6 +1263,8 @@ export const HrAndRbacModule: React.FC<{
   const [kraPin, setKraPin] = useState<string>('A009182741Z');
   const [nssfNo, setNssfNo] = useState<string>('092837192');
   const [nhifNo, setNhifNo] = useState<string>('88392019');
+  const [agreedCommissionPct, setAgreedCommissionPct] = useState<number>(8.0);
+  const [isCasual, setIsCasual] = useState<boolean>(true);
 
   // Edit Staff Modal State
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
@@ -1279,6 +1282,8 @@ export const HrAndRbacModule: React.FC<{
   const [editKraPin, setEditKraPin] = useState<string>('');
   const [editNssfNo, setEditNssfNo] = useState<string>('');
   const [editNhifNo, setEditNhifNo] = useState<string>('');
+  const [editIsCasual, setEditIsCasual] = useState<boolean>(false);
+  const [editAgreedCommissionPct, setEditAgreedCommissionPct] = useState<number>(8.0);
 
   // Quick Compensation & Penalties Adjustment Modal State
   const [compStaff, setCompStaff] = useState<StaffMember | null>(null);
@@ -1290,6 +1295,8 @@ export const HrAndRbacModule: React.FC<{
   const [compKra, setCompKra] = useState<string>('');
   const [compNssf, setCompNssf] = useState<string>('');
   const [compNhif, setCompNhif] = useState<string>('');
+  const [compCommissionPct, setCompCommissionPct] = useState<number>(8.0);
+  const [compIsCasual, setCompIsCasual] = useState<boolean>(false);
   const [isSavingComp, setIsSavingComp] = useState<boolean>(false);
 
   // Payroll Run execution state
@@ -1362,6 +1369,8 @@ export const HrAndRbacModule: React.FC<{
         ? branches.find((b) => b.id === currentUser.branchId) || branches[0]
         : branches.find((b) => b.id === branchId) || branches[0];
 
+    const isCasualSalesRep = effectiveRole === 'Affiliate Sales Representative';
+
     await onCreateStaff({
       name: name.trim(),
       email: email.trim().toLowerCase(),
@@ -1381,10 +1390,14 @@ export const HrAndRbacModule: React.FC<{
       kraPin: kraPin.trim(),
       nssfNo: nssfNo.trim(),
       nhifNo: nhifNo.trim(),
+      isCasual: isCasualSalesRep || isCasual,
+      agreedCommissionPct: isCasualSalesRep ? Number(agreedCommissionPct) : undefined,
     });
 
     setFeedback(
-      effectiveAuthMethod === 'pin'
+      isCasualSalesRep
+        ? `Provisioned Casual Sales Rep "${name}" with 6-Digit PIN: ${pin}, Base Pay KES ${Number(baseSalary).toLocaleString()} & Agreed Commission: ${agreedCommissionPct}%.`
+        : effectiveAuthMethod === 'pin'
         ? `Provisioned ${effectiveRole} "${name}" with 6-Digit PIN: ${pin} & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`
         : `Provisioned ${effectiveRole} "${name}" (${email}) for Google Authentication & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`
     );
@@ -1409,6 +1422,8 @@ export const HrAndRbacModule: React.FC<{
     setEditKraPin(staff.kraPin || 'A009182741Z');
     setEditNssfNo(staff.nssfNo || '092837192');
     setEditNhifNo(staff.nhifNo || '88392019');
+    setEditIsCasual(Boolean(staff.isCasual || staff.role === 'Affiliate Sales Representative'));
+    setEditAgreedCommissionPct(staff.agreedCommissionPct ?? 8.0);
   };
 
   const handleOpenCompensation = (staff: StaffMember) => {
@@ -1422,6 +1437,8 @@ export const HrAndRbacModule: React.FC<{
     setCompKra(staff.kraPin || 'A009182741Z');
     setCompNssf(staff.nssfNo || '092837192');
     setCompNhif(staff.nhifNo || '88392019');
+    setCompCommissionPct(staff.agreedCommissionPct ?? 8.0);
+    setCompIsCasual(Boolean(staff.isCasual || staff.role === 'Affiliate Sales Representative'));
   };
 
   const handleSaveCompensation = async (e: React.FormEvent) => {
@@ -1438,6 +1455,8 @@ export const HrAndRbacModule: React.FC<{
         kraPin: compKra.trim(),
         nssfNo: compNssf.trim(),
         nhifNo: compNhif.trim(),
+        isCasual: compIsCasual,
+        agreedCommissionPct: compIsCasual ? Number(compCommissionPct) : undefined,
       });
       setFeedback(`Compensation details updated for ${compStaff.name}. Net take-home: KES ${(compBase - compDed - compPen).toLocaleString()}`);
       setCompStaff(null);
@@ -1475,6 +1494,8 @@ export const HrAndRbacModule: React.FC<{
       kraPin: editKraPin.trim(),
       nssfNo: editNssfNo.trim(),
       nhifNo: editNhifNo.trim(),
+      isCasual: editIsCasual || editRole === 'Affiliate Sales Representative',
+      agreedCommissionPct: (editIsCasual || editRole === 'Affiliate Sales Representative') ? Number(editAgreedCommissionPct) : undefined,
     });
 
     setFeedback(`Updated staff account for ${editName.trim()} successfully.`);
@@ -1739,6 +1760,66 @@ export const HrAndRbacModule: React.FC<{
                   </div>
                 </div>
 
+                {/* Casual Sales Representative Agreement Section */}
+                {(selectedRole === 'Affiliate Sales Representative' || currentUser.role === 'Branch Manager') && (
+                  <div className="sm:col-span-2 lg:col-span-4 bg-[#FFDE00]/25 border-2 border-[#0A006E]/30 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-montserrat font-black bg-[#0A006E] text-[#FFDE00]">
+                          Casual Sales Representative Agreement
+                        </span>
+                        <span className="text-xs text-slate-700 font-semibold">
+                          Branch casual employment: base pay + agreed commission %
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="font-montserrat font-bold text-slate-800">
+                          Agreed Base Pay (KES) *
+                        </label>
+                        <input
+                          type="number"
+                          value={baseSalary}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setBaseSalary(val);
+                            const calc = autoCalculateKenyanStatutory(val);
+                            setDeductions(calc.totalDeds);
+                            setDeductionsBreakdown(calc.breakdown);
+                          }}
+                          className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular font-bold text-[#0A006E]"
+                          placeholder="e.g. 25000"
+                        />
+                        <span className="text-[11px] text-slate-600 mt-1 block">
+                          Casual base stipend / retainer negotiated for this branch.
+                        </span>
+                      </div>
+                      <div>
+                        <label className="font-montserrat font-bold text-slate-800">
+                          Agreed Sales Commission (%) *
+                        </label>
+                        <div className="relative mt-1">
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max="100"
+                            value={agreedCommissionPct}
+                            onChange={(e) => setAgreedCommissionPct(Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular font-black text-[#0A006E] pr-8"
+                            placeholder="e.g. 8.0"
+                          />
+                          <span className="absolute right-3 top-2.5 font-montserrat font-bold text-slate-500">%</span>
+                        </div>
+                        <span className="text-[11px] text-slate-600 mt-1 block">
+                          Earns {agreedCommissionPct}% commission on all verified beverage dispatch volume.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {!isGoogleRole ? (
                   <div className="sm:col-span-2 lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2">
                     <label className="font-montserrat font-bold text-slate-700">
@@ -1841,15 +1922,22 @@ export const HrAndRbacModule: React.FC<{
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="font-montserrat font-black text-[#0A006E]">{s.role}</div>
-                          <span className={`inline-flex items-center px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold ${
-                            s.status === 'Active'
-                              ? 'bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40'
-                              : s.status === 'Suspended'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                              : 'bg-rose-100 text-rose-800 border border-rose-300'
-                          }`}>
-                            {s.status}
-                          </span>
+                          {(s.role === 'Affiliate Sales Representative' || s.isCasual) && (
+                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-[#FFDE00] text-[#0A006E] border border-amber-400">
+                              Casual · {s.agreedCommissionPct ?? 8}% Commission
+                            </span>
+                          )}
+                          <div>
+                            <span className={`inline-flex items-center px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold ${
+                              s.status === 'Active'
+                                ? 'bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40'
+                                : s.status === 'Suspended'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}>
+                              {s.status}
+                            </span>
+                          </div>
                         </td>
                         <td className="py-2.5 px-3 font-mono-tabular">
                           {s.authMethod === 'google' ? (
@@ -1862,8 +1950,15 @@ export const HrAndRbacModule: React.FC<{
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-slate-700">{s.branchName}</td>
-                        <td className="py-2.5 px-3 text-right font-mono-tabular font-bold text-[#0A006E]">
-                          KES {net.toLocaleString()}
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="font-mono-tabular font-bold text-[#0A006E]">
+                            KES {net.toLocaleString()}
+                          </div>
+                          {(s.role === 'Affiliate Sales Representative' || s.isCasual) && (
+                            <div className="text-[10px] text-slate-500 font-semibold font-mono-tabular">
+                              Base KES {bSal.toLocaleString()} + {s.agreedCommissionPct ?? 8}%
+                            </div>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           {canManage ? (
@@ -2261,8 +2356,8 @@ export const HrAndRbacModule: React.FC<{
 
       {/* Quick Compensation Adjustment Modal */}
       {compStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-lg w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-lg w-full h-full sm:h-auto overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div>
                 <h3 className="text-base font-montserrat font-black text-[#0A006E]">
@@ -2416,8 +2511,8 @@ export const HrAndRbacModule: React.FC<{
 
       {/* Edit Staff Modal */}
       {editingStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-lg w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-lg w-full h-full sm:h-auto overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-montserrat font-black text-[#0A006E]">
                 Edit Staff Account: {editingStaff.name}
@@ -2560,8 +2655,8 @@ export const HrAndRbacModule: React.FC<{
 
       {/* Delete Staff Permanent Confirmation Modal (Prompting Question per Requirement 3) */}
       {deletingStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border-2 border-rose-600 shadow-2xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-rose-600 shadow-2xl max-w-none sm:max-w-md w-full h-full sm:h-auto overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
             <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto border-2 border-rose-200 shadow-xs">
               <AlertTriangle className="w-8 h-8 stroke-[2.5]" />
             </div>

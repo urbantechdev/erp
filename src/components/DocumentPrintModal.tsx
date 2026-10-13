@@ -21,8 +21,8 @@ export const DocumentPrintModal: React.FC<DocumentPrintModalProps> = ({ docData,
   const isLogisticsOnly = docData.docType === 'Packing List' || docData.docType === 'Delivery Note';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white border-2 border-[#0A006E] rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto">
+      <div className="bg-white border-0 sm:border-2 border-[#0A006E] rounded-none sm:rounded-2xl max-w-none sm:max-w-3xl w-full h-full sm:h-auto overflow-y-auto shadow-2xl my-0 sm:my-8 flex flex-col">
         {/* Top Action Bar (Hidden during print) */}
         <div className="bg-[#0A006E] text-white px-6 py-4 flex items-center justify-between border-b-3 border-[#FFDE00] relative overflow-hidden">
           <div className="silent-scanner-beam" />

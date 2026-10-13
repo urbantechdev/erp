@@ -22,6 +22,7 @@ import {
   Loader2,
   MapPin,
   ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 import { StaffMember, StaffRole, Branch } from '../types';
 import { AnimatedErrorPromptIcon } from './AnimatedFeedback';
@@ -368,7 +369,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
       {/* VAAIRO Deep Navy Header with Curved Single-Wave Bottom Edge */}
-      <header className="relative bg-[#0A006E] text-white sticky top-0 z-40 pt-6 pb-14 px-6 sm:px-8 flex items-center justify-between gap-8 overflow-hidden shadow-lg">
+      <header className="relative bg-[#0A006E] text-white sticky top-0 z-40 pt-5 sm:pt-6 pb-12 sm:pb-14 px-4 sm:px-8 flex items-center justify-between gap-4 sm:gap-8 overflow-hidden shadow-lg">
         <div className="silent-scanner-beam" />
         <a
           href="#top"
@@ -376,26 +377,28 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
             e.preventDefault();
             setScreenView('boxes');
           }}
-          className="flex items-center gap-4 relative z-10 whitespace-nowrap shrink-0"
+          className="flex items-center gap-3 sm:gap-4 relative z-10 whitespace-nowrap shrink-0"
         >
-          <div className="w-14 h-14 rounded-2xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-lg border-2 border-white">
-            <Wine className="w-7 h-7 stroke-[2.5]" />
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white text-[#0A006E] flex items-center justify-center shadow-lg border-2 border-white">
+            <Wine className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.5]" />
           </div>
-          <span className="font-montserrat font-black italic text-3xl sm:text-4xl lg:text-5xl tracking-tighter text-white">
+          <span className="font-montserrat font-black italic text-2xl sm:text-4xl lg:text-5xl tracking-tighter text-white">
             VAAIRO{' '}
-            <span className="text-[#FFDE00] not-italic text-sm sm:text-base font-black px-2.5 py-1 bg-white/10 rounded-xl ml-1.5 align-middle">
+            <span className="text-[#FFDE00] not-italic text-xs sm:text-base font-black px-2 sm:px-2.5 py-0.5 sm:py-1 bg-white/10 rounded-xl ml-1 sm:ml-1.5 align-middle">
               ERP
             </span>
           </span>
         </a>
 
-        <div className="flex items-center gap-3 shrink-0 relative z-10">
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 relative z-10">
           <button
+            type="button"
             onClick={onOpenCustomerPortal}
-            className="px-4 py-2.5 text-xs font-montserrat font-black text-[#0A006E] bg-[#FFDE00] hover:bg-amber-400 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5 shadow-md"
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white hover:bg-slate-100 text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center justify-center active:scale-95 text-xs font-montserrat font-black"
+            title="Customer Online Order Portal"
+            aria-label="Customer Online Order Portal"
           >
-            <ShoppingBag className="w-4 h-4" />
-            Customer Online Order Portal
+            <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.3]" />
           </button>
         </div>
 
@@ -431,7 +434,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
         {screenView === 'boxes' && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 lg:gap-10 max-w-5xl mx-auto w-full items-center">
             {/* BOX 1: ADMIN (2x Square) */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center">
               <div
                 onClick={() => {
                   if (isSubmitting) return;
@@ -456,26 +459,12 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                   <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-white">
                     ADMIN
                   </h2>
-                  <span className="text-[11px] font-montserrat font-bold text-[#FFDE00] block mt-1">
-                    Google Sign-In
-                  </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedDepartment('Admin' as any);
-                  setScreenView('pin');
-                }}
-                className="text-xs font-montserrat font-bold text-[#0A006E] hover:text-blue-700 underline underline-offset-2 py-1 px-3 rounded-lg hover:bg-slate-200/60 transition-colors"
-              >
-                Sign in with Admin PIN
-              </button>
             </div>
 
             {/* BOX 2: ACCOUNTS (2x Square) */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center">
               <div
                 onClick={() => {
                   if (isSubmitting) return;
@@ -500,26 +489,12 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                   <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E]">
                     ACCOUNTS
                   </h2>
-                  <span className="text-[11px] font-montserrat font-bold text-[#0A006E]/80 block mt-1">
-                    Google Sign-In
-                  </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedDepartment('Accountant' as any);
-                  setScreenView('pin');
-                }}
-                className="text-xs font-montserrat font-bold text-[#0A006E] hover:text-blue-700 underline underline-offset-2 py-1 px-3 rounded-lg hover:bg-slate-200/60 transition-colors"
-              >
-                Sign in with Accounts PIN
-              </button>
             </div>
 
             {/* BOX 3: STAFFS (2x Square - Tapping switches on-screen to Departments) */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center">
               <div
                 onClick={handleOpenStaffDepartments}
                 className={`w-full group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(52,209,134,0.5)] ${
@@ -535,18 +510,8 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                   <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E]">
                     STAFFS
                   </h2>
-                  <span className="text-[11px] font-montserrat font-bold text-[#0A006E]/80 block mt-1">
-                    Department PIN
-                  </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleOpenStaffDepartments}
-                className="text-xs font-montserrat font-bold text-[#0A006E] hover:text-blue-700 underline underline-offset-2 py-1 px-3 rounded-lg hover:bg-slate-200/60 transition-colors"
-              >
-                Choose Department & Branch
-              </button>
             </div>
           </div>
         )}
@@ -1146,6 +1111,56 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
           </div>
         )}
       </main>
+
+      {/* Signature Curved Single-Wave Footer */}
+      <footer className="relative bg-[#0A006E] text-white pt-8 sm:pt-10 pb-6 px-4 sm:px-8 mt-auto shrink-0 shadow-2xl">
+        {/* Single Smooth Curved Wave Top Edge */}
+        <svg
+          className="absolute top-0 left-0 w-full h-7 sm:h-9 -translate-y-[96%] pointer-events-none block overflow-visible"
+          viewBox="0 0 1440 80"
+          preserveAspectRatio="none"
+        >
+          <path
+            d="M0,55 C480,-5 960,95 1440,35 L1440,80 L0,80 Z"
+            fill="#0A006E"
+          />
+          <path
+            d="M0,55 C480,-5 960,95 1440,35"
+            fill="none"
+            stroke="#FFDE00"
+            strokeWidth="5"
+          />
+        </svg>
+
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left relative z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/10 text-[#FFDE00] flex items-center justify-center border border-white/20">
+              <Wine className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-montserrat font-black italic text-sm tracking-tight text-white">
+                VAAIRO <span className="text-[#FFDE00] not-italic text-[10px] font-bold">ERP SYSTEM</span>
+              </span>
+              <p className="text-[11px] text-slate-300">
+                Enterprise Cloud Commerce &amp; Beverage Distribution Terminal
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-200 font-montserrat">
+            <span className="font-medium text-slate-300">Powered by</span>
+            <a
+              href="https://urbantechdev.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFDE00] hover:bg-[#FFE833] text-[#0A006E] font-black transition-all shadow-sm hover:shadow active:scale-95 group cursor-pointer"
+            >
+              <span>urbantechdev</span>
+              <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform stroke-[2.5]" />
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

@@ -6,6 +6,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  addDoc,
   query,
   orderBy,
   where,
@@ -24,6 +25,10 @@ import {
   Activity,
   ShoppingBag,
   LogOut,
+  LogIn,
+  Wifi,
+  RefreshCw,
+  CheckCircle2,
   Menu,
   X,
   Wine,
@@ -31,6 +36,8 @@ import {
   User,
   Lock,
   AlertTriangle,
+  Barcode,
+  ChevronRight,
 } from 'lucide-react';
 import {
   db,
@@ -82,6 +89,7 @@ import {
 } from './components/ErpModulesPart2';
 import { DocumentPrintModal } from './components/DocumentPrintModal';
 import { ThermalPayslipModal } from './components/ThermalPayslipModal';
+import { OnboardItemsModal } from './components/OnboardItemsModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
@@ -128,6 +136,7 @@ export default function App() {
   const [previewDoc, setPreviewDoc] = useState<TransactionDoc | null>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
+  const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
   const isGoogleAuthInProgressRef = useRef(false);
   const [toastStatus, setToastStatus] = useState<{
     type: 'success' | 'error';
@@ -800,6 +809,65 @@ export default function App() {
     }
   };
 
+  const handleActivateProductStock = async (
+    productId: string,
+    branchId: string,
+    quantityToAdd: number
+  ) => {
+    try {
+      const prod = products.find((p) => p.id === productId);
+      if (!prod) return { success: false, message: 'Product not found in system.' };
+
+      let branchMap: Record<string, number> = {};
+      if (prod.branchStockSummary) {
+        try {
+          branchMap = JSON.parse(prod.branchStockSummary);
+        } catch {}
+      }
+
+      const currentBranchQty = branchMap[branchId] || 0;
+      const newBranchQty = currentBranchQty + quantityToAdd;
+      branchMap[branchId] = newBranchQty;
+
+      const newTotalBottles = (prod.totalBottles || 0) + quantityToAdd;
+
+      const updatedPayload: Partial<Product> = {
+        totalBottles: newTotalBottles,
+        branchStockSummary: JSON.stringify(branchMap),
+        isOnboarded: true,
+        status: 'Active',
+        onboardedAt: new Date().toISOString(),
+        onboardedBy: currentUser?.name || 'Branch Manager',
+        onboardedBranchId: branchId,
+      };
+
+      await persistProductState(productId, updatedPayload);
+
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Activated ${quantityToAdd} btls of ${prod.name}`,
+          'Inventory & Stock Onboarding',
+          `Branch Manager activated ${quantityToAdd} bottles into available stock for branch ${branchId}.`,
+          currentUser.branchName,
+          'Info'
+        );
+      }
+
+      return {
+        success: true,
+        message: `Successfully activated ${quantityToAdd} bottles on available stock.`,
+        updatedProduct: { ...prod, ...updatedPayload },
+      };
+    } catch (err: any) {
+      console.error('Stock activation failure:', err);
+      handleFirestoreError(err, OperationType.WRITE, 'products');
+      return { success: false, message: err?.message || 'Error updating stock in database.' };
+    }
+  };
+
   const handleLogStockIncident = async (incident: DamageSpoilageIncident) => {
     try {
       const prod = products.find((p) => p.id === incident.productId);
@@ -1412,7 +1480,7 @@ export default function App() {
           }}
           className="flex items-center gap-3.5 relative z-10 whitespace-nowrap shrink-0"
         >
-          <div className="w-13 h-13 rounded-2xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-md border-2 border-white">
+          <div className="w-13 h-13 rounded-2xl bg-white text-[#0A006E] flex items-center justify-center shadow-md border-2 border-white">
             <Wine className="w-7 h-7 stroke-[2.5]" />
           </div>
           <span className="font-montserrat font-black italic text-2xl sm:text-3xl lg:text-4xl tracking-tighter text-white">
@@ -1420,8 +1488,25 @@ export default function App() {
           </span>
         </a>
 
-        {/* Zone 3: Header Right Action Icons - ONLY Website for Client, User, and Lock Icons */}
-        <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0 relative z-10">
+        {/* Mobile Header: Hamburger Button - White Background */}
+        <div className="flex sm:hidden items-center shrink-0 relative z-10">
+          <button
+            type="button"
+            onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)}
+            className="w-11 h-11 rounded-2xl flex items-center justify-center bg-white text-[#0A006E] border-2 border-white shadow-md cursor-pointer transition active:scale-95"
+            title={mobileDrawerOpen ? 'Close Menu' : 'Open Navigation Menu'}
+            aria-label={mobileDrawerOpen ? 'Close Menu' : 'Open Navigation Menu'}
+          >
+            {mobileDrawerOpen ? (
+              <X className="w-6 h-6 stroke-[2.5]" />
+            ) : (
+              <Menu className="w-6 h-6 stroke-[2.5]" />
+            )}
+          </button>
+        </div>
+
+        {/* Desktop Header: Header Right Action Icons (White Background) */}
+        <div className="hidden sm:flex items-center gap-2.5 sm:gap-3.5 shrink-0 relative z-10">
           {/* 1. Website for client icon */}
           <button
             type="button"
@@ -1430,11 +1515,7 @@ export default function App() {
                 ? handleSelectModule('overview')
                 : handleSelectModule('customer_portal')
             }
-            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-sm relative group ${
-              activeModule === 'customer_portal'
-                ? 'bg-[#FFDE00] text-[#0A006E] border-white shadow-md'
-                : 'bg-white/10 hover:bg-[#FFDE00] text-white hover:text-[#0A006E] border-white/20 hover:border-white'
-            }`}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-md relative group bg-white text-[#0A006E] hover:bg-slate-100 border-white"
             title="Client Website / Customer Portal"
             aria-label="Client Website / Customer Portal"
           >
@@ -1448,11 +1529,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setShowUserProfileModal(!showUserProfileModal)}
-            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-sm relative group ${
-              showUserProfileModal
-                ? 'bg-[#FFDE00] text-[#0A006E] border-white shadow-md'
-                : 'bg-white/10 hover:bg-[#FFDE00] text-white hover:text-[#0A006E] border-white/20 hover:border-white'
-            }`}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-md relative group bg-white text-[#0A006E] hover:bg-slate-100 border-white"
             title={`${currentUser.name} (${currentUser.role})`}
             aria-label="User Profile"
           >
@@ -1466,7 +1543,7 @@ export default function App() {
           <button
             type="button"
             onClick={handleLogout}
-            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white/10 hover:bg-rose-600 hover:text-white text-white border-2 border-white/20 hover:border-rose-400 transition-all cursor-pointer shadow-sm relative group"
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-md relative group bg-white text-[#0A006E] hover:text-rose-600 hover:bg-rose-50 border-white"
             title="Lock Terminal / Sign Out"
             aria-label="Lock Terminal / Sign Out"
           >
@@ -1496,10 +1573,326 @@ export default function App() {
         </svg>
       </header>
 
-      {/* User Profile Flyout Modal triggered by Header User Icon */}
+      {/* Mobile Full-Screen Hamburger Drawer (Consolidates Client Website, User Profile, Lock Terminal, & All ERP Modules) */}
+      {mobileDrawerOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex flex-col bg-white overflow-hidden animate-in fade-in sm:hidden"
+        >
+          {/* Mobile Drawer Header */}
+          <div className="bg-[#0A006E] text-white p-4 flex items-center justify-between border-b-2 border-[#FFDE00] shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-md border border-white">
+                <Wine className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div>
+                <div className="font-montserrat font-black italic text-lg text-white leading-tight">
+                  VAAIRO <span className="text-[#FFDE00] not-italic text-xs font-black">ERP</span>
+                </div>
+                <div className="text-[10px] text-slate-300 font-medium">Operations Command & System Menu</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(false)}
+              className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#FFDE00] hover:text-[#0A006E] text-white flex items-center justify-center cursor-pointer transition active:scale-95"
+              aria-label="Close menu"
+            >
+              <X className="w-5 h-5 stroke-[2.5]" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* 1. User Profile & Live Activity Status Card */}
+            <div className="bg-[#0A006E]/5 border-2 border-[#0A006E]/20 rounded-2xl p-4 space-y-3.5 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-13 h-13 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center font-montserrat font-black text-lg border-2 border-white shadow-md shrink-0">
+                  {currentUser.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-montserrat font-black text-slate-900 text-base leading-tight truncate">
+                    {currentUser.name}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-[#0A006E] text-[#FFDE00] font-montserrat uppercase tracking-wider">
+                      {currentUser.role}
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-xs text-slate-600 font-bold truncate">
+                      {currentUser.branchName}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* User Account Details */}
+              <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Email:</span>
+                  <span className="font-semibold text-slate-900 truncate max-w-[190px]">{currentUser.email}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Authentication:</span>
+                  <span className="font-bold text-[#0A006E] flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    {currentUser.authMethod === 'google' ? 'Google OAuth 2.0' : 'Encrypted 6-Digit PIN'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Branch Depot:</span>
+                  <span className="font-semibold text-slate-900 truncate max-w-[170px]">{currentUser.branchName}</span>
+                </div>
+              </div>
+
+              {/* Live Activity Status Section (Moved Inside Hamburger for Mobile) */}
+              <div className="bg-[#F0F2F0] border border-slate-300/80 rounded-xl p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-[#0A006E]" />
+                    Live Activity Status
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Online &amp; Active
+                  </span>
+                </div>
+
+                <div className="space-y-1 pt-0.5 text-[11px]">
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="flex items-center gap-1">
+                      <Wifi className="w-3 h-3 text-emerald-600" />
+                      Cloud Firestore Sync:
+                    </span>
+                    <span className="font-bold text-emerald-700">Real-Time Active</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-[#0A006E]" />
+                      Session Security:
+                    </span>
+                    <span className="font-bold text-slate-800">Encrypted Token</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>Active Device:</span>
+                    <span className="font-mono text-[10px] text-slate-700 truncate max-w-[160px]">
+                      {currentUser.lastDevice || 'Mobile Browser Terminal'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Authentication Actions: Lock Terminal / Logout & Switch User / Login */}
+            <div className="space-y-2">
+              <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider px-1">
+                Terminal Access &amp; Authentication
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* Logout / Lock Terminal Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileDrawerOpen(false);
+                    handleLogout();
+                  }}
+                  className="p-3 rounded-2xl border-2 border-rose-300 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-900 flex flex-col items-center justify-center text-center gap-1.5 cursor-pointer transition shadow-xs active:scale-95"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-xs">
+                    <Lock className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <span className="text-xs font-montserrat font-black leading-tight text-rose-900">
+                    Lock Terminal
+                  </span>
+                  <span className="text-[10px] text-rose-700 font-medium">Log out securely</span>
+                </button>
+
+                {/* Login as Alternate Staff / Switch Account */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileDrawerOpen(false);
+                    handleLogout();
+                  }}
+                  className="p-3 rounded-2xl border-2 border-[#0A006E] bg-white hover:bg-[#FFDE00]/15 active:bg-[#FFDE00]/30 text-[#0A006E] flex flex-col items-center justify-center text-center gap-1.5 cursor-pointer transition shadow-xs active:scale-95"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                    <LogIn className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <span className="text-xs font-montserrat font-black leading-tight text-[#0A006E]">
+                    Switch Account
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">Login alternate staff</span>
+                </button>
+              </div>
+
+              {/* Client Website / Customer Store Shortcut */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileDrawerOpen(false);
+                  if (activeModule === 'customer_portal') {
+                    handleSelectModule('overview');
+                  } else {
+                    handleSelectModule('customer_portal');
+                  }
+                }}
+                className={`w-full p-3 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition shadow-xs active:scale-98 ${
+                  activeModule === 'customer_portal'
+                    ? 'bg-[#FFDE00] border-[#0A006E] text-[#0A006E]'
+                    : 'bg-white border-slate-200 hover:border-[#0A006E] text-slate-800'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                    <Globe className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs font-montserrat font-black leading-tight text-slate-900">
+                      {activeModule === 'customer_portal' ? 'Return to ERP Operations' : 'Client Website & Store'}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      {activeModule === 'customer_portal' ? 'Back to dashboard' : 'Browse public customer catalog'}
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </button>
+
+              {/* Manage HR Staff Shortcut for Admins */}
+              {allowedModules.includes('hr_rbac') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSelectModule('hr_rbac');
+                    setMobileDrawerOpen(false);
+                  }}
+                  className="w-full p-3 rounded-2xl border-2 border-slate-200 bg-white hover:border-[#0A006E] flex items-center justify-between cursor-pointer transition shadow-xs active:scale-98"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-xs">
+                      <UserPlus className="w-5 h-5 stroke-[2.2]" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-xs font-montserrat font-black leading-tight text-slate-900">
+                        Manage HR &amp; Staff Roles
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        Provision employees, commissions &amp; payroll
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+              )}
+            </div>
+
+            {/* Quick Action: Onboard Items & Barcode Scanner for Branch Managers & Admin */}
+            {(currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || currentUser.role === 'Inventory Controller') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileDrawerOpen(false);
+                  setIsOnboardModalOpen(true);
+                }}
+                className="w-full p-3 rounded-2xl bg-[#34D186] hover:bg-[#28B873] active:bg-[#209A5F] text-[#0A006E] border-2 border-[#0A006E] flex items-center justify-between cursor-pointer shadow-md transition active:scale-98"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                    <Barcode className="w-5 h-5 stroke-[2.4]" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs font-montserrat font-black leading-tight text-[#0A006E]">
+                      Onboard Items &amp; Barcode Scanner
+                    </div>
+                    <div className="text-[10px] text-slate-900 font-medium">
+                      Activate available stock &amp; branch assets
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-[#0A006E]" />
+              </button>
+            )}
+
+            {/* 3. All ERP Modules Navigation Inside Hamburger */}
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider px-1">
+                Authorized ERP Navigation Modules ({allowedModules.length})
+              </div>
+              <div className="space-y-1.5">
+                {allowedModules.map((modId) => {
+                  const IconComp = MODULE_META[modId].icon;
+                  const isActive = activeModule === modId;
+                  return (
+                    <button
+                      key={modId}
+                      type="button"
+                      onClick={() => {
+                        handleSelectModule(modId);
+                        setMobileDrawerOpen(false);
+                      }}
+                      className={`w-full p-3 rounded-2xl flex items-center gap-3.5 border-2 text-left cursor-pointer transition ${
+                        isActive
+                          ? 'bg-[#0A006E] border-[#0A006E] text-white shadow-md'
+                          : 'bg-white border-slate-200 hover:border-[#0A006E] text-slate-800'
+                      }`}
+                    >
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          isActive
+                            ? 'bg-[#FFDE00] text-[#0A006E]'
+                            : 'bg-[#F0F2F0] text-[#0A006E]'
+                        }`}
+                      >
+                        <IconComp className="w-5 h-5 stroke-[2.2]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-xs font-montserrat font-black truncate ${
+                          isActive ? 'text-white' : 'text-slate-900'
+                        }`}>
+                          {MODULE_META[modId].label}
+                        </div>
+                        <div className={`text-[10px] truncate ${
+                          isActive ? 'text-[#FFDE00]' : 'text-slate-500'
+                        }`}>
+                          {modId === 'overview'
+                            ? 'Operations & Real-Time KPIs'
+                            : modId === 'retail_pos'
+                            ? 'Customer Counter Checkout'
+                            : modId === 'sales_pos'
+                            ? 'B2B Wholesale Invoicing'
+                            : modId === 'inventory'
+                            ? 'IPS & LPS Stock Valuation'
+                            : modId === 'branches_transfers'
+                            ? 'Inter-Depot Stock Transfers'
+                            : modId === 'geo_pricing'
+                            ? 'Zone Pricing & Currency'
+                            : modId === 'partners'
+                            ? 'Suppliers & Retail Partners'
+                            : modId === 'documents_credit'
+                            ? 'Official Invoices & Credit Notes'
+                            : modId === 'compliance'
+                            ? 'KRA eTIMS & Excise Audit'
+                            : modId === 'hr_rbac'
+                            ? 'Staff Roles & Payroll Run'
+                            : modId === 'audit_security'
+                            ? 'Security Logs & Device Trace'
+                            : 'Client Shopping Catalog'}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Profile Flyout Modal (Full-Screen on Mobile) */}
       {showUserProfileModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-end pt-20 sm:pt-24 pr-4 sm:pr-8 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-sm w-full p-5 space-y-4 animate-scale-in">
+        <div className="fixed inset-0 z-50 flex items-center sm:items-start justify-center sm:justify-end p-0 sm:p-4 sm:pt-24 sm:pr-8 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-sm w-full h-full sm:h-auto p-5 sm:p-6 space-y-4 animate-scale-in flex flex-col justify-between sm:justify-start overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center font-montserrat font-black text-sm border-2 border-white shadow-sm">
@@ -1661,6 +2054,8 @@ export default function App() {
               payrollRuns={payrollRuns}
               onOpenPayslip={(record) => setViewingPayslipRecord(record)}
               onPreviewDoc={(d) => setPreviewDoc(d)}
+              onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
+              onNavigateModule={handleSelectModule}
             />
           )}
 
@@ -1699,6 +2094,7 @@ export default function App() {
               onBatchCreateProducts={handleBatchCreateProducts}
               onUpdateProduct={handleUpdateProduct}
               onLogStockIncident={handleLogStockIncident}
+              onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
             />
           )}
 
@@ -1805,6 +2201,20 @@ export default function App() {
         <ThermalPayslipModal
           record={viewingPayslipRecord}
           onClose={() => setViewingPayslipRecord(null)}
+        />
+      )}
+
+      {/* Branch Onboarding & Stock Activation Modal */}
+      {isOnboardModalOpen && currentUser && (
+        <OnboardItemsModal
+          isOpen={isOnboardModalOpen}
+          onClose={() => setIsOnboardModalOpen(false)}
+          currentUser={currentUser}
+          products={products}
+          branches={branches}
+          onActivateProductStock={handleActivateProductStock}
+          onShowSuccessFeedback={(title, msg) => triggerToast('success', title, msg)}
+          onShowErrorFeedback={(title, msg) => triggerToast('error', title, msg)}
         />
       )}
     </div>

@@ -83,7 +83,7 @@ service cloud.firestore {
       return data.keys().hasAll(['docNumber', 'docType', 'channel', 'branchName', 'regionName', 'customerName', 'itemsSummary', 'totalAmount', 'status', 'createdBy', 'createdAt']) &&
              data.docNumber is string && data.docNumber.size() <= 48 &&
              data.docType in ['Receipt', 'Invoice', 'Quote', 'Packing List', 'Delivery Note', 'Credit Note', 'Online Order'] &&
-             data.channel in ['Retail Counter POS', 'B2B Wholesale POS', 'Customer Online Portal', 'Affiliate Rep'] &&
+             data.channel in ['Retail Counter POS', 'B2B Wholesale POS', 'Customer Online Portal', 'Affiliate Rep', 'Restaurant & Club POS', 'Merchant Shop POS'] &&
              data.branchName is string && data.branchName.size() <= 120 &&
              data.regionName is string && data.regionName.size() <= 120 &&
              data.customerName is string && data.customerName.size() <= 160 &&
@@ -91,6 +91,31 @@ service cloud.firestore {
              data.totalAmount is number &&
              data.status in ['Paid', 'Issued', 'Approved', 'Fulfilled', 'Credited', 'Pending Verification'] &&
              data.createdBy is string && data.createdBy.size() <= 120 &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidBusinessUnit(data) {
+      return data.keys().hasAll(['code', 'name', 'branchId', 'branchName', 'unitType', 'status', 'createdAt']) &&
+             data.code is string && data.code.size() <= 48 &&
+             data.name is string && data.name.size() <= 160 &&
+             data.branchId is string && data.branchId.size() <= 128 &&
+             data.branchName is string && data.branchName.size() <= 120 &&
+             data.unitType in ['restaurant_club', 'merchant_shop', 'bar_lounge'] &&
+             data.status in ['Active', 'Inactive'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidRestaurantInventory(data) {
+      return data.keys().hasAll(['businessUnitId', 'branchId', 'name', 'category', 'itemType', 'portionUnit', 'costPriceKes', 'sellingPriceKes', 'portionsAvailable', 'createdAt']) &&
+             data.businessUnitId is string && data.businessUnitId.size() <= 128 &&
+             data.branchId is string && data.branchId.size() <= 128 &&
+             data.name is string && data.name.size() <= 180 &&
+             data.category is string && data.category.size() <= 80 &&
+             data.itemType in ['food', 'beverage', 'club_amenity', 'tobacco_sigger', 'shisha'] &&
+             data.portionUnit is string && data.portionUnit.size() <= 40 &&
+             data.costPriceKes is number &&
+             data.sellingPriceKes is number &&
+             data.portionsAvailable is number &&
              data.createdAt is string && data.createdAt.size() <= 64;
     }
 
@@ -150,6 +175,20 @@ service cloud.firestore {
       allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(branchId) && isValidBranch(incoming());
       allow delete: if isValidId(branchId) && resource.data.createdAt >= '';
+    }
+
+    match /business_units/{unitId} {
+      allow get: if isValidId(unitId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
+      allow create, update: if isValidId(unitId) && isValidBusinessUnit(incoming());
+      allow delete: if isValidId(unitId) && resource.data.createdAt >= '';
+    }
+
+    match /restaurant_inventory/{itemId} {
+      allow get: if isValidId(itemId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
+      allow create, update: if isValidId(itemId) && isValidRestaurantInventory(incoming());
+      allow delete: if isValidId(itemId) && resource.data.createdAt >= '';
     }
 
     match /geo_regions/{regionId} {

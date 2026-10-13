@@ -179,7 +179,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         <header className="relative flex items-center justify-between gap-8 px-6 pt-6 pb-14 bg-[#0A006E] text-white overflow-hidden shadow-lg">
           <div className="silent-scanner-beam" />
           <div className="flex items-center gap-3.5 relative z-10 whitespace-nowrap shrink-0">
-            <div className="w-13 h-13 rounded-2xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center font-black border-2 border-white shadow-md">
+            <div className="w-13 h-13 rounded-2xl bg-white text-[#0A006E] flex items-center justify-center font-black border-2 border-white shadow-md">
               <Wine className="w-7 h-7" />
             </div>
             <span className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tighter">
@@ -194,7 +194,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
           {onBackToErpLogin && (
             <button
               onClick={onBackToErpLogin}
-              className="px-4 py-2.5 bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 relative z-10 shadow-md"
+              className="px-4 py-2.5 bg-white text-[#0A006E] hover:bg-slate-100 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 relative z-10 shadow-md border-2 border-white"
             >
               <ArrowLeft className="w-4 h-4" />
               Staff ERP Sign-In

@@ -245,6 +245,7 @@ export const ROLE_PERMISSIONS: Record<
       'hr_rbac',
       'audit_security',
       'customer_portal',
+      'outlets_restaurants',
     ],
     canCreateRoles: ['HR'], // Per requirement: "just the admin to create HR then HR can create other roles"
     badgeTitle: 'Executive System Administrator (Google Auth)',
@@ -285,6 +286,7 @@ export const ROLE_PERMISSIONS: Record<
       'partners',
       'documents_credit',
       'customer_portal',
+      'outlets_restaurants',
     ],
     canCreateRoles: [],
     badgeTitle: 'National Distribution Sales Manager (6-Digit PIN)',
@@ -300,6 +302,7 @@ export const ROLE_PERMISSIONS: Record<
       'branches_transfers',
       'documents_credit',
       'hr_rbac',
+      'outlets_restaurants',
     ],
     // Per requirement: "Branch manager should have capacity to also create sales persons and their cashier"
     canCreateRoles: ['Counter Cashier', 'Affiliate Sales Representative'],
@@ -315,6 +318,7 @@ export const ROLE_PERMISSIONS: Record<
       'partners',
       'compliance',
       'documents_credit',
+      'outlets_restaurants',
     ],
     canCreateRoles: [],
     badgeTitle: 'Bonded Warehouse & Inventory Controller (6-Digit PIN)',

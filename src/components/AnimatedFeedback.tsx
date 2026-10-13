@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 
 export const AnimatedSuccessTickIcon: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({
@@ -80,37 +80,62 @@ export const StatusFeedbackToast: React.FC<StatusFeedbackToastProps> = ({
 
   const isSuccess = status.type === 'success';
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onDismiss();
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [status, onDismiss]);
+
   return (
-    <div className="fixed top-24 right-4 sm:right-6 z-50 max-w-md w-full pointer-events-auto">
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      onClick={onDismiss}
+      className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 pointer-events-auto select-none"
+    >
       <div
-        className={`rounded-2xl p-4 border-2 shadow-2xl flex items-center gap-3.5 transition-all ${
+        onClick={(e) => e.stopPropagation()}
+        className={`relative z-10 rounded-3xl p-6 sm:p-8 flex flex-col items-center justify-center text-center shadow-2xl min-w-[280px] max-w-sm sm:max-w-md w-full border-2 transition-all feedback-dialog ${
           isSuccess
-            ? 'bg-white border-[#34D186] text-[#0A006E] animate-success-pop'
-            : 'bg-red-50 border-red-600 text-red-950 animate-error-shake'
+            ? 'bg-white border-[#34D186] text-slate-900 animate-success-pop shadow-emerald-950/20'
+            : 'bg-white border-red-600 text-slate-900 animate-error-shake shadow-rose-950/20'
         }`}
       >
-        {isSuccess ? (
-          <AnimatedSuccessTickIcon size="md" />
-        ) : (
-          <AnimatedErrorPromptIcon size="md" />
-        )}
-
-        <div className="flex-1 min-w-0">
-          <div className="text-xs font-montserrat font-black uppercase tracking-wider">
-            {status.title}
-          </div>
-          <div className="text-xs font-semibold text-slate-700 mt-0.5 leading-snug">
-            {status.message}
-          </div>
+        {/* Animated Center Icon (Success Tick / Error Prompt) */}
+        <div className="mb-4">
+          {isSuccess ? (
+            <AnimatedSuccessTickIcon size="lg" />
+          ) : (
+            <AnimatedErrorPromptIcon size="lg" />
+          )}
         </div>
 
+        {/* Title in Montserrat Bold */}
+        <h3
+          className={`font-montserrat font-black text-xl sm:text-2xl tracking-tight ${
+            isSuccess ? 'text-[#1E9E60]' : 'text-red-700'
+          }`}
+        >
+          {status.title}
+        </h3>
+
+        {/* Message */}
+        <p className="mt-2 text-xs sm:text-sm font-semibold text-slate-700 max-w-xs leading-relaxed">
+          {status.message}
+        </p>
+
+        {/* Action Button */}
         <button
           type="button"
           onClick={onDismiss}
-          className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer shrink-0"
-          aria-label="Dismiss notification"
+          className={`mt-6 px-7 py-2.5 rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition ${
+            isSuccess
+              ? 'bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00]'
+              : 'bg-red-600 hover:bg-red-700 text-white'
+          }`}
         >
-          <X className="w-4 h-4" />
+          Dismiss
         </button>
       </div>
     </div>
