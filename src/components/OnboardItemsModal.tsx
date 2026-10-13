@@ -213,7 +213,16 @@ export const OnboardItemsModal: React.FC<OnboardItemsModalProps> = ({
       }
     } catch (err: any) {
       console.error('Stock activation error:', err);
-      onShowErrorFeedback?.('System Error', err?.message || 'Error activating stock in database.');
+      let errorMsg = 'Error activating stock in database.';
+      if (err?.message) {
+        try {
+          const parsed = JSON.parse(err.message);
+          errorMsg = parsed.error || err.message;
+        } catch {
+          errorMsg = err.message;
+        }
+      }
+      onShowErrorFeedback?.('System Error', errorMsg);
     } finally {
       setIsActivating(false);
     }

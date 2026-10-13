@@ -85,6 +85,7 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
   const [gunInput, setGunInput] = useState<string>('');
   const [manualInput, setManualInput] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  const [locallyAssignedBarcodes, setLocallyAssignedBarcodes] = useState<Record<string, string>>({});
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error' | 'warning';
     text: string;
@@ -310,7 +311,13 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
   // Submit and save real barcode to product
   const handleSaveBarcode = async () => {
     if (!selectedProduct) return;
-    const clean = scannedCode.trim();
+    let clean = scannedCode.trim();
+    if (!clean && activeTab === 'manual' && manualInput.trim()) {
+      clean = manualInput.trim();
+    } else if (!clean && activeTab === 'gun' && gunInput.trim()) {
+      clean = gunInput.trim();
+    }
+
     if (!clean) {
       setStatusMessage({ type: 'error', text: 'Please scan or enter a real barcode first.' });
       return;
@@ -336,6 +343,12 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
         barcodeRegisteredByRole: currentUser.role,
       });
 
+      // Optimistically record the assigned barcode
+      setLocallyAssignedBarcodes((prev) => ({
+        ...prev,
+        [selectedProduct.id]: clean,
+      }));
+
       playPosBeep('success');
       setStatusMessage({
         type: 'success',
@@ -349,7 +362,7 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
 
       // Auto-advance to next product awaiting real barcode if available
       const nextAwaiting = products.find(
-        (p) => p.id !== selectedProduct.id && !p.hasRealBarcode
+        (p) => p.id !== selectedProduct.id && !p.hasRealBarcode && !locallyAssignedBarcodes[p.id]
       );
       if (nextAwaiting) {
         setTimeout(() => {
@@ -361,9 +374,19 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
         }, 800);
       }
     } catch (err: any) {
+      console.error('Barcode save error:', err);
+      let errorMsg = 'Failed to save real barcode to database.';
+      if (err?.message) {
+        try {
+          const parsed = JSON.parse(err.message);
+          errorMsg = parsed.error || err.message;
+        } catch {
+          errorMsg = err.message;
+        }
+      }
       setStatusMessage({
         type: 'error',
-        text: err?.message || 'Failed to save real barcode to database.',
+        text: errorMsg,
       });
     } finally {
       setIsSaving(false);
@@ -498,10 +521,10 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
                 </div>
 
                 <div className="text-right shrink-0">
-                  {selectedProduct.hasRealBarcode && selectedProduct.barcode ? (
+                  {(selectedProduct.hasRealBarcode && selectedProduct.barcode) || locallyAssignedBarcodes[selectedProduct.id] ? (
                     <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-mono-tabular font-bold text-[11px]">
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      Current: {selectedProduct.barcode}
+                      Current: {locallyAssignedBarcodes[selectedProduct.id] || selectedProduct.barcode}
                     </div>
                   ) : (
                     <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-300 rounded-lg font-montserrat font-bold text-[11px]">
@@ -637,6 +660,12 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
                   type="text"
                   value={manualInput}
                   onChange={(e) => setManualInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleBarcodeDetected(manualInput);
+                    }
+                  }}
                   placeholder="e.g. 5000267014005"
                   className="flex-1 px-3 py-2.5 bg-white border border-slate-300 rounded-xl font-mono-tabular font-bold text-sm text-slate-900"
                 />

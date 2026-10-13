@@ -764,7 +764,7 @@ export const OverviewModule: React.FC<{
           </button>
 
           {/* Button 3: Onboard Items & Barcode Scanner (Branch Manager / Inventory / Admin) */}
-          {onOpenOnboardItems && (currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || currentUser.role === 'Inventory Controller') && (
+          {onOpenOnboardItems && (currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || (currentUser.role as string) === 'Inventory Controller') && (
             <button
               type="button"
               onClick={onOpenOnboardItems}
@@ -883,7 +883,7 @@ export const OverviewModule: React.FC<{
         </div>
 
         <div className="flex items-center gap-2 relative z-10 shrink-0">
-          {onOpenOnboardItems && (currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || currentUser.role === 'Inventory Controller') && (
+          {onOpenOnboardItems && (currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || (currentUser.role as string) === 'Inventory Controller') && (
             <button
               type="button"
               onClick={onOpenOnboardItems}

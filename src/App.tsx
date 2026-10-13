@@ -189,12 +189,12 @@ export default function App() {
       const override = overrideMap.get(baseItem.id);
       if (override) {
         overrideMap.delete(baseItem.id);
-        const isReal = Boolean(override.hasRealBarcode);
+        const isReal = Boolean(override.hasRealBarcode || override.barcode);
         return {
           ...baseItem,
           ...override,
-          barcode: isReal ? override.barcode : undefined,
-          caseBarcode: isReal ? override.caseBarcode : undefined,
+          barcode: override.barcode || (isReal ? baseItem.barcode : undefined),
+          caseBarcode: override.caseBarcode || (isReal ? baseItem.caseBarcode : undefined),
           hasRealBarcode: isReal,
         };
       }
@@ -203,11 +203,11 @@ export default function App() {
 
     // Prepend any brand-new products created via the Auto-SKU generator in Firestore
     const customCreated = Array.from(overrideMap.values()).map((item) => {
-      const isReal = Boolean(item.hasRealBarcode);
+      const isReal = Boolean(item.hasRealBarcode || item.barcode);
       return {
         ...item,
-        barcode: isReal ? item.barcode : undefined,
-        caseBarcode: isReal ? item.caseBarcode : undefined,
+        barcode: item.barcode,
+        caseBarcode: item.caseBarcode,
         hasRealBarcode: isReal,
       };
     });
@@ -428,27 +428,27 @@ export default function App() {
     action: string,
     moduleName: string,
     details: string,
-    branchName: string,
+    branchName?: string,
     severity: AuditLog['severity'] = 'Info'
   ) => {
     const logId = `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const entry: AuditLog = {
+    const entry: AuditLog = cleanFirestoreData({
       id: logId,
-      actorName,
-      actorRole,
-      actorEmailOrPinId,
-      action,
-      module: moduleName,
-      details: details.slice(0, 490),
+      actorName: actorName || 'System Actor',
+      actorRole: actorRole || 'Staff',
+      actorEmailOrPinId: actorEmailOrPinId || 'terminal',
+      action: action || 'Action',
+      module: moduleName || 'General',
+      details: (details || '').slice(0, 490),
       deviceFingerprint: getDeviceFingerprint(),
-      branchName,
+      branchName: branchName || 'Headquarters',
       severity,
       createdAt: new Date().toISOString(),
-    };
+    });
     try {
       await setDoc(doc(db, 'audit_logs', logId), entry);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'audit_logs');
+      console.warn('[AuditLog] Non-critical write error:', error);
     }
   };
 
@@ -457,15 +457,22 @@ export default function App() {
     productId: string,
     patch: Partial<Product>
   ) => {
-    const baseProd = products.find((p) => p.id === productId);
-    if (!baseProd) return;
+    const baseProd =
+      products.find((p) => p.id === productId) ||
+      MASTER_IMPORTED_INVENTORY.find((p) => p.id === productId) ||
+      firestoreProducts.find((p) => p.id === productId);
+
     const now = new Date().toISOString();
-    const docPayload: Product = {
-      ...baseProd,
+    const docPayload: Product = cleanFirestoreData({
+      sku: baseProd?.sku || `SKU-${productId}`,
+      name: baseProd?.name || 'Product',
+      category: baseProd?.category || 'IPS',
+      volumeMl: Number(baseProd?.volumeMl || patch.volumeMl || 750),
+      createdAt: (baseProd && baseProd.createdAt) || now,
+      ...(baseProd || {}),
       ...patch,
       id: productId,
-      createdAt: baseProd.createdAt || now,
-    };
+    });
     await setDoc(doc(db, 'products', productId), docPayload, { merge: true });
   };
 
@@ -867,7 +874,7 @@ export default function App() {
       triggerToast(
         'success',
         'Product Updated',
-        `Updated "${updates.name || 'product'}" specifications & bottle photo.`
+        `Updated "${updates.name || 'product'}" specifications & barcode.`
       );
       if (currentUser) {
         await recordAuditLog(
@@ -876,12 +883,13 @@ export default function App() {
           currentUser.email,
           `Updated Product ${updates.name || productId}`,
           'Inventory & Auto-SKU',
-          `Edited product specs & uploaded bottle image for ${productId}`,
-          currentUser.branchName,
+          `Edited product specs & barcode for ${productId}`,
+          currentUser.branchName || 'Headquarters',
           'Info'
         );
       }
     } catch (error) {
+      console.error('Failed to update product details:', error);
       triggerToast('error', 'Update Failed', 'Unable to update product details.');
       handleFirestoreError(error, OperationType.WRITE, 'products');
     }
@@ -893,7 +901,9 @@ export default function App() {
     quantityToAdd: number
   ) => {
     try {
-      const prod = products.find((p) => p.id === productId);
+      const prod =
+        products.find((p) => p.id === productId) ||
+        MASTER_IMPORTED_INVENTORY.find((p) => p.id === productId);
       if (!prod) return { success: false, message: 'Product not found in system.' };
 
       let branchMap: Record<string, number> = {};
@@ -929,7 +939,7 @@ export default function App() {
           `Activated ${quantityToAdd} btls of ${prod.name}`,
           'Inventory & Stock Onboarding',
           `Branch Manager activated ${quantityToAdd} bottles into available stock for branch ${branchId}.`,
-          currentUser.branchName,
+          currentUser.branchName || 'Headquarters',
           'Info'
         );
       }
@@ -1090,11 +1100,11 @@ export default function App() {
       for (let i = 0; i < newProducts.length; i++) {
         const prod = newProducts[i];
         const id = `prod-${now}-${i}`;
-        const fullProd: Product = {
+        const fullProd: Product = cleanFirestoreData({
           ...prod,
           id,
           createdAt: new Date().toISOString(),
-        };
+        });
         await setDoc(doc(db, 'products', id), fullProd);
         successCount++;
       }

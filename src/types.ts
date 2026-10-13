@@ -107,6 +107,17 @@ export interface Branch {
   status: 'Operational' | 'Audit Hold' | 'Closed';
   isMain?: boolean;
   createdAt: string;
+  location?: string;
+  county?: string;
+  latitude?: number;
+  longitude?: number;
+  maxDeliveryRadiusKm?: number;
+  deliveryZones?: string[];
+  allowDirectSales?: boolean;
+  tier?: string;
+  marketClassTier?: BranchMarketClassTier;
+  priceMultiplierPercent?: number;
+  preferredProductPrices?: Record<string, BranchProductPriceOverride | number>;
 }
 
 export type BusinessUnitType = 'restaurant_club' | 'merchant_shop' | 'bar_lounge';
@@ -442,3 +453,190 @@ export type ERPModuleId =
   | 'audit_security'
   | 'customer_portal'
   | 'outlets_restaurants';
+
+// ==========================================
+// STOREFRONT & GEO-ROUTING ENTERPRISE TYPES
+// ==========================================
+
+export type BranchMarketClassTier =
+  | 'AFFLUENT_PREMIUM'
+  | 'UPMARKET_URBAN'
+  | 'STANDARD_RESIDENTIAL'
+  | 'EASTLANDS_ECONOMY'
+  | 'CUSTOM'
+  | 'TIER_1_UPMARKET'
+  | 'TIER_2_MIDMARKET'
+  | 'TIER_3_MASSMARKET';
+
+export interface BranchProductPriceOverride {
+  productId?: string;
+  priceKes?: number;
+  retailPriceKes?: number;
+  wholesalePriceKes?: number;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export type BranchRoutingModel =
+  | 'GPS_HAVERSINE'
+  | 'SERVICE_ZONE_GEOFENCE'
+  | 'STOCK_AWARE_FALLBACK'
+  | 'MANUAL_SELECTION';
+
+export type WebsiteDeliveryOrderStatus =
+  | 'ON_HOLD_PENDING_DELIVERY'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED_AWAITING_PAYMENT'
+  | 'COMPLETED_AND_PAID';
+
+export interface WebsiteDeliveryOrder {
+  id: string;
+  orderNumber: string;
+  consumerId?: string;
+  retailerOrganizationId?: string;
+  customerName: string;
+  customerEmail?: string;
+  customerPhone: string;
+  deliveryLocation: string;
+  deliveryNotes?: string;
+  branchId: string;
+  branchName: string;
+  customerLatitude?: number;
+  customerLongitude?: number;
+  distanceKm?: number;
+  estimatedEtaMinutes?: number;
+  routingModel?: BranchRoutingModel;
+  items: {
+    product: Product;
+    quantity: number;
+    companyUnitPrice: number;
+    preferredSellingUnitPrice?: number;
+    totalAmount: number;
+  }[];
+  totalCompanyPriceKes: number;
+  grossSoldPriceKes?: number;
+  affiliateId?: string;
+  affiliateName?: string;
+  affiliateCode?: string;
+  salesNetworkCustomerId?: string;
+  affiliateMarkupProfitKes?: number;
+  affiliateBaseCommissionKes?: number;
+  deliveryStatus: WebsiteDeliveryOrderStatus;
+  riderName?: string;
+  riderPhone?: string;
+  createdAt: string;
+  deliveredAt?: string;
+  paidAt?: string;
+  paymentPhone?: string;
+  mpesaReceiptNumber?: string;
+  completedSaleOrderId?: string;
+  etimsInvoiceNumber?: string;
+}
+
+export interface ProductRatingRecord {
+  id: string;
+  productId: string;
+  consumerId?: string;
+  raterKey: string;
+  raterName: string;
+  stars: number;
+  comment?: string;
+  isVerifiedBuyer?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LiveLoggedInCustomer {
+  uid: string;
+  name: string;
+  email: string;
+  phone: string;
+  carrier?: 'SAFARICOM' | 'AIRTEL' | 'TELKOM' | 'UNKNOWN';
+  photoURL?: string;
+  deliveryZone?: string;
+  deliveryStreetAndHouse?: string;
+  branchId?: string;
+  branchName?: string;
+  cartItemsCount: number;
+  cartTotalKes: number;
+  activeOrdersCount: number;
+  status: 'ONLINE' | 'IN_CHECKOUT' | 'ORDER_PLACED';
+}
+
+export interface SaleItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  barcode?: string;
+  quantity: number;
+  companyUnitPrice?: number;
+  unitPrice: number;
+  costPrice: number;
+  vatAmount?: number;
+  companyTotalAmount?: number;
+  totalAmount: number;
+  affiliateMarkupPerUnit?: number;
+  affiliateProfitAmount?: number;
+  stockBeforeSale?: number;
+  stockAfterSale?: number;
+  assetValueDeductedKes?: number;
+  itemType?: 'ALCOHOL' | 'FOOD';
+  foodCategoryName?: string;
+  notes?: string;
+}
+
+export interface SaleOrder {
+  id: string;
+  orderNumber: string;
+  orderSource?: 'POS' | 'WEBSITE';
+  deliveryAddress?: string;
+  branchId: string;
+  branchName: string;
+  cashierId?: string;
+  cashierName?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  customerKraPin?: string;
+  saleType?: 'RETAIL' | 'WHOLESALE';
+  items: SaleItem[];
+  subtotalKes?: number;
+  vatAmountKes?: number;
+  totalKes: number;
+  totalAmount?: number;
+  createdAt: string;
+  paymentMethod?: string;
+  mpesaReceiptNumber?: string;
+  etimsInvoiceNumber?: string;
+}
+
+export interface ETimsInvoice {
+  id: string;
+  invoiceNumber: string;
+  orderId: string;
+  branchId: string;
+  sellerPin: string;
+  sellerName: string;
+  buyerPin?: string;
+  buyerName?: string;
+  servedBy?: string;
+  deviceSerialNumber: string;
+  cuSerialNumber: string;
+  qrCodeUrl: string;
+  kraControlCode: string;
+  invoiceDate: string;
+  taxableAmount: number;
+  taxAmount: number;
+  totalInvoiceAmount: number;
+  transmissionStatus: 'TRANSMITTED' | 'QUEUED' | 'VERIFIED';
+}
+
+export interface BarcodeScanRecord {
+  id: string;
+  barcode: string;
+  productId: string;
+  branchId: string;
+  scannedAt: string;
+  scannerId: string;
+}
+
