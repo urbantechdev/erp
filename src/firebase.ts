@@ -89,7 +89,13 @@ export { safeSignInWithPopup as signInWithPopup, signOut };
  * Prevents Firestore "Function setDoc() called with invalid data. Unsupported field value: undefined" errors.
  */
 export function cleanFirestoreData<T>(obj: T): T {
-  if (obj === null || obj === undefined || typeof obj !== 'object') {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (typeof obj !== 'object') {
+    if (typeof obj === 'number' && Number.isNaN(obj)) {
+      return 0 as unknown as T;
+    }
     return obj;
   }
   if (Array.isArray(obj)) {
@@ -100,6 +106,9 @@ export function cleanFirestoreData<T>(obj: T): T {
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (value !== undefined) {
+      if (typeof value === 'number' && Number.isNaN(value)) {
+        continue;
+      }
       result[key] = typeof value === 'object' && value !== null ? cleanFirestoreData(value) : value;
     }
   }

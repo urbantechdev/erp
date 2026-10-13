@@ -38,6 +38,7 @@ export interface StaffMember {
   branchName: string;
   businessUnitId?: string;
   businessUnitName?: string;
+  assignedLine?: 'restaurant' | 'supermarket' | 'all';
   status: 'Active' | 'Suspended' | 'Terminated';
   createdBy: string;
   createdByRole: string;
