@@ -995,19 +995,6 @@ export default function App() {
 
   const handleUpdateProduct = async (productId: string, updates: Partial<Product>) => {
     try {
-      setFirestoreProducts((prev) => {
-        const idx = prev.findIndex((p) => p.id === productId);
-        if (idx >= 0) {
-          const updated = [...prev];
-          updated[idx] = { ...updated[idx], ...updates };
-          return updated;
-        } else {
-          const baseProd =
-            products.find((p) => p.id === productId) ||
-            MASTER_IMPORTED_INVENTORY.find((p) => p.id === productId);
-          return [{ ...(baseProd || ({} as Product)), ...updates, id: productId }, ...prev];
-        }
-      });
       await persistProductState(productId, updates);
       triggerToast(
         'success',
