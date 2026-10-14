@@ -131,7 +131,7 @@ export interface Branch {
   tier?: string;
   marketClassTier?: BranchMarketClassTier;
   priceMultiplierPercent?: number;
-  preferredProductPrices?: Record<string, BranchProductPriceOverride | number>;
+  preferredProductPrices?: Record<string, BranchProductPriceOverride>;
 }
 
 export type BusinessUnitType = 'restaurant_club' | 'merchant_shop' | 'bar_lounge';
@@ -612,6 +612,16 @@ export interface SaleOrder {
   customerEmail?: string;
   customerPhone?: string;
   customerKraPin?: string;
+  tableNumber?: string;
+  attachedAlcoholBill?: any;
+  affiliateId?: string;
+  affiliateName?: string;
+  companySalesTotal?: number;
+  affiliateMarkupTotal?: number;
+  affiliateProfitAmount?: number;
+  affiliateBaseCommissionAmount?: number;
+  affiliateCommissionRate?: number;
+  affiliateCommissionAmount?: number;
   saleType?: 'RETAIL' | 'WHOLESALE';
   items: SaleItem[];
   subtotalKes?: number;
@@ -620,17 +630,9 @@ export interface SaleOrder {
   totalAmount?: number;
   createdAt: string;
   paymentMethod?: string;
+  paymentStatus?: string;
   mpesaReceiptNumber?: string;
   etimsInvoiceNumber?: string;
-  affiliateCommissionAmount?: number;
-  affiliateCommissionRate?: number;
-  affiliateBaseCommissionAmount?: number;
-  affiliateId?: string;
-  affiliateName?: string;
-  companySalesTotal?: number;
-  affiliateMarkupTotal?: number;
-  affiliateProfitAmount?: number;
-  attachedAlcoholBill?: any;
 }
 
 export interface ETimsInvoice {

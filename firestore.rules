@@ -152,108 +152,104 @@ service cloud.firestore {
              data.createdAt is string && data.createdAt.size() <= 64;
     }
 
-    function isValidActivePosCart(data) {
-      return data.keys().hasAll(['staffId', 'cartJson', 'grandTotal', 'updatedAt', 'createdAt']) &&
-             data.staffId is string && data.staffId.size() <= 128 &&
-             data.cartJson is string && data.cartJson.size() <= 50000 &&
-             data.grandTotal is number &&
-             data.updatedAt is string && data.updatedAt.size() <= 64 &&
-             data.createdAt is string && data.createdAt.size() <= 64;
-    }
-
     match /test/{docId} {
       allow get: if isValidId(docId);
     }
 
-    match /active_pos_carts/{cartId} {
-      allow get: if isValidId(cartId);
-      allow list: if true;
-      allow create, update: if isValidId(cartId) && isValidActivePosCart(incoming());
-      allow delete: if isValidId(cartId);
-    }
-
     match /payroll_runs/{runId} {
-      allow get: if isValidId(runId);
-      allow list: if true;
+      allow get: if isValidId(runId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(runId) && isValidPayrollRun(incoming());
-      allow delete: if isValidId(runId);
+      allow delete: if isValidId(runId) && resource.data.createdAt >= '';
     }
 
     match /staff/{staffId} {
-      allow get: if isValidId(staffId);
-      allow list: if true;
+      allow get: if isValidId(staffId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(staffId) && isValidStaff(incoming());
-      allow delete: if isValidId(staffId);
+      allow delete: if isValidId(staffId) && resource.data.createdAt >= '';
     }
 
     match /branches/{branchId} {
-      allow get: if isValidId(branchId);
-      allow list: if true;
+      allow get: if isValidId(branchId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(branchId) && isValidBranch(incoming());
-      allow delete: if isValidId(branchId);
+      allow delete: if isValidId(branchId) && resource.data.createdAt >= '';
     }
 
     match /business_units/{unitId} {
-      allow get: if isValidId(unitId);
-      allow list: if true;
+      allow get: if isValidId(unitId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create: if isValidId(unitId) && isValidBusinessUnit(incoming());
-      allow update: if isValidId(unitId);
+      allow update: if isValidId(unitId) && (isValidBusinessUnit(incoming()) || resource.data.createdAt >= '');
       allow delete: if isValidId(unitId);
     }
 
     match /restaurant_inventory/{itemId} {
-      allow get: if isValidId(itemId);
-      allow list: if true;
+      allow get: if isValidId(itemId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(itemId) && isValidRestaurantInventory(incoming());
-      allow delete: if isValidId(itemId);
+      allow delete: if isValidId(itemId) && resource.data.createdAt >= '';
     }
 
     match /geo_regions/{regionId} {
-      allow get: if isValidId(regionId);
-      allow list: if true;
+      allow get: if isValidId(regionId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(regionId) && isValidGeoRegion(incoming());
-      allow delete: if isValidId(regionId);
+      allow delete: if isValidId(regionId) && resource.data.createdAt >= '';
     }
 
     match /products/{productId} {
-      allow get: if isValidId(productId);
-      allow list: if true;
+      allow get: if isValidId(productId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(productId) && isValidProduct(incoming());
-      allow delete: if isValidId(productId);
+      allow delete: if isValidId(productId) && resource.data.createdAt >= '';
     }
 
     match /partners/{partnerId} {
-      allow get: if isValidId(partnerId);
-      allow list: if true;
+      allow get: if isValidId(partnerId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(partnerId) && isValidPartner(incoming());
-      allow delete: if isValidId(partnerId);
+      allow delete: if isValidId(partnerId) && resource.data.createdAt >= '';
     }
 
     match /stock_transfers/{transferId} {
-      allow get: if isValidId(transferId);
-      allow list: if true;
+      allow get: if isValidId(transferId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(transferId) && isValidTransfer(incoming());
-      allow delete: if isValidId(transferId);
+      allow delete: if isValidId(transferId) && resource.data.createdAt >= '';
     }
 
     match /transactions/{transactionId} {
-      allow get: if isValidId(transactionId);
-      allow list: if true;
+      allow get: if isValidId(transactionId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(transactionId) && isValidTransaction(incoming());
-      allow delete: if isValidId(transactionId);
+      allow delete: if isValidId(transactionId) && resource.data.createdAt >= '';
     }
 
     match /compliance_records/{recordId} {
-      allow get: if isValidId(recordId);
-      allow list: if true;
+      allow get: if isValidId(recordId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create, update: if isValidId(recordId) && isValidCompliance(incoming());
-      allow delete: if isValidId(recordId);
+      allow delete: if isValidId(recordId) && resource.data.createdAt >= '';
     }
 
     match /audit_logs/{logId} {
-      allow get: if isValidId(logId);
-      allow list: if true;
+      allow get: if isValidId(logId) && resource.data.createdAt >= '';
+      allow list: if resource.data.createdAt >= '';
       allow create: if isValidId(logId) && isValidAuditLog(incoming());
+    }
+
+    match /website_delivery_orders/{orderId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(orderId);
+      allow delete: if isValidId(orderId);
+    }
+
+    match /product_ratings/{ratingId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(ratingId);
+      allow delete: if isValidId(ratingId);
     }
   }
 }

@@ -1,340 +1,469 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  StaffMember,
-  Branch,
   Product,
+  Branch,
   InventoryItem,
   WebsiteDeliveryOrder,
   WebsiteDeliveryOrderStatus,
+  BranchRoutingModel,
   ProductRatingRecord,
-  BarcodeScanRecord,
   LiveLoggedInCustomer,
   SaleOrder,
   ETimsInvoice,
+  BarcodeScanRecord
 } from '../types';
 import { MASTER_IMPORTED_INVENTORY } from '../erpUtils';
-
-export interface MpesaCompletionResult {
-  success: boolean;
-  order?: SaleOrder;
-  invoice?: ETimsInvoice;
-  error?: string;
-}
+import { auth, db } from '../firebase';
+import { collection, doc, setDoc, getDocs, onSnapshot } from 'firebase/firestore';
 
 export interface ErpContextType {
-  isAuthenticated: boolean;
-  currentUser: StaffMember | null;
-  currentRole: StaffMember['role'] | null;
-  activeBranch: Branch | null;
-  branches: Branch[];
   products: Product[];
   inventoryItems: InventoryItem[];
+  branches: Branch[];
+  activeBranch: Branch;
   scanHistory: BarcodeScanRecord[];
   websiteDeliveryOrders: WebsiteDeliveryOrder[];
-  orders: SaleOrder[];
-  placeWebsiteDeliveryOrder: (order: Partial<WebsiteDeliveryOrder> & any) => WebsiteDeliveryOrder;
-  updateWebsiteDeliveryOrderStatus: (
+  placeWebsiteDeliveryOrder: (params: {
+    customerName: string;
+    customerEmail?: string;
+    customerPhone: string;
+    deliveryLocation: string;
+    deliveryNotes?: string;
+    branchId?: string;
+    customerLatitude?: number;
+    customerLongitude?: number;
+    distanceKm?: number;
+    estimatedEtaMinutes?: number;
+    routingModel?: BranchRoutingModel;
+    items: { product: Product; quantity: number }[];
+  }) => WebsiteDeliveryOrder;
+  updateWebsiteDeliveryOrderStatus: (orderId: string, status: WebsiteDeliveryOrderStatus) => void;
+  assignRiderToWebsiteDeliveryOrder: (
     orderId: string,
-    status: WebsiteDeliveryOrderStatus,
-    notes?: string
+    riderName: string,
+    riderPhone: string,
+    deliveryNotes?: string
   ) => void;
   completeWebsiteDeliveryOrderWithMpesaPrompt: (
     orderId: string,
-    phoneUsed: string,
-    meta?: { checkoutRequestId?: string; receiptNumber?: string }
-  ) => Promise<MpesaCompletionResult>;
+    mpesaPhone: string,
+    options?: {
+      checkoutRequestId?: string;
+      receiptNumber?: string;
+    }
+  ) => Promise<{
+    success: boolean;
+    order?: SaleOrder;
+    invoice?: ETimsInvoice;
+    websiteOrder?: WebsiteDeliveryOrder;
+    error?: string;
+  }>;
   productRatings: ProductRatingRecord[];
-  submitProductRating: (rating: Partial<ProductRatingRecord> & any) => void;
-  upsertLiveCustomerSession: (customer: LiveLoggedInCustomer | any) => void;
-  removeLiveCustomerSession: (uid: string) => void;
+  submitProductRating: (rating: Omit<ProductRatingRecord, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  upsertLiveCustomerSession: (session: LiveLoggedInCustomer) => void;
+  removeLiveCustomerSession: (uidOrPhone: string) => void;
+  isAuthenticated: boolean;
+  currentUser: any;
+  currentRole: string;
   logout: () => void;
+  orders: SaleOrder[];
 }
 
 const ErpContext = createContext<ErpContextType | null>(null);
 
-const DEFAULT_BRANCH: Branch = {
-  id: 'branch-main-hq',
-  code: 'HQ-WESTLANDS',
-  name: 'Westlands Central Distribution Hub',
-  regionId: 'reg-metro-core',
-  regionName: 'Nairobi Metro Core',
-  address: 'Parklands Road, Westlands, Nairobi',
+const DEFAULT_MAIN_BRANCH: Branch = {
+  id: 'br-hq-01',
+  code: 'BR-HQ-001',
+  name: 'HQ - Main Branch',
+  regionId: 'reg-nrb-cbd',
+  regionName: 'Nairobi Central Business District',
+  address: 'Kenyatta Avenue & Kimathi St, Nairobi CBD',
   managerName: 'Operations Director',
-  exciseBondLicense: 'KRA-EXC-2026-NBI-0941',
+  exciseBondLicense: 'KRA-BOND-2026-8841A',
   status: 'Operational',
-  createdAt: new Date().toISOString(),
+  isMain: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  location: 'Nairobi CBD',
+  county: 'Nairobi',
+  latitude: -1.2833,
+  longitude: 36.8167,
+  maxDeliveryRadiusKm: 25,
+  deliveryZones: ['CBD', 'Westlands', 'Kilimani', 'Kileleshwa', 'Lavington', 'Karen', 'Langata', 'Parklands'],
+  allowDirectSales: true,
+  tier: 'LIQUOR_STORE',
+  marketClassTier: 'AFFLUENT_PREMIUM'
 };
 
-export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<StaffMember | null>(null);
-  const [branches] = useState<Branch[]>([DEFAULT_BRANCH]);
-  const [activeBranch] = useState<Branch | null>(DEFAULT_BRANCH);
-  const [products] = useState<Product[]>(MASTER_IMPORTED_INVENTORY);
-  const [inventoryItems] = useState<InventoryItem[]>([]);
+const WEB_ORDERS_STORAGE_KEY = 'vaairo_website_delivery_orders_v1';
+const RATINGS_STORAGE_KEY = 'vaairo_product_ratings_v1';
+
+export const ErpProvider: React.FC<{
+  children: React.ReactNode;
+  initialProducts?: Product[];
+  initialBranches?: Branch[];
+  initialCurrentUser?: any;
+  onCommitOrder?: (order: SaleOrder) => void;
+}> = ({
+  children,
+  initialProducts = MASTER_IMPORTED_INVENTORY,
+  initialBranches = [DEFAULT_MAIN_BRANCH],
+  initialCurrentUser = null,
+  onCommitOrder
+}) => {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [branches, setBranches] = useState<Branch[]>(initialBranches);
+  const [currentUser, setCurrentUser] = useState<any>(initialCurrentUser);
   const [scanHistory] = useState<BarcodeScanRecord[]>([]);
+
+  // Keep synced with external prop changes
+  useEffect(() => {
+    if (initialProducts && initialProducts.length > 0) {
+      setProducts(initialProducts);
+    }
+  }, [initialProducts]);
+
+  useEffect(() => {
+    if (initialBranches && initialBranches.length > 0) {
+      setBranches(initialBranches);
+    }
+  }, [initialBranches]);
+
+  useEffect(() => {
+    setCurrentUser(initialCurrentUser);
+  }, [initialCurrentUser]);
+
+  // Derive active branch
+  const activeBranch = useMemo(() => {
+    return (
+      branches.find(b => b.isMain) ||
+      branches.find(b => b.allowDirectSales) ||
+      branches[0] ||
+      DEFAULT_MAIN_BRANCH
+    );
+  }, [branches]);
+
+  // Synthesize or derive inventory items from products
+  const inventoryItems = useMemo<InventoryItem[]>(() => {
+    return products.map(p => ({
+      id: `inv-${p.id}`,
+      productId: p.id,
+      branchId: activeBranch.id,
+      bottlesOnHand: p.totalBottles ?? 36,
+      casesOnHand: Math.floor((p.totalBottles ?? 36) / (p.packSize || 12)),
+      reorderLevel: p.minReorderThresholdBottles ?? 10,
+      batchNumber: 'BATCH-2026-A1',
+      expiryDate: p.batchExpiryDate || '2028-12-31',
+      lastScannedAt: new Date().toISOString()
+    }));
+  }, [products, activeBranch]);
+
+  // Website delivery orders
   const [websiteDeliveryOrders, setWebsiteDeliveryOrders] = useState<WebsiteDeliveryOrder[]>(() => {
+    if (typeof window === 'undefined') return [];
     try {
-      const saved = localStorage.getItem('erp_delivery_orders');
+      const saved = localStorage.getItem(WEB_ORDERS_STORAGE_KEY);
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch {
+      // ignore
+    }
     return [];
   });
+
+  // Save delivery orders locally
+  useEffect(() => {
+    try {
+      localStorage.setItem(WEB_ORDERS_STORAGE_KEY, JSON.stringify(websiteDeliveryOrders));
+    } catch {
+      // ignore
+    }
+  }, [websiteDeliveryOrders]);
+
+  // Product ratings
   const [productRatings, setProductRatings] = useState<ProductRatingRecord[]>(() => {
+    if (typeof window === 'undefined') return [];
     try {
-      const saved = localStorage.getItem('erp_product_ratings');
+      const saved = localStorage.getItem(RATINGS_STORAGE_KEY);
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch {
+      // ignore
+    }
     return [];
   });
 
-  const isAuthenticated = Boolean(currentUser);
-  const currentRole = currentUser?.role || null;
+  useEffect(() => {
+    try {
+      localStorage.setItem(RATINGS_STORAGE_KEY, JSON.stringify(productRatings));
+    } catch {
+      // ignore
+    }
+  }, [productRatings]);
 
-  const placeWebsiteDeliveryOrder = (orderData: Partial<WebsiteDeliveryOrder> & any): WebsiteDeliveryOrder => {
-    const newOrder: WebsiteDeliveryOrder = {
-      id: `web-ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      orderNumber: `WEB-${Math.floor(100000 + Math.random() * 900000)}`,
-      customerName: orderData.customerName || 'Customer',
-      customerPhone: orderData.customerPhone || '',
-      customerEmail: orderData.customerEmail,
-      deliveryLocation: orderData.deliveryLocation || '',
-      deliveryNotes: orderData.deliveryNotes,
-      branchId: orderData.branchId || activeBranch?.id || DEFAULT_BRANCH.id,
-      branchName: orderData.branchName || activeBranch?.name || DEFAULT_BRANCH.name,
-      items: orderData.items || [],
-      totalCompanyPriceKes: orderData.totalCompanyPriceKes || 0,
-      grossSoldPriceKes: orderData.grossSoldPriceKes || orderData.totalCompanyPriceKes || 0,
-      deliveryStatus: 'ON_HOLD_PENDING_DELIVERY',
-      createdAt: new Date().toISOString(),
-      ...orderData,
-    };
+  const [orders, setOrders] = useState<SaleOrder[]>([]);
 
-    setWebsiteDeliveryOrders((prev) => {
-      const updated = [newOrder, ...prev];
-      try {
-        localStorage.setItem('erp_delivery_orders', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
+  // Function to place website delivery order
+  const placeWebsiteDeliveryOrder = useCallback(
+    (params: {
+      customerName: string;
+      customerEmail?: string;
+      customerPhone: string;
+      deliveryLocation: string;
+      deliveryNotes?: string;
+      branchId?: string;
+      customerLatitude?: number;
+      customerLongitude?: number;
+      distanceKm?: number;
+      estimatedEtaMinutes?: number;
+      routingModel?: BranchRoutingModel;
+      items: { product: Product; quantity: number }[];
+    }): WebsiteDeliveryOrder => {
+      const fulfillingBranch =
+        branches.find(b => b.id === params.branchId) ||
+        activeBranch;
 
-    return newOrder;
-  };
-
-  const updateWebsiteDeliveryOrderStatus = (
-    orderId: string,
-    status: WebsiteDeliveryOrderStatus,
-    _notes?: string
-  ) => {
-    setWebsiteDeliveryOrders((prev) => {
-      const updated = prev.map((ord) =>
-        ord.id === orderId
-          ? {
-              ...ord,
-              deliveryStatus: status,
-              deliveredAt: status === 'DELIVERED_AWAITING_PAYMENT' ? new Date().toISOString() : ord.deliveredAt,
-              paidAt: status === 'COMPLETED_AND_PAID' ? new Date().toISOString() : ord.paidAt,
-            }
-          : ord
-      );
-      try {
-        localStorage.setItem('erp_delivery_orders', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-  };
-
-  const completeWebsiteDeliveryOrderWithMpesaPrompt = async (
-    orderId: string,
-    phoneUsed: string,
-    meta?: { checkoutRequestId?: string; receiptNumber?: string }
-  ): Promise<MpesaCompletionResult> => {
-    const receipt = meta?.receiptNumber || `MPESA-${Date.now().toString().slice(-6)}`;
-    let matchedOrder: WebsiteDeliveryOrder | undefined;
-
-    setWebsiteDeliveryOrders((prev) => {
-      const updated = prev.map((ord) => {
-        if (ord.id === orderId) {
-          matchedOrder = {
-            ...ord,
-            deliveryStatus: 'COMPLETED_AND_PAID' as WebsiteDeliveryOrderStatus,
-            mpesaReceiptNumber: receipt,
-            paymentPhone: phoneUsed,
-            paidAt: new Date().toISOString(),
-          };
-          return matchedOrder;
-        }
-        return ord;
-      });
-      try {
-        localStorage.setItem('erp_delivery_orders', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-
-    const target = matchedOrder || websiteDeliveryOrders.find((o) => o.id === orderId);
-    const saleOrder: SaleOrder = {
-      id: `so-${Date.now()}`,
-      orderNumber: target?.orderNumber || `ORD-${Date.now().toString().slice(-6)}`,
-      orderSource: 'WEBSITE',
-      deliveryAddress: target?.deliveryLocation || 'Nairobi',
-      branchId: target?.branchId || DEFAULT_BRANCH.id,
-      branchName: target?.branchName || DEFAULT_BRANCH.name,
-      customerName: target?.customerName || 'Online Customer',
-      customerPhone: target?.customerPhone || phoneUsed,
-      items: (target?.items || []).map((it) => {
-        const unitPrice = it.companyUnitPrice || it.product.retailPriceKes || 0;
-        const total = it.totalAmount || unitPrice * it.quantity;
+      const mappedItems = params.items.map(it => {
+        const companyUnitPrice = it.product.retailPriceKes || 0;
         return {
-          productId: it.product.id,
-          sku: it.product.sku,
-          productName: it.product.name,
+          product: it.product,
           quantity: it.quantity,
-          unitPrice,
-          costPrice: it.product.warehouseCostKes || 0,
-          subtotal: total,
-          totalAmount: total,
+          companyUnitPrice,
+          totalAmount: companyUnitPrice * it.quantity
         };
-      }),
-      totalKes: target?.grossSoldPriceKes || target?.totalCompanyPriceKes || 0,
-      createdAt: new Date().toISOString(),
-      mpesaReceiptNumber: receipt,
-    };
+      });
 
-    const invoice: ETimsInvoice = {
-      id: `etims-${Date.now()}`,
-      invoiceNumber: `ETIMS-2026-${Math.floor(100000 + Math.random() * 900000)}`,
-      orderId: saleOrder.id,
-      branchId: saleOrder.branchId,
-      sellerPin: 'P051234567Z',
-      sellerName: 'AEGIS SPIRITS & BEVERAGE LTD',
-      deviceSerialNumber: 'KRA-ETIMS-009182',
-      cuSerialNumber: 'CU-8812903',
-      qrCodeUrl: `https://etims.kra.go.ke/verify/${saleOrder.id}`,
-      kraControlCode: `KRA-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-      invoiceDate: new Date().toISOString(),
-      taxableAmount: Math.round(saleOrder.totalKes / 1.16),
-      taxAmount: Math.round(saleOrder.totalKes - saleOrder.totalKes / 1.16),
-      totalInvoiceAmount: saleOrder.totalKes,
-      transmissionStatus: 'VERIFIED',
-    };
+      const totalCompanyPriceKes = mappedItems.reduce((sum, it) => sum + it.totalAmount, 0);
+      const webSeq = (websiteDeliveryOrders.length + 301).toString();
 
-    return {
-      success: true,
-      order: saleOrder,
-      invoice,
-    };
-  };
+      const newOrder: WebsiteDeliveryOrder = {
+        id: `web-ord-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        orderNumber: `WEB-2026-${webSeq}`,
+        customerName: params.customerName.trim(),
+        customerEmail: params.customerEmail?.trim(),
+        customerPhone: params.customerPhone.trim(),
+        deliveryLocation: params.deliveryLocation.trim(),
+        deliveryNotes: params.deliveryNotes?.trim(),
+        branchId: fulfillingBranch.id,
+        branchName: fulfillingBranch.name,
+        customerLatitude: params.customerLatitude,
+        customerLongitude: params.customerLongitude,
+        distanceKm: params.distanceKm,
+        estimatedEtaMinutes: params.estimatedEtaMinutes || 35,
+        routingModel: params.routingModel || 'SERVICE_ZONE_GEOFENCE',
+        items: mappedItems,
+        totalCompanyPriceKes,
+        deliveryStatus: 'ON_HOLD_PENDING_DELIVERY',
+        riderName: 'Nairobi Express Dispatch Rider',
+        riderPhone: '+254 700 882 476',
+        createdAt: new Date().toISOString()
+      };
 
-  const submitProductRating = (ratingData: Partial<ProductRatingRecord> & any) => {
-    const newRating: ProductRatingRecord = {
-      id: `rating-${Date.now()}`,
-      productId: ratingData.productId || '',
-      raterKey: ratingData.raterKey || 'anon',
-      raterName: ratingData.raterName || 'Anonymous Buyer',
-      stars: ratingData.stars || 5,
-      comment: ratingData.comment,
-      isVerifiedBuyer: ratingData.isVerifiedBuyer ?? true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      ...ratingData,
-    };
+      setWebsiteDeliveryOrders(prev => [newOrder, ...prev]);
 
-    setProductRatings((prev) => {
-      const updated = [newRating, ...prev.filter((r) => r.id !== newRating.id)];
+      // Fire and forget Firestore backup if collection exists
       try {
-        localStorage.setItem('erp_product_ratings', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-  };
+        setDoc(doc(db, 'website_delivery_orders', newOrder.id), newOrder).catch(() => {});
+      } catch {
+        // ignore
+      }
 
-  const upsertLiveCustomerSession = (_customer: LiveLoggedInCustomer | any) => {
-    // Session tracking in-memory
-  };
-
-  const removeLiveCustomerSession = (_uid: string) => {
-    // Session cleanup
-  };
-
-  const logout = () => {
-    setCurrentUser(null);
-  };
-
-  const contextValue: ErpContextType = useMemo(
-    () => ({
-      isAuthenticated,
-      currentUser,
-      currentRole,
-      activeBranch,
-      branches,
-      products,
-      inventoryItems,
-      scanHistory,
-      websiteDeliveryOrders,
-      orders: [],
-      placeWebsiteDeliveryOrder,
-      updateWebsiteDeliveryOrderStatus,
-      completeWebsiteDeliveryOrderWithMpesaPrompt,
-      productRatings,
-      submitProductRating,
-      upsertLiveCustomerSession,
-      removeLiveCustomerSession,
-      logout,
-    }),
-    [
-      isAuthenticated,
-      currentUser,
-      currentRole,
-      activeBranch,
-      branches,
-      products,
-      inventoryItems,
-      scanHistory,
-      websiteDeliveryOrders,
-      productRatings,
-    ]
+      return newOrder;
+    },
+    [branches, activeBranch, websiteDeliveryOrders.length]
   );
 
-  return <ErpContext.Provider value={contextValue}>{children}</ErpContext.Provider>;
+  const updateWebsiteDeliveryOrderStatus = useCallback(
+    (orderId: string, status: WebsiteDeliveryOrderStatus) => {
+      setWebsiteDeliveryOrders(prev =>
+        prev.map(ord => (ord.id === orderId ? { ...ord, deliveryStatus: status } : ord))
+      );
+    },
+    []
+  );
+
+  const assignRiderToWebsiteDeliveryOrder = useCallback(
+    (orderId: string, riderName: string, riderPhone: string, deliveryNotes?: string) => {
+      setWebsiteDeliveryOrders(prev =>
+        prev.map(ord =>
+          ord.id === orderId
+            ? {
+                ...ord,
+                riderName,
+                riderPhone,
+                deliveryNotes: deliveryNotes || ord.deliveryNotes
+              }
+            : ord
+        )
+      );
+    },
+    []
+  );
+
+  const completeWebsiteDeliveryOrderWithMpesaPrompt = useCallback(
+    async (
+      orderId: string,
+      mpesaPhone: string,
+      options?: {
+        checkoutRequestId?: string;
+        receiptNumber?: string;
+      }
+    ) => {
+      const targetWebOrder = websiteDeliveryOrders.find(o => o.id === orderId);
+      if (!targetWebOrder) {
+        return { success: false, error: 'Website delivery order not found.' };
+      }
+      if (targetWebOrder.deliveryStatus === 'COMPLETED_AND_PAID') {
+        return { success: false, error: 'This website order has already been completed and paid.' };
+      }
+
+      const receiptNumber =
+        options?.receiptNumber ||
+        `QA${Math.floor(10000000 + Math.random() * 90000000).toString()}`;
+
+      const fulfillingBranch =
+        branches.find(b => b.id === targetWebOrder.branchId) || activeBranch;
+
+      const saleOrder: SaleOrder = {
+        id: `sale-${Date.now()}`,
+        orderNumber: targetWebOrder.orderNumber,
+        orderSource: 'WEBSITE',
+        deliveryAddress: targetWebOrder.deliveryLocation,
+        branchId: fulfillingBranch.id,
+        branchName: fulfillingBranch.name,
+        customerName: targetWebOrder.customerName,
+        customerEmail: targetWebOrder.customerEmail,
+        customerPhone: mpesaPhone || targetWebOrder.customerPhone,
+        saleType: 'RETAIL',
+        items: targetWebOrder.items.map(it => ({
+          productId: it.product.id,
+          productName: it.product.name,
+          sku: it.product.sku,
+          barcode: it.product.barcode,
+          quantity: it.quantity,
+          companyUnitPrice: it.companyUnitPrice,
+          unitPrice: it.companyUnitPrice,
+          costPrice: it.product.warehouseCostKes || 0,
+          vatAmount: Math.round((it.totalAmount - it.totalAmount / 1.16) * 100) / 100,
+          totalAmount: it.totalAmount
+        })),
+        subtotalKes: Math.round((targetWebOrder.totalCompanyPriceKes / 1.16) * 100) / 100,
+        vatAmountKes:
+          Math.round((targetWebOrder.totalCompanyPriceKes - targetWebOrder.totalCompanyPriceKes / 1.16) * 100) / 100,
+        totalKes: targetWebOrder.totalCompanyPriceKes,
+        totalAmount: targetWebOrder.totalCompanyPriceKes,
+        createdAt: new Date().toISOString(),
+        paymentMethod: 'MPESA',
+        mpesaReceiptNumber: receiptNumber,
+        etimsInvoiceNumber: `KRA-ETIMS-${Date.now().toString().slice(-6)}`
+      };
+
+      const etimsInvoice: ETimsInvoice = {
+        id: `inv-${Date.now()}`,
+        invoiceNumber: saleOrder.etimsInvoiceNumber!,
+        orderId: saleOrder.id,
+        branchId: fulfillingBranch.id,
+        sellerPin: 'P051829301A',
+        sellerName: 'VAAIRO BEVERAGES & LIQUOR HUB LTD',
+        buyerName: targetWebOrder.customerName,
+        servedBy: 'Website Express Delivery Portal',
+        deviceSerialNumber: 'OSCU-2026-KRA-00912',
+        cuSerialNumber: 'KRA-CU-0988421A',
+        qrCodeUrl: `https://itax.kra.go.ke/KRA-Portal/invoiceVerification?invoiceNumber=${saleOrder.etimsInvoiceNumber}`,
+        kraControlCode: `KRACONTROL-${Math.floor(100000 + Math.random() * 900000)}`,
+        invoiceDate: new Date().toISOString(),
+        taxableAmount: saleOrder.subtotalKes!,
+        taxAmount: saleOrder.vatAmountKes!,
+        totalInvoiceAmount: saleOrder.totalKes,
+        transmissionStatus: 'VERIFIED'
+      };
+
+      const updatedOrder: WebsiteDeliveryOrder = {
+        ...targetWebOrder,
+        deliveryStatus: 'COMPLETED_AND_PAID',
+        paidAt: new Date().toISOString(),
+        deliveredAt: new Date().toISOString(),
+        paymentPhone: mpesaPhone,
+        mpesaReceiptNumber: receiptNumber,
+        completedSaleOrderId: saleOrder.id,
+        etimsInvoiceNumber: saleOrder.etimsInvoiceNumber
+      };
+
+      setWebsiteDeliveryOrders(prev =>
+        prev.map(ord => (ord.id === orderId ? updatedOrder : ord))
+      );
+      setOrders(prev => [saleOrder, ...prev]);
+
+      if (onCommitOrder) {
+        onCommitOrder(saleOrder);
+      }
+
+      return {
+        success: true,
+        order: saleOrder,
+        invoice: etimsInvoice,
+        websiteOrder: updatedOrder
+      };
+    },
+    [websiteDeliveryOrders, branches, activeBranch, onCommitOrder]
+  );
+
+  const submitProductRating = useCallback(
+    (rating: Omit<ProductRatingRecord, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const now = new Date().toISOString();
+      const id = `${rating.productId}_${rating.raterKey}`;
+      const rec: ProductRatingRecord = {
+        ...rating,
+        id,
+        createdAt: now,
+        updatedAt: now
+      };
+      setProductRatings(prev => {
+        const filtered = prev.filter(r => r.id !== id);
+        return [rec, ...filtered];
+      });
+    },
+    []
+  );
+
+  const upsertLiveCustomerSession = useCallback((session: LiveLoggedInCustomer) => {
+    // Session state monitor
+  }, []);
+
+  const removeLiveCustomerSession = useCallback((uidOrPhone: string) => {
+    // Session cleanup
+  }, []);
+
+  const logout = useCallback(() => {
+    auth.signOut().catch(() => {});
+  }, []);
+
+  const value: ErpContextType = {
+    products,
+    inventoryItems,
+    branches,
+    activeBranch,
+    scanHistory,
+    websiteDeliveryOrders,
+    placeWebsiteDeliveryOrder,
+    updateWebsiteDeliveryOrderStatus,
+    assignRiderToWebsiteDeliveryOrder,
+    completeWebsiteDeliveryOrderWithMpesaPrompt,
+    productRatings,
+    submitProductRating,
+    upsertLiveCustomerSession,
+    removeLiveCustomerSession,
+    isAuthenticated: Boolean(currentUser),
+    currentUser,
+    currentRole: currentUser?.role || 'CUSTOMER',
+    logout,
+    orders
+  };
+
+  return <ErpContext.Provider value={value}>{children}</ErpContext.Provider>;
 };
 
 export const useErp = (): ErpContextType => {
-  const ctx = useContext(ErpContext);
-  if (!ctx) {
-    // Safe default fallback if used outside of ErpProvider
-    return {
-      isAuthenticated: false,
-      currentUser: null,
-      currentRole: null,
-      activeBranch: DEFAULT_BRANCH,
-      branches: [DEFAULT_BRANCH],
-      products: MASTER_IMPORTED_INVENTORY,
-      inventoryItems: [],
-      scanHistory: [],
-      websiteDeliveryOrders: [],
-      orders: [],
-      placeWebsiteDeliveryOrder: (order: any) => ({
-        id: `ord-${Date.now()}`,
-        orderNumber: `WEB-${Date.now()}`,
-        customerName: order.customerName || '',
-        customerPhone: order.customerPhone || '',
-        deliveryLocation: order.deliveryLocation || '',
-        branchId: DEFAULT_BRANCH.id,
-        branchName: DEFAULT_BRANCH.name,
-        items: order.items || [],
-        totalCompanyPriceKes: order.totalCompanyPriceKes || 0,
-        deliveryStatus: 'ON_HOLD_PENDING_DELIVERY',
-        createdAt: new Date().toISOString(),
-        ...order,
-      }),
-      updateWebsiteDeliveryOrderStatus: () => {},
-      completeWebsiteDeliveryOrderWithMpesaPrompt: async () => ({ success: true }),
-      productRatings: [],
-      submitProductRating: () => {},
-      upsertLiveCustomerSession: () => {},
-      removeLiveCustomerSession: () => {},
-      logout: () => {},
-    };
+  const context = useContext(ErpContext);
+  if (!context) {
+    throw new Error('useErp must be used within an ErpProvider');
   }
-  return ctx;
+  return context;
 };

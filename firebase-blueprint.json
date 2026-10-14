@@ -266,38 +266,9 @@
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["businessUnitId", "branchId", "name", "category", "itemType", "portionUnit", "costPriceKes", "sellingPriceKes", "portionsAvailable", "createdAt"]
-    },
-    "ActivePosCart": {
-      "title": "ActivePosCart",
-      "description": "Real-time shared POS cashier session cart synced across cashier phone and desktop under the cashier account",
-      "type": "object",
-      "properties": {
-        "staffId": { "type": "string", "maxLength": 128 },
-        "staffName": { "type": "string", "maxLength": 120 },
-        "staffEmail": { "type": "string", "maxLength": 180 },
-        "staffRole": { "type": "string", "maxLength": 64 },
-        "branchId": { "type": "string", "maxLength": 128 },
-        "cartJson": { "type": "string", "maxLength": 50000 },
-        "activatedProductIdsJson": { "type": "string", "maxLength": 10000 },
-        "totalUnits": { "type": "number" },
-        "subtotal": { "type": "number" },
-        "exciseAndTax": { "type": "number" },
-        "grandTotal": { "type": "number" },
-        "lastScannedBarcode": { "type": "string", "maxLength": 80 },
-        "lastScannedProductName": { "type": "string", "maxLength": 160 },
-        "lastScannedUnitMode": { "type": "string", "maxLength": 32 },
-        "lastScannedAt": { "type": "string", "maxLength": 64 },
-        "updatedAt": { "type": "string", "maxLength": 64 },
-        "createdAt": { "type": "string", "maxLength": 64 }
-      },
-      "required": ["staffId", "cartJson", "grandTotal", "updatedAt", "createdAt"]
     }
   },
   "firestore": {
-    "/active_pos_carts/{cartId}": {
-      "schema": { "$ref": "#/entities/ActivePosCart" },
-      "description": "Active POS cart session synced in real time between cashier phone and desktop under the cashier account"
-    },
     "/payroll_runs/{runId}": {
       "schema": { "$ref": "#/entities/PayrollRun" },
       "description": "Payroll disbursement runs and employee thermal payslip records"

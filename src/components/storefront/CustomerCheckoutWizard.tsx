@@ -255,7 +255,7 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
   }
 
   return (
-    <div className={`flex flex-col h-full min-h-0 ${compact ? 'p-2' : ''}`}>
+    <div className={compact ? 'p-3 space-y-2' : 'space-y-2'}>
       <CenterScreenFeedback
         feedback={wizardFeedback}
         onDismiss={() => setWizardFeedback(null)}
@@ -263,7 +263,7 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
 
       {/* Compact Error Banner */}
       {checkoutError && (
-        <div className="p-2.5 rounded-xl bg-red-50 border border-red-300 text-red-900 text-[11px] font-semibold flex items-center justify-between gap-2 mb-2 shrink-0">
+        <div className="p-2.5 rounded-xl bg-red-50 border border-red-300 text-red-900 text-[11px] font-semibold flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <AnimatedErrorLogo size="sm" />
             <span className="truncate">{checkoutError}</span>
@@ -278,12 +278,10 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
         </div>
       )}
 
-      {/* Scrollable Steps Area: Allows Steps to Scroll while Total Bar Stays Floating */}
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5">
-        {/* ======================================================== */}
-        {/* COLLAPSIBLE ACCORDION STEP 1: CART ITEMS                 */}
-        {/* ======================================================== */}
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
+      {/* ======================================================== */}
+      {/* COLLAPSIBLE ACCORDION STEP 1: CART ITEMS                 */}
+      {/* ======================================================== */}
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
         <button
           type="button"
           onClick={() => setCurrentStep(1)}
@@ -492,16 +490,16 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] font-montserrat font-bold text-slate-700 flex items-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-[#1E9E60]" />
-                  <span>M-Pesa Number</span>
-                  <span className="text-red-500">*</span>
+                <label className="text-[11px] font-montserrat font-bold text-slate-700">
+                  M-Pesa / Airtel Phone <span className="text-red-500">*</span>
                 </label>
-                <span className="text-[10px] font-mono font-bold text-[#1E9E60]">
-                  Safaricom / Airtel
+                <span className="text-[10px] font-mono font-bold text-slate-500">
+                  {phoneCarrierInfo.carrier !== 'UNKNOWN' ? `${phoneCarrierInfo.carrier} • ` : ''}
+                  {phoneCarrierInfo.digitsCount}/10 digits
                 </span>
               </div>
               <div className="relative">
+                <Smartphone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="tel"
                   inputMode="numeric"
@@ -511,23 +509,17 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
                     setCustomerPhone(sanitizeAndControlKenyanMobileInput(e.target.value));
                     if (checkoutError) setCheckoutError(null);
                   }}
-                  placeholder="07XX XXX XXX or 01XX XXX XXX"
-                  className={`w-full px-3 py-2 pr-20 rounded-lg bg-slate-50 border-2 text-xs font-mono font-black tracking-wider text-[#0A006E] focus:bg-white focus:outline-none transition ${
+                  placeholder="0712345678"
+                  className={`w-full pl-8 pr-16 py-2 rounded-lg bg-slate-50 border text-xs font-mono font-black tracking-wider text-[#0A006E] focus:bg-white focus:outline-none ${
                     isPhoneValid ? 'border-[#34D186]' : 'border-slate-300 focus:border-[#0A006E]'
                   }`}
                 />
-                <span className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-montserrat font-bold flex items-center gap-1 ${
-                  isPhoneValid ? 'text-[#1E9E60]' : 'text-slate-400'
-                }`}>
-                  {isPhoneValid ? (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#1E9E60]" />
-                      <span>Ready</span>
-                    </>
-                  ) : (
-                    <span>10 digits</span>
-                  )}
-                </span>
+                {isPhoneValid && (
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-montserrat font-bold text-[#1E9E60] flex items-center gap-0.5">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Valid</span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -853,32 +845,19 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="space-y-2">
-                {/* Simplified Safaricom M-Pesa STK Push Action */}
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-montserrat font-black text-emerald-900 flex items-center gap-1.5">
-                      <Smartphone className="w-3.5 h-3.5 text-[#1E9E60]" />
-                      Lipa Na M-Pesa (STK Push)
-                    </span>
-                    <span className="text-[10px] font-mono font-bold text-emerald-700">
-                      {formatKenyanMobileDisplay(customerPhone)}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    Instant prompt sent to your handset. Enter your M-Pesa PIN to complete payment.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => onSubmitOrder(true)}
-                    className="w-full py-2.5 px-3 rounded-xl bg-[#1E9E60] hover:bg-emerald-700 text-[#FFDE00] font-montserrat font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
-                  >
-                    <CreditCard className="w-3.5 h-3.5 shrink-0 text-[#FFDE00]" />
-                    <span>Pay {formatKes(totalCartCompanyPriceKes)} via M-Pesa</span>
-                  </button>
-                </div>
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => onSubmitOrder(true)}
+                  className="w-full py-2.5 px-3 rounded-xl bg-[#34D186] hover:bg-emerald-950 text-[#FFDE00] font-montserrat font-black text-xs uppercase tracking-wide flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                >
+                  <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">
+                    Pay Now via M-Pesa ({formatKenyanMobileDisplay(customerPhone) || 'STK Push'})
+                  </span>
+                </button>
 
-                <div className="flex items-center gap-1.5 pt-0.5">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setCurrentStep(3)}
@@ -890,7 +869,7 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
                   <button
                     type="button"
                     onClick={() => onSubmitOrder(false)}
-                    className="flex-1 py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-montserrat font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    className="flex-1 py-2 px-2.5 rounded-xl bg-[#0A006E] hover:bg-[#060046] text-white font-montserrat font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <Truck className="w-3.5 h-3.5 text-[#FFDE00] shrink-0" />
                     <span className="truncate">Pay on Delivery (Hold Order)</span>
@@ -900,59 +879,6 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
             )}
           </div>
         )}
-      </div>
-      </div>
-
-      {/* ======================================================== */}
-      {/* FLOATING CART TOTAL BAR - NEVER SCROLLS AWAY             */}
-      {/* ======================================================== */}
-      <div className="shrink-0 sticky bottom-0 z-30 bg-white/98 backdrop-blur-md border-t-2 border-[#0A006E]/20 p-3 rounded-b-xl shadow-[0_-8px_20px_rgba(0,0,0,0.1)] mt-auto">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-[10px] font-montserrat font-bold text-slate-500 uppercase tracking-wider">
-              Cart Total ({totalCartItems} btl{totalCartItems === 1 ? '' : 's'})
-            </div>
-            <div className="text-base font-montserrat font-black text-[#0A006E] font-mono-tabular leading-tight">
-              {formatKes(totalCartCompanyPriceKes)}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {currentStep < 4 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (currentStep === 1) handleProceedToStep2();
-                  else if (currentStep === 2) handleProceedToStep3();
-                  else if (currentStep === 3) handleProceedToStep4();
-                }}
-                className="px-3.5 py-2 rounded-xl bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] font-montserrat font-black text-xs flex items-center gap-1 cursor-pointer shadow-xs transition"
-              >
-                <span>{currentStep === 1 ? 'Checkout' : currentStep === 2 ? 'Next' : 'Review'}</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            ) : !customerProfile ? (
-              <button
-                type="button"
-                data-oauth-popup="true"
-                onClick={() => onRequireSignInForCheckout(true)}
-                className="px-3.5 py-2 rounded-xl bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] font-montserrat font-black text-xs flex items-center gap-1 cursor-pointer shadow-xs transition"
-              >
-                <Lock className="w-3 h-3" />
-                <span>Sign In to Pay</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onSubmitOrder(true)}
-                className="px-3.5 py-2 rounded-xl bg-[#1E9E60] hover:bg-emerald-700 text-[#FFDE00] font-montserrat font-black text-xs flex items-center gap-1 cursor-pointer shadow-xs transition"
-              >
-                <Smartphone className="w-3 h-3" />
-                <span>Pay M-Pesa</span>
-              </button>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

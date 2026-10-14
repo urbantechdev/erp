@@ -159,7 +159,22 @@ export default function App() {
 
   // Active User Session State
   const [currentUser, setCurrentUser] = useState<StaffMember | null>(null);
-  const [standaloneCustomerPortal, setStandaloneCustomerPortal] = useState(false);
+  const [standaloneCustomerPortal, setStandaloneCustomerPortal] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.toLowerCase();
+    const search = new URLSearchParams(window.location.search);
+    return (
+      path === '/website' ||
+      path.startsWith('/website/') ||
+      path === '/store' ||
+      path.startsWith('/store/') ||
+      path === '/shop' ||
+      path.startsWith('/shop/') ||
+      search.get('view') === 'website' ||
+      search.get('view') === 'store' ||
+      search.get('mode') === 'website'
+    );
+  });
   const [phoneScannerSession, setPhoneScannerSession] = useState<{
     isOpen: boolean;
     staffId: string;
