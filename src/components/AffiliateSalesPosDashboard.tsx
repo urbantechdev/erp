@@ -612,108 +612,97 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   return (
     <div className="space-y-4">
       {/* --------------------------------------------------------------------- */}
-      {/* 1. TOP HEADER BANNER: AFFILIATE SALES POS COMMAND                     */}
+      {/* 1. TOP HERO: SIMPLE & STREAMLINED AFFILIATE COMMAND BAR               */}
       {/* --------------------------------------------------------------------- */}
-      <div className="bg-[#0A006E] text-white border-2 border-[#0A006E] rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-lg">
-        {/* Subtle decorative background accent */}
-        <div className="absolute -right-10 -bottom-10 w-44 h-44 rounded-full bg-[#FFDE00]/10 pointer-events-none" />
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-montserrat font-black bg-[#FFDE00] text-[#0A006E] uppercase tracking-wider">
-                Field &amp; Affiliate Sales POS
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-montserrat font-bold bg-white/15 text-white">
-                {currentUser.branchName} Depot
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-montserrat font-black bg-[#34D186] text-[#0A006E]">
-                {commPct}% Agreed Commission
-              </span>
+      <div className="bg-[#0A006E] text-white rounded-2xl p-3.5 sm:p-4 shadow-sm border border-[#0A006E]/30">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Identity & Branch */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center font-montserrat font-black text-sm shrink-0 shadow-2xs">
+              {currentUser.name.slice(0, 2).toUpperCase()}
             </div>
-            <h1 className="text-xl sm:text-2xl font-montserrat font-black italic text-white mt-1.5 flex items-center gap-2">
-              <span>{currentUser.name}</span>
-              <span className="text-[#FFDE00] text-sm not-italic font-mono font-bold">({affiliateCode})</span>
-            </h1>
-            <p className="text-xs text-white/80 font-medium mt-0.5">
-              Select products from depot inventory, add to cart, and instantly <strong>Checkout</strong> or <strong>Queue to Branch Cashier</strong> for counter pickup.
-            </p>
-          </div>
-
-          {/* Quick Tab Switcher */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab('pos')}
-              className={`px-4 py-2.5 rounded-xl font-montserrat font-black text-xs cursor-pointer transition flex items-center gap-2 ${
-                activeTab === 'pos'
-                  ? 'bg-[#FFDE00] text-[#0A006E] shadow-md scale-102'
-                  : 'bg-white/10 text-white hover:bg-white/20'
-              }`}
-            >
-              <ShoppingCart className="w-4 h-4" />
-              <span>Sales POS Terminal</span>
-              {cart.length > 0 && (
-                <span className="w-5 h-5 rounded-full bg-[#0A006E] text-[#FFDE00] text-[10px] flex items-center justify-center font-bold">
-                  {totalUnitsInCart}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-base font-montserrat font-black text-white truncate">
+                  {currentUser.name}
+                </h1>
+                <span className="text-[#FFDE00] text-[11px] font-mono font-bold px-2 py-0.5 bg-white/10 rounded-md">
+                  {affiliateCode}
                 </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('orders')}
-              className={`px-4 py-2.5 rounded-xl font-montserrat font-black text-xs cursor-pointer transition flex items-center gap-2 ${
-                activeTab === 'orders'
-                  ? 'bg-[#FFDE00] text-[#0A006E] shadow-md scale-102'
-                  : 'bg-white/10 text-white hover:bg-white/20'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>My Orders &amp; Queues</span>
-              {queuedTransactions.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-[#0A006E] text-[10px] font-black animate-pulse">
-                  {queuedTransactions.length} Queued
+                <span className="text-[10px] font-montserrat font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                  {commPct}% Comm
                 </span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Affiliate Real-Time KPI Metric Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5 mt-4 pt-4 border-t border-white/15 text-xs">
-          <div className="bg-white/10 rounded-xl p-2.5 sm:p-3">
-            <div className="text-white/70 text-[10px] sm:text-xs font-semibold">Total Fulfilled Sales</div>
-            <div className="text-base sm:text-lg font-montserrat font-black text-white font-mono-tabular mt-0.5">
-              {formatKes(totalSalesVolume)}
-            </div>
-            <div className="text-[10px] text-white/60">{paidTransactions.length} Paid Orders</div>
-          </div>
-
-          <div className="bg-[#34D186]/20 border border-[#34D186]/40 rounded-xl p-2.5 sm:p-3">
-            <div className="text-[#34D186] text-[10px] sm:text-xs font-bold">Earned Commission</div>
-            <div className="text-base sm:text-lg font-montserrat font-black text-[#FFDE00] font-mono-tabular mt-0.5">
-              {formatKes(totalEarnedCommission)}
-            </div>
-            <div className="text-[10px] text-[#34D186] font-semibold">{commPct}% Rate on Fulfilled Volume</div>
-          </div>
-
-          <div className="bg-amber-400/20 border border-amber-400/40 rounded-xl p-2.5 sm:p-3">
-            <div className="text-[#FFDE00] text-[10px] sm:text-xs font-bold">Queued to Cashier</div>
-            <div className="text-base sm:text-lg font-montserrat font-black text-white font-mono-tabular mt-0.5">
-              {queuedTransactions.length} <span className="text-xs text-white/70">pending</span>
-            </div>
-            <div className="text-[10px] text-[#FFDE00] font-semibold">
-              {formatKes(queuedTransactions.reduce((acc, t) => acc + (t.totalAmount || 0), 0))} waiting
+              </div>
+              <p className="text-[11px] text-slate-300 font-medium mt-0.5 flex items-center gap-1.5 truncate">
+                <Building2 className="w-3 h-3 text-[#FFDE00] shrink-0" />
+                <span className="truncate">{currentUser.branchName} Depot</span>
+              </p>
             </div>
           </div>
 
-          <div className="bg-white/10 rounded-xl p-2.5 sm:p-3">
-            <div className="text-white/70 text-[10px] sm:text-xs font-semibold">Depot Stock Access</div>
-            <div className="text-base sm:text-lg font-montserrat font-black text-white font-mono-tabular mt-0.5">
-              {filteredProducts.length} <span className="text-xs text-white/70">SKUs</span>
+          {/* Simple Inline Key Metrics */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <div className="bg-white/10 rounded-xl px-2.5 py-1.5 border border-white/10">
+              <span className="text-[9px] text-slate-300 block uppercase font-mono">Commission</span>
+              <span className="text-xs sm:text-sm font-montserrat font-black text-[#FFDE00] font-mono-tabular">
+                {formatKes(totalEarnedCommission)}
+              </span>
             </div>
-            <div className="text-[10px] text-white/60">{activeBranch.name}</div>
+
+            <div className="bg-white/10 rounded-xl px-2.5 py-1.5 border border-white/10">
+              <span className="text-[9px] text-slate-300 block uppercase font-mono">Fulfilled</span>
+              <span className="text-xs sm:text-sm font-montserrat font-black text-white font-mono-tabular">
+                {formatKes(totalSalesVolume)}
+              </span>
+            </div>
+
+            {queuedTransactions.length > 0 && (
+              <div className="bg-amber-400/20 border border-amber-300/40 rounded-xl px-2.5 py-1.5">
+                <span className="text-[9px] text-amber-200 block uppercase font-mono">Queued</span>
+                <span className="text-xs sm:text-sm font-montserrat font-black text-amber-300 font-mono-tabular">
+                  {queuedTransactions.length} orders
+                </span>
+              </div>
+            )}
+
+            {/* Simple Segmented Tab Toggle */}
+            <div className="flex items-center bg-black/30 p-1 rounded-xl border border-white/10 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('pos')}
+                className={`px-3 py-1.5 rounded-lg font-montserrat font-bold text-xs cursor-pointer transition-all flex items-center gap-1.5 ${
+                  activeTab === 'pos'
+                    ? 'bg-[#FFDE00] text-[#0A006E] shadow-2xs'
+                    : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span>POS</span>
+                {totalUnitsInCart > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-[#0A006E] text-[#FFDE00] text-[10px] font-black">
+                    {totalUnitsInCart}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('orders')}
+                className={`px-3 py-1.5 rounded-lg font-montserrat font-bold text-xs cursor-pointer transition-all flex items-center gap-1.5 ${
+                  activeTab === 'orders'
+                    ? 'bg-[#FFDE00] text-[#0A006E] shadow-2xs'
+                    : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Orders</span>
+                {queuedTransactions.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-[#0A006E] text-[10px] font-black">
+                    {queuedTransactions.length}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -844,14 +833,14 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                     >
                       {/* Product Visual Header */}
                       <div className="space-y-2">
-                        <div className="relative aspect-4/3 rounded-xl overflow-hidden bg-[#F0F2F0] flex items-center justify-center p-2">
+                        <div className="relative aspect-4/3 rounded-xl overflow-hidden bg-slate-900">
                           <ProductImage
                             product={{
                               ...prod,
                               category: prod.category === 'LPS' ? 'LPS' : 'IPS',
                             }}
-                            size="md"
-                            className="max-h-full max-w-full object-contain drop-shadow-sm"
+                            size="full"
+                            className="w-full h-full object-cover"
                           />
                           {/* Stock Badge */}
                           <div className="absolute top-2 left-2">
