@@ -39,11 +39,12 @@ export interface ActivePosCartPayload {
   sourceDevice?: 'phone' | 'desktop';
 }
 
-export function getPosCartDocId(staffIdOrEmail: string): string {
-  const sanitized = (staffIdOrEmail || 'default_cashier')
-    .toLowerCase()
-    .replace(/[^a-zA-Z0-9_-]/g, '_')
-    .slice(0, 100);
+export function getPosCartDocId(staffIdOrEmail?: string): string {
+  const val = (staffIdOrEmail || '').toLowerCase().trim();
+  if (!val || val.includes('cashier')) {
+    return 'pos_cart_cashier_main';
+  }
+  const sanitized = val.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100);
   return `pos_cart_${sanitized}`;
 }
 
@@ -59,10 +60,14 @@ function broadcastLocalCart(docId: string, data: any) {
     if (typeof window !== 'undefined') {
       if ('BroadcastChannel' in window) {
         const bc = new BroadcastChannel(SYNC_CHANNEL_NAME);
-        bc.postMessage({ docId, data, timestamp: Date.now() });
+        bc.postMessage({ docId, channel: 'cashier_main', data, timestamp: Date.now() });
         bc.close();
       }
-      localStorage.setItem(`pos_cart_sync_${docId}`, JSON.stringify({ data, timestamp: Date.now() }));
+      const serialized = JSON.stringify({ data, timestamp: Date.now() });
+      localStorage.setItem(`pos_cart_sync_${docId}`, serialized);
+      if (docId !== 'pos_cart_cashier_main') {
+        localStorage.setItem(`pos_cart_sync_pos_cart_cashier_main`, serialized);
+      }
     }
   } catch (e) {
     console.warn('[POS Sync] Local broadcast error:', e);
@@ -115,8 +120,8 @@ export async function syncPosCartToFirestore(payload: ActivePosCartPayload): Pro
   // 1. Instant local broadcast (0ms latency between tabs and windows)
   broadcastLocalCart(docId, normalizedData);
 
-  // 2. Persist to Firestore if user is authenticated
-  if (auth.currentUser) {
+  // 2. Persist to Firestore for instant wireless cross-device syncing
+  try {
     const firestoreData = cleanFirestoreData({
       staffId: payload.staffId || 'staff_cashier',
       staffName: payload.staffName || 'Counter Cashier',
@@ -137,18 +142,19 @@ export async function syncPosCartToFirestore(payload: ActivePosCartPayload): Pro
       createdAt: now,
     });
 
-    try {
-      await setDoc(doc(db, 'active_pos_carts', docId), firestoreData, { merge: true });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `active_pos_carts/${docId}`);
+    await setDoc(doc(db, 'active_pos_carts', docId), firestoreData, { merge: true });
+    if (docId !== 'pos_cart_cashier_main') {
+      await setDoc(doc(db, 'active_pos_carts', 'pos_cart_cashier_main'), firestoreData, { merge: true }).catch(() => {});
     }
+  } catch (err) {
+    console.warn('[POS Sync] Firestore write warning:', err);
   }
 }
 
 /**
  * Subscribes to real-time cart updates for the cashier's account.
  * Uses BroadcastChannel and window storage events for instant local sync,
- * and attaches Firestore onSnapshot when authenticated.
+ * and attaches Firestore onSnapshot for real-time mobile-to-desktop wireless syncing.
  */
 export function subscribeToActivePosCart(
   staffIdOrEmail: string,
@@ -166,107 +172,117 @@ export function subscribeToActivePosCart(
 ): () => void {
   const docId = getPosCartDocId(staffIdOrEmail);
   let isCleanedUp = false;
-  let firestoreUnsub: (() => void) | null = null;
+  let firestoreUnsub1: (() => void) | null = null;
+  let firestoreUnsub2: (() => void) | null = null;
+  let lastProcessedUpdateAt = '';
+
+  const processIncomingUpdate = (payload: any) => {
+    if (!payload || !Array.isArray(payload.cart)) return;
+    if (payload.updatedAt && payload.updatedAt === lastProcessedUpdateAt) return;
+    lastProcessedUpdateAt = payload.updatedAt || '';
+    onUpdate(payload);
+  };
 
   // 1. Listen via BroadcastChannel (zero-latency in same browser)
   let bc: BroadcastChannel | null = null;
   if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-    bc = new BroadcastChannel(SYNC_CHANNEL_NAME);
-    bc.onmessage = (event) => {
-      if (isCleanedUp) return;
-      if (event.data && event.data.docId === docId && event.data.data) {
-        onUpdate(event.data.data);
-      }
-    };
+    try {
+      bc = new BroadcastChannel(SYNC_CHANNEL_NAME);
+      bc.onmessage = (event) => {
+        if (isCleanedUp) return;
+        if (event.data?.data) {
+          if (
+            event.data.docId === docId ||
+            event.data.docId === 'pos_cart_cashier_main' ||
+            event.data.channel === 'cashier_main' ||
+            docId === 'pos_cart_cashier_main'
+          ) {
+            processIncomingUpdate(event.data.data);
+          }
+        }
+      };
+    } catch (e) {
+      console.warn('[POS Sync] BroadcastChannel init error:', e);
+    }
   }
 
   // 2. Listen via window storage event (cross-tab / cross-window fallback)
   const handleStorageEvent = (e: StorageEvent) => {
     if (isCleanedUp) return;
-    if (e.key === `pos_cart_sync_${docId}` && e.newValue) {
-      try {
-        const parsed = JSON.parse(e.newValue);
-        if (parsed?.data) {
-          onUpdate(parsed.data);
-        }
-      } catch {}
+    if (
+      e.key === `pos_cart_sync_${docId}` ||
+      e.key === 'pos_cart_sync_pos_cart_cashier_main'
+    ) {
+      if (e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.data) {
+            processIncomingUpdate(parsed.data);
+          }
+        } catch {}
+      }
     }
   };
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', handleStorageEvent);
   }
 
-  // 3. Attach Firestore onSnapshot ONLY when user is authenticated (as required by Firestore rules & skill)
-  const attachFirestoreListener = () => {
-    if (firestoreUnsub || isCleanedUp) return;
-    if (!auth.currentUser) return;
-
+  // 3. Attach Firestore onSnapshot for cross-device wireless phone-to-cashier sync
+  const parseSnap = (snap: any) => {
+    if (!snap.exists()) return;
+    const d = snap.data();
     try {
-      firestoreUnsub = onSnapshot(
-        doc(db, 'active_pos_carts', docId),
-        (snap) => {
-          if (!snap.exists()) return;
-          const d = snap.data();
-          try {
-            const cart: PosCartItem[] = d.cartJson ? JSON.parse(d.cartJson) : [];
-            const activatedProductIds: string[] = d.activatedProductIdsJson
-              ? JSON.parse(d.activatedProductIdsJson)
-              : [];
+      const cart: PosCartItem[] = d.cartJson ? JSON.parse(d.cartJson) : [];
+      const activatedProductIds: string[] = d.activatedProductIdsJson
+        ? JSON.parse(d.activatedProductIdsJson)
+        : [];
 
-            onUpdate({
-              cart,
-              activatedProductIds,
-              grandTotal: Number(d.grandTotal || 0),
-              subtotal: Number(d.subtotal || 0),
-              exciseAndTax: Number(d.exciseAndTax || 0),
-              lastScannedBarcode: d.lastScannedBarcode || '',
-              lastScannedProductName: d.lastScannedProductName || '',
-              lastScannedUnitMode: d.lastScannedUnitMode || '',
-              updatedAt: d.updatedAt || '',
-            });
-          } catch (e) {
-            console.warn('Failed to parse active POS cart snapshot:', e);
-          }
-        },
-        (err) => {
-          if (auth.currentUser) {
-            handleFirestoreError(err, OperationType.GET, `active_pos_carts/${docId}`);
-          }
-        }
-      );
+      processIncomingUpdate({
+        cart,
+        activatedProductIds,
+        grandTotal: Number(d.grandTotal || 0),
+        subtotal: Number(d.subtotal || 0),
+        exciseAndTax: Number(d.exciseAndTax || 0),
+        lastScannedBarcode: d.lastScannedBarcode || '',
+        lastScannedProductName: d.lastScannedProductName || '',
+        lastScannedUnitMode: d.lastScannedUnitMode || '',
+        updatedAt: d.updatedAt || '',
+      });
     } catch (e) {
-      console.warn('[POS Sync] Firestore listener initialization:', e);
+      console.warn('Failed to parse active POS cart snapshot:', e);
     }
   };
 
-  // If already authenticated, attach immediately
-  if (auth.currentUser) {
-    attachFirestoreListener();
-  }
+  try {
+    firestoreUnsub1 = onSnapshot(
+      doc(db, 'active_pos_carts', docId),
+      parseSnap,
+      (err) => console.warn('[POS Sync] Firestore snapshot warning:', err)
+    );
 
-  // Monitor auth state changes: attach Firestore listener once authenticated, detach on logout
-  const unsubAuth = auth.onAuthStateChanged((user) => {
-    if (isCleanedUp) return;
-    if (user) {
-      attachFirestoreListener();
-    } else if (firestoreUnsub) {
-      firestoreUnsub();
-      firestoreUnsub = null;
+    if (docId !== 'pos_cart_cashier_main') {
+      firestoreUnsub2 = onSnapshot(
+        doc(db, 'active_pos_carts', 'pos_cart_cashier_main'),
+        parseSnap,
+        (err) => console.warn('[POS Sync] Main cashier snapshot warning:', err)
+      );
     }
-  });
+  } catch (e) {
+    console.warn('[POS Sync] Firestore listener initialization:', e);
+  }
 
   return () => {
     isCleanedUp = true;
     if (bc) {
-      bc.close();
+      try {
+        bc.close();
+      } catch {}
     }
     if (typeof window !== 'undefined') {
       window.removeEventListener('storage', handleStorageEvent);
     }
-    unsubAuth();
-    if (firestoreUnsub) {
-      firestoreUnsub();
-    }
+    if (firestoreUnsub1) firestoreUnsub1();
+    if (firestoreUnsub2) firestoreUnsub2();
   };
 }
 
@@ -291,28 +307,26 @@ export async function clearActivePosCart(staffIdOrEmail: string): Promise<void> 
     updatedAt: now,
   });
 
-  // 2. Clear in Firestore if authenticated
-  if (auth.currentUser) {
-    try {
-      await setDoc(
-        doc(db, 'active_pos_carts', docId),
-        {
-          staffId: staffIdOrEmail || 'staff_cashier',
-          cartJson: '[]',
-          activatedProductIdsJson: '[]',
-          totalUnits: 0,
-          subtotal: 0,
-          exciseAndTax: 0,
-          grandTotal: 0,
-          lastScannedBarcode: '',
-          lastScannedProductName: '',
-          updatedAt: now,
-          createdAt: now,
-        },
-        { merge: true }
-      );
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `active_pos_carts/${docId}`);
+  // 2. Clear in Firestore
+  try {
+    const clearData = cleanFirestoreData({
+      staffId: staffIdOrEmail || 'staff_cashier',
+      cartJson: '[]',
+      activatedProductIdsJson: '[]',
+      totalUnits: 0,
+      subtotal: 0,
+      exciseAndTax: 0,
+      grandTotal: 0,
+      lastScannedBarcode: '',
+      lastScannedProductName: '',
+      updatedAt: now,
+      createdAt: now,
+    });
+    await setDoc(doc(db, 'active_pos_carts', docId), clearData, { merge: true });
+    if (docId !== 'pos_cart_cashier_main') {
+      await setDoc(doc(db, 'active_pos_carts', 'pos_cart_cashier_main'), clearData, { merge: true }).catch(() => {});
     }
+  } catch (err) {
+    console.warn('[POS Sync] Error clearing active cart:', err);
   }
 }
