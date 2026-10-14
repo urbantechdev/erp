@@ -1257,10 +1257,42 @@ export default function App() {
     newProducts: Omit<Product, 'id' | 'createdAt'>[]
   ): Promise<number> => {
     let successCount = 0;
+    let mergedDuplicateCount = 0;
     try {
       const now = Date.now();
       for (let i = 0; i < newProducts.length; i++) {
         const prod = newProducts[i];
+
+        // Auto-check for duplicate in existing catalog
+        const existingProd = products.find((p) => {
+          if (prod.barcode && p.barcode && p.barcode.trim() === prod.barcode.trim()) {
+            return true;
+          }
+          if (
+            p.name.trim().toLowerCase() === prod.name.trim().toLowerCase() &&
+            Number(p.volumeMl || 750) === Number(prod.volumeMl || 750)
+          ) {
+            return true;
+          }
+          return false;
+        });
+
+        if (existingProd) {
+          // Merge incoming bottles into existing product stock
+          const incomingBottles = Number(prod.pendingActivationBottles || prod.totalBottles || 12);
+          const updatedPending = (existingProd.pendingActivationBottles || 0) + incomingBottles;
+          await updateDoc(doc(db, 'products', existingProd.id), {
+            pendingActivationBottles: updatedPending,
+            baseLandedCost: prod.baseLandedCost || existingProd.baseLandedCost,
+            baseWholesalePrice: prod.baseWholesalePrice || existingProd.baseWholesalePrice,
+            baseRetailPrice: prod.baseRetailPrice || existingProd.baseRetailPrice,
+            updatedAt: new Date().toISOString(),
+          });
+          mergedDuplicateCount++;
+          successCount++;
+          continue;
+        }
+
         const id = `prod-${now}-${i}`;
         const fullProd: Product = cleanFirestoreData({
           ...prod,
@@ -1273,7 +1305,9 @@ export default function App() {
       triggerToast(
         'success',
         'CSV Batch Import Completed',
-        `Successfully imported ${successCount} products into bonded inventory.`
+        mergedDuplicateCount > 0
+          ? `Processed ${successCount} products (${mergedDuplicateCount} existing duplicates auto-merged into stock).`
+          : `Successfully imported ${successCount} products into bonded inventory.`
       );
       if (currentUser) {
         await recordAuditLog(

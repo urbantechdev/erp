@@ -15,7 +15,7 @@
   },
   "firestore": [
     {
-      "database": "erp-db-1",
+      "database": "ai-studio-uhurumarketunifo-a6b8e363-33a9-4ad9-9adf-f375f36e2445",
       "rules": "firestore.rules"
     }
   ]

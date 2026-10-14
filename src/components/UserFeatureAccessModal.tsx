@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -41,24 +41,31 @@ export const UserFeatureAccessModal: React.FC<UserFeatureAccessModalProps> = ({
   customRoleMatrix,
   onSavePermissions,
 }) => {
-  if (!isOpen || !staff) return null;
-
-  const [stripped, setStripped] = useState<string[]>(() => staff.strippedFeatures || []);
-  const [granted, setGranted] = useState<string[]>(() => staff.grantedFeatures || []);
-  const [note, setNote] = useState<string>(() => staff.customPermissionsNote || '');
+  const [stripped, setStripped] = useState<string[]>(() => staff?.strippedFeatures || []);
+  const [granted, setGranted] = useState<string[]>(() => staff?.grantedFeatures || []);
+  const [note, setNote] = useState<string>(() => staff?.customPermissionsNote || '');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  useEffect(() => {
+    if (staff) {
+      setStripped(staff.strippedFeatures || []);
+      setGranted(staff.grantedFeatures || []);
+      setNote(staff.customPermissionsNote || '');
+    }
+  }, [staff]);
+
   // Baseline modules from user's role
   const roleBaseModules =
-    (customRoleMatrix && customRoleMatrix[staff.role]) ||
-    ROLE_PERMISSIONS[staff.role]?.allowedModules ||
+    (staff && customRoleMatrix && customRoleMatrix[staff.role]) ||
+    (staff && ROLE_PERMISSIONS[staff.role]?.allowedModules) ||
     [];
 
   // Helper to determine if a feature is enabled by default for this user's role
   const isDefaultEnabledForRole = (featureKey: string, isModule: boolean, moduleId?: ERPModuleId): boolean => {
+    if (!staff) return false;
     if (isModule && moduleId) {
       return roleBaseModules.includes(moduleId);
     }
@@ -129,6 +136,7 @@ export const UserFeatureAccessModal: React.FC<UserFeatureAccessModalProps> = ({
   };
 
   const handleSave = async () => {
+    if (!staff) return;
     setIsSaving(true);
     try {
       await onSavePermissions(staff.id, {
@@ -163,6 +171,8 @@ export const UserFeatureAccessModal: React.FC<UserFeatureAccessModalProps> = ({
       f.key.toLowerCase().includes(searchFilter.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  if (!isOpen || !staff) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/75 backdrop-blur-xs overflow-y-auto">

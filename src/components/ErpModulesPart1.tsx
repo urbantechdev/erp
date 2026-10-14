@@ -2886,6 +2886,7 @@ export const InventoryModule: React.FC<{
         isOpen={isCsvModalOpen}
         onClose={() => setIsCsvModalOpen(false)}
         branches={branches}
+        existingProducts={products}
         onBatchImport={async (drafts) => {
           if (onBatchCreateProducts) {
             return await onBatchCreateProducts(drafts);

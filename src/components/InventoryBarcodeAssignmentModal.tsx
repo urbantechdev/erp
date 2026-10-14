@@ -44,7 +44,6 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
   currentUser,
   onUpdateProduct,
 }) => {
-  if (!isOpen) return null;
 
   // Selected product to link barcode to
   const [selectedProductId, setSelectedProductId] = useState<string>(() => {
@@ -392,6 +391,8 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
       setIsSaving(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/85 backdrop-blur-xs overflow-y-auto">
