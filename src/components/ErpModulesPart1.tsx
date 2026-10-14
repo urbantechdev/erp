@@ -1961,7 +1961,7 @@ export const InventoryModule: React.FC<{
                   <img
                     src={newProductImage}
                     alt="New bottle"
-                    className="w-full h-full object-cover object-center"
+                    className="w-full h-full object-contain"
                   />
                   <button
                     type="button"

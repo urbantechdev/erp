@@ -239,7 +239,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
   useEffect(() => {
     if (isPhonePairModalOpen) {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const url = `${origin}/?phone_scanner=true&channel=cashier_main&staffId=${encodeURIComponent(currentUser.id)}&staffName=${encodeURIComponent(currentUser.name)}&staffRole=${encodeURIComponent(currentUser.role)}&staffEmail=${encodeURIComponent(currentUser.email || '')}`;
+      const url = `${origin}/?phone_scanner=true&staffId=${encodeURIComponent(currentUser.id)}&staffName=${encodeURIComponent(currentUser.name)}&staffRole=${encodeURIComponent(currentUser.role)}&staffEmail=${encodeURIComponent(currentUser.email || '')}`;
       setPairingUrl(url);
       QRCode.toDataURL(url, { width: 280, margin: 2, color: { dark: '#0A006E', light: '#FFFFFF' } })
         .then((dataUrl) => setPairingQrDataUrl(dataUrl))
@@ -361,21 +361,16 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const localCartRef = useRef(cart);
   localCartRef.current = cart;
 
-  // Real-time listener: receive instant scans from phone under currentUser's account or main cashier channel
+  // Real-time listener: receive instant scans from phone under currentUser's account
   useEffect(() => {
-    const staffKey = currentUser.id || currentUser.email || 'cashier_main';
+    const staffKey = currentUser.id || currentUser.email;
+    if (!staffKey) return;
 
     const unsub = subscribeToActivePosCart(staffKey, (remote) => {
       // Enrich remote items with catalog product details for accurate pricing, taxes, and images
       const enrichedCart = remote.cart.map((item) => {
-        if (item.kind === 'bonded_product') {
-          const fullProd = products.find(
-            (p) =>
-              p.id === item.product?.id ||
-              p.sku === item.product?.sku ||
-              (item.product?.barcode && p.barcode === item.product.barcode) ||
-              p.name === item.name
-          ) || item.product;
+        if (item.kind === 'bonded_product' && item.product?.id) {
+          const fullProd = products.find((p) => p.id === item.product!.id) || item.product;
           return { ...item, product: fullProd };
         }
         return item;
@@ -796,28 +791,15 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
   const computedLineItems: LineItem[] = useMemo(() => {
     return cart.map((entry) => {
-      if (entry.kind === 'bonded_product') {
-        const prod =
-          entry.product ||
-          products.find(
-            (p) =>
-              p.id === (entry as any).productId ||
-              p.sku === (entry as any).sku ||
-              p.name === entry.name ||
-              p.id === entry.id
-          );
-        const packSize = prod?.packSize || prod?.bottlesPerCase || 12;
-        const geoPricing = prod
-          ? calculateGeoPrice(
-              prod,
-              activeRegion,
-              mode === 'wholesale' ? 'wholesale' : 'retail'
-            )
-          : { casePrice: (entry.unitPrice || 0) * packSize, unitBottlePrice: entry.unitPrice || 0 };
+      if (entry.kind === 'bonded_product' && entry.product) {
+        const packSize = entry.product.packSize || entry.product.bottlesPerCase || 12;
+        const geoPricing = calculateGeoPrice(
+          entry.product,
+          activeRegion,
+          mode === 'wholesale' ? 'wholesale' : 'retail'
+        );
         const unitPrice =
-          entry.unitMode === 'Case'
-            ? geoPricing.casePrice
-            : entry.unitPrice || geoPricing.unitBottlePrice;
+          entry.unitMode === 'Case' ? geoPricing.casePrice : geoPricing.unitBottlePrice;
         const totalBottles =
           entry.unitMode === 'Case'
             ? entry.quantityUnits * packSize
@@ -825,9 +807,9 @@ export const PosViews: React.FC<PosViewsProps> = ({
         const lineTotal = Math.round(unitPrice * entry.quantityUnits);
 
         return {
-          productId: prod?.id || entry.id,
-          sku: prod?.sku || (entry as any).sku || 'SKU',
-          name: prod?.name || entry.name,
+          productId: entry.product.id,
+          sku: entry.product.sku,
+          name: entry.product.name,
           unitMode: entry.unitMode,
           bottlesPerCase: packSize,
           quantityUnits: entry.quantityUnits,
@@ -1447,17 +1429,14 @@ export const PosViews: React.FC<PosViewsProps> = ({
                   className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4 flex flex-col justify-between hover:border-[#0A006E] transition-all"
                 >
                   <div className="flex items-start gap-3.5">
-                    <div className="w-18 h-18 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden bg-slate-900 shadow-2xs">
-                      <ProductImage
-                        product={{
-                          ...product,
-                          category: product.category === 'LPS' ? 'LPS' : 'IPS',
-                        }}
-                        size="full"
-                        className="w-full h-full object-cover"
-                        showVolumeBadge={true}
-                      />
-                    </div>
+                    <ProductImage
+                      product={{
+                        ...product,
+                        category: product.category === 'LPS' ? 'LPS' : 'IPS',
+                      }}
+                      size="md"
+                      showVolumeBadge={true}
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono-tabular">
                         <span className="font-bold text-[#0A006E] truncate">{product.sku}</span>
@@ -1544,27 +1523,6 @@ export const PosViews: React.FC<PosViewsProps> = ({
                 {computedLineItems.length} Line Item{computedLineItems.length === 1 ? '' : 's'}
               </span>
             </div>
-          </div>
-
-          {/* Live Phone Barcode Scanner Status Strip */}
-          <div className={`px-4 py-2 border-b flex items-center justify-between text-xs font-montserrat font-bold transition-colors shrink-0 ${
-            isPhoneSyncActive
-              ? 'bg-emerald-50 text-emerald-950 border-emerald-200'
-              : 'bg-amber-50/70 text-slate-700 border-amber-200'
-          }`}>
-            <div className="flex items-center gap-2">
-              <Smartphone className={`w-4 h-4 ${isPhoneSyncActive ? 'text-[#1E9E60]' : 'text-amber-600'}`} />
-              <span className="text-[11px]">
-                {isPhoneSyncActive ? '🟢 Phone Scanner Linked · Live Beam Active' : '📱 Phone Scanner: Ready to Beam to Cart'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsPhonePairModalOpen(true)}
-              className="text-[10px] px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-300 text-[#0A006E] font-black cursor-pointer shadow-2xs"
-            >
-              {isPhoneSyncActive ? 'QR Link' : 'Pair Phone'}
-            </button>
           </div>
 
           {/* Scrollable Register Content: Customer Details, Simplified M-Pesa, and Line Items */}
@@ -1770,36 +1728,8 @@ export const PosViews: React.FC<PosViewsProps> = ({
               </div>
 
               {computedLineItems.length === 0 ? (
-                <div className="bg-white border-2 border-dashed border-[#0A006E]/20 rounded-2xl p-5 text-center space-y-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#1E9E60] border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
-                    <Smartphone className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <h4 className="text-xs font-montserrat font-black text-[#0A006E]">
-                      Scan with Phone for Retail Checkout
-                    </h4>
-                    <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-tight">
-                      Point phone camera at any bottle barcode — it appears in this checkout cart instantly!
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setIsPhonePairModalOpen(true)}
-                      className="px-3 py-1.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-2xs transition"
-                    >
-                      <QrCode className="w-3.5 h-3.5" />
-                      Pair Phone
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsPhoneCompanionModalOpen(true)}
-                      className="px-3 py-1.5 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-2xs transition"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      Test Scanner
-                    </button>
-                  </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-5 text-center text-xs text-slate-500">
+                  Select IPS/LPS liquor products on the left or scan with your phone to populate this register.
                 </div>
               ) : (
                 computedLineItems.map((item, idx) => (
