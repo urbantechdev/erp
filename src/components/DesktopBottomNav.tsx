@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Store,
@@ -62,7 +62,20 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
   onOpenCustomerPortal,
 }) => {
   const [isMobileModulesSheetOpen, setIsMobileModulesSheetOpen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      if (typeof document !== 'undefined') {
+        setIsFullscreen(Boolean(document.fullscreenElement));
+      }
+    };
+    handleFsChange();
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+    };
+  }, []);
 
   const handleToggleFullscreen = async () => {
     try {

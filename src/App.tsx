@@ -269,8 +269,8 @@ export default function App() {
 
   // Boot connection test & operational seed (with zero staff)
   useEffect(() => {
-    testFirestoreConnection();
-    ensureOperationalFoundationSeeded();
+    testFirestoreConnection().catch(() => {});
+    ensureOperationalFoundationSeeded().catch(() => {});
   }, []);
 
   // Full Screen helper with iframe and extension safety
