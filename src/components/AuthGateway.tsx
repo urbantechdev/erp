@@ -24,6 +24,7 @@ import {
   ChevronRight,
   ExternalLink,
   Smartphone,
+  Globe,
 } from 'lucide-react';
 import { StaffMember, StaffRole, Branch } from '../types';
 import { AnimatedErrorPromptIcon } from './AnimatedFeedback';
@@ -373,7 +374,6 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
       {/* VAAIRO Deep Navy Header with Curved Single-Wave Bottom Edge */}
       <header className="relative bg-[#0A006E] text-white sticky top-0 z-40 pt-5 sm:pt-6 pb-12 sm:pb-14 px-4 sm:px-8 flex items-center justify-between gap-4 sm:gap-8 overflow-hidden shadow-lg">
-        <div className="silent-scanner-beam" />
         <a
           href="#top"
           onClick={(e) => {
@@ -394,25 +394,15 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
         </a>
 
         <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 relative z-10">
-          {onOpenPhoneScanner && (
-            <button
-              type="button"
-              onClick={onOpenPhoneScanner}
-              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center justify-center active:scale-95 text-xs font-montserrat font-black"
-              title="📱 Launch Phone Barcode Scanner Station"
-              aria-label="Launch Phone Barcode Scanner Station"
-            >
-              <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.3]" />
-            </button>
-          )}
           <button
             type="button"
             onClick={onOpenCustomerPortal}
-            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white hover:bg-slate-100 text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center justify-center active:scale-95 text-xs font-montserrat font-black"
-            title="Customer Online Order Portal"
-            aria-label="Customer Online Order Portal"
+            className="h-11 sm:h-12 px-3.5 sm:px-4 rounded-2xl bg-white hover:bg-[#FFDE00] text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center gap-2 active:scale-95 text-xs font-montserrat font-black group"
+            title="Customer Website & Online Storefront"
+            aria-label="Customer Website & Online Storefront"
           >
-            <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.3]" />
+            <Globe className="w-5 h-5 sm:w-5 sm:h-5 stroke-[2.3] text-[#0A006E] group-hover:rotate-12 transition-transform" />
+            <span className="hidden sm:inline font-bold">Customer Website</span>
           </button>
         </div>
 

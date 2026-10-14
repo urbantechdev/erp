@@ -72,6 +72,7 @@ import { StockThresholdsGovernanceModal } from './StockThresholdsGovernanceModal
 import { LogDamageSpoilageModal } from './LogDamageSpoilageModal';
 import { SalesPeriodTracker } from './SalesPeriodTracker';
 import { InventoryBarcodeAssignmentModal } from './InventoryBarcodeAssignmentModal';
+import { AffiliateSalesPosDashboard } from './AffiliateSalesPosDashboard';
 
 // ---------------------------------------------------------------------------
 // 1. OVERVIEW DASHBOARD
@@ -91,6 +92,15 @@ export const OverviewModule: React.FC<{
   onPreviewDoc: (doc: TransactionDoc) => void;
   onOpenOnboardItems?: () => void;
   onNavigateModule?: (module: any) => void;
+  onCommitTransaction?: (
+    txDraft: Omit<TransactionDoc, 'id' | 'createdAt'>,
+    updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[]
+  ) => Promise<TransactionDoc | null>;
+  onUpdateTransaction?: (
+    txId: string,
+    updates: Partial<TransactionDoc>,
+    updatedProducts?: { productId: string; newTotal: number; newBranchStockJson: string }[]
+  ) => Promise<boolean>;
 }> = ({
   currentUser,
   products,
@@ -106,6 +116,8 @@ export const OverviewModule: React.FC<{
   onPreviewDoc,
   onOpenOnboardItems,
   onNavigateModule,
+  onCommitTransaction,
+  onUpdateTransaction,
 }) => {
   const isAccountant = currentUser.role === 'Accountant';
   const [adminOverviewView, setAdminOverviewView] = useState<'executive' | 'accounting'>('executive');
@@ -582,145 +594,23 @@ export const OverviewModule: React.FC<{
     );
   }
 
-  // Specialized Affiliate Sales Representative Personal Command Dashboard
+  // Specialized Affiliate Sales Representative Personal Command Dashboard - Full Sales POS
   if (currentUser.role === 'Affiliate Sales Representative') {
-    const ownTransactions = transactions.filter(
-      (t) =>
-        t.createdBy === currentUser.name ||
-        t.createdBy === currentUser.email ||
-        t.affiliateCode === currentUser.id
-    );
-    const ownSalesTotal = ownTransactions.reduce((acc, t) => acc + t.totalAmount, 0);
-    const commPct = currentUser.agreedCommissionPct || 8;
-    const earnedCommission = Math.round((ownSalesTotal * commPct) / 100);
-
     return (
-      <div className="space-y-6">
-        {/* Affiliate Banner */}
-        <div className="bg-[#FFDE00] text-[#0A006E] border-2 border-[#0A006E] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
-          <div>
-            <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider block">
-              Field &amp; Affiliate Sales Representative Command
-            </span>
-            <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
-              Personal Sales Volume &amp; Earned Commission Tracker
-            </h2>
-            <p className="text-xs text-slate-900 font-semibold mt-0.5">
-              Authorized to create and track your own wholesale orders and client quotes at approved prices.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onNavigateModule?.('sales_pos')}
-              className="px-4 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition"
-            >
-              New Wholesale Order
-            </button>
-            <button
-              onClick={() => onNavigateModule?.('customer_portal')}
-              className="px-3.5 py-2 bg-white border border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
-            >
-              Browse Catalog
-            </button>
-          </div>
-        </div>
-
-        {/* Affiliate Personal KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
-            <div className="text-xs font-montserrat font-bold text-slate-600">Personal Sales Volume</div>
-            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
-              {formatKes(ownSalesTotal)}
-            </div>
-            <div className="text-xs text-slate-600 mt-1">
-              {ownTransactions.length} Total Orders Generated
-            </div>
-          </div>
-
-          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
-            <div className="text-xs font-montserrat font-bold text-slate-600">Earned Commissions</div>
-            <div className="text-2xl font-montserrat font-black text-[#1E9E60] font-mono-tabular mt-1">
-              {formatKes(earnedCommission)}
-            </div>
-            <div className="text-xs text-slate-600 mt-1">
-              Agreed Rate: <strong>{commPct}%</strong> on fulfilled orders
-            </div>
-          </div>
-
-          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
-            <div className="text-xs font-montserrat font-bold text-slate-600">Assigned Branch &amp; Depot</div>
-            <div className="text-lg font-montserrat font-black text-[#0A006E] truncate mt-1">
-              {currentUser.branchName}
-            </div>
-            <div className="text-xs text-slate-600 mt-1">
-              Regional pickup &amp; delivery base
-            </div>
-          </div>
-
-          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
-            <div className="text-xs font-montserrat font-bold text-slate-600">Approved Catalog Access</div>
-            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
-              {products.length} SKUs
-            </div>
-            <div className="text-xs text-slate-600 mt-1">
-              Live pricing with case multipliers
-            </div>
-          </div>
-        </div>
-
-        {/* Affiliate Orders Table */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-          <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
-            <FileText className="w-4 h-4 text-[#0A006E]" />
-            My Recent Orders &amp; Commercial Invoices
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
-                  <th className="py-2.5 px-3 font-black">Document No</th>
-                  <th className="py-2.5 px-3 font-black">Type</th>
-                  <th className="py-2.5 px-3 font-black">Customer</th>
-                  <th className="py-2.5 px-3 font-black text-right">Amount (KES)</th>
-                  <th className="py-2.5 px-3 font-black text-right">Commission (KES)</th>
-                  <th className="py-2.5 px-3 font-black text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {ownTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-6 text-center text-slate-500">
-                      You haven&apos;t created any orders yet. Click &ldquo;New Wholesale Order&rdquo; to generate commercial quotes.
-                    </td>
-                  </tr>
-                ) : (
-                  ownTransactions.slice(0, 8).map((tx) => (
-                    <tr key={tx.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">{tx.docNumber}</td>
-                      <td className="py-2.5 px-3 font-montserrat font-bold text-slate-900">{tx.docType}</td>
-                      <td className="py-2.5 px-3 text-slate-800">{tx.customerName}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-tabular font-bold">{formatKes(tx.totalAmount)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono-tabular font-bold text-[#1E9E60]">
-                        {formatKes(Math.round((tx.totalAmount * commPct) / 100))}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <button
-                          onClick={() => onPreviewDoc(tx)}
-                          className="px-3 py-1 bg-[#0A006E] text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-black cursor-pointer"
-                        >
-                          View PDF
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <AffiliateSalesPosDashboard
+        currentUser={currentUser}
+        products={products}
+        branches={branches}
+        regions={regions}
+        transactions={transactions}
+        onCommitTransaction={onCommitTransaction || (async () => null)}
+        onUpdateTransaction={onUpdateTransaction}
+        onPreviewDoc={onPreviewDoc}
+        onNavigateModule={onNavigateModule}
+      />
     );
   }
+
 
   return (
     <div className="space-y-6">

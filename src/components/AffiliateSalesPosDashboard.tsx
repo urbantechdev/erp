@@ -1,0 +1,1652 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useMemo } from 'react';
+import {
+  Search,
+  ShoppingCart,
+  Send,
+  CreditCard,
+  CheckCircle2,
+  Clock,
+  User,
+  Phone,
+  FileText,
+  Package,
+  Layers,
+  TrendingUp,
+  DollarSign,
+  Building2,
+  Trash2,
+  Plus,
+  Minus,
+  X,
+  Printer,
+  Share2,
+  Copy,
+  Check,
+  Percent,
+  MapPin,
+  ExternalLink,
+  Store,
+  Tag,
+  AlertCircle,
+  HelpCircle,
+  Sparkles,
+  QrCode,
+  ArrowRight,
+  RefreshCw,
+} from 'lucide-react';
+import {
+  Product,
+  Branch,
+  GeoRegion,
+  TransactionDoc,
+  StaffMember,
+  StockCategory,
+} from '../types';
+import { calculateGeoPrice, formatKes } from '../erpUtils';
+import { playPosBeep } from '../utils/audioBeep';
+import { ProductImage } from './ProductImage';
+import { EtimsReceiptModal, EtimsReceiptData } from './EtimsReceiptModal';
+
+interface CartItem {
+  productId: string;
+  product: Product;
+  unitMode: 'Bottle' | 'Case';
+  quantity: number;
+  unitPrice: number;
+  packSize: number;
+  totalBottles: number;
+  affiliateMarkupPerUnit: number;
+  lineTotal: number;
+}
+
+interface QueuedSlipData {
+  token: string;
+  docNumber: string;
+  customerName: string;
+  customerPhone: string;
+  items: { name: string; qty: number; unitMode: string; price: number }[];
+  subtotal: number;
+  tax: number;
+  totalAmount: number;
+  branchName: string;
+  affiliateName: string;
+  affiliateCode: string;
+  earnedCommission: number;
+  notes?: string;
+  createdAt: string;
+}
+
+interface AffiliateSalesPosDashboardProps {
+  currentUser: StaffMember;
+  products: Product[];
+  branches: Branch[];
+  regions: GeoRegion[];
+  transactions: TransactionDoc[];
+  onCommitTransaction: (
+    txDraft: Omit<TransactionDoc, 'id' | 'createdAt'>,
+    updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[]
+  ) => Promise<TransactionDoc | null>;
+  onUpdateTransaction?: (
+    txId: string,
+    updates: Partial<TransactionDoc>,
+    updatedProducts?: { productId: string; newTotal: number; newBranchStockJson: string }[]
+  ) => Promise<boolean>;
+  onPreviewDoc: (doc: TransactionDoc) => void;
+  onNavigateModule?: (module: any) => void;
+}
+
+const DRINK_CATEGORIES = [
+  { id: 'ALL', label: 'All Drinks' },
+  { id: 'Whisky', label: 'Whiskies' },
+  { id: 'Vodka', label: 'Vodkas' },
+  { id: 'Gin', label: 'Gins' },
+  { id: 'Rum', label: 'Rums' },
+  { id: 'Tequila', label: 'Tequilas' },
+  { id: 'Cognac & Brandy', label: 'Cognacs & Brandies' },
+  { id: 'Champagne & Wine', label: 'Wines & Champagne' },
+  { id: 'Beer & Cider', label: 'Beers & Ciders' },
+  { id: 'Liqueur & Cream', label: 'Liqueurs & Creams' },
+];
+
+export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProps> = ({
+  currentUser,
+  products,
+  branches,
+  regions,
+  transactions,
+  onCommitTransaction,
+  onUpdateTransaction,
+  onPreviewDoc,
+  onNavigateModule,
+}) => {
+  // Navigation / View Tabs
+  const [activeTab, setActiveTab] = useState<'pos' | 'orders'>('pos');
+
+  // Branch & Region Scope (default to affiliate's assigned branch)
+  const defaultBranch = useMemo(
+    () => branches.find((b) => b.id === currentUser.branchId) || branches[0],
+    [branches, currentUser.branchId]
+  );
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(defaultBranch?.id || '');
+  const activeBranch = useMemo(
+    () => branches.find((b) => b.id === selectedBranchId) || defaultBranch,
+    [branches, selectedBranchId, defaultBranch]
+  );
+
+  const activeRegion = useMemo(() => {
+    if (activeBranch?.regionId) {
+      return regions.find((r) => r.id === activeBranch.regionId) || regions[0];
+    }
+    return regions[0];
+  }, [regions, activeBranch]);
+
+  // Product Catalog Filters & Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [priceType, setPriceType] = useState<'wholesale' | 'retail'>('wholesale');
+
+  // Active POS Cart
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerNotes, setCustomerNotes] = useState('');
+  const [dispatchType, setDispatchType] = useState<'counter_pickup' | 'field_delivery'>('counter_pickup');
+
+  // Modals & UI States
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [queuedSlip, setQueuedSlip] = useState<QueuedSlipData | null>(null);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<'M-Pesa Express' | 'Cash' | 'Bank EFT / Cheque' | 'Credit'>('M-Pesa Express');
+  const [checkoutMpesaPhone, setCheckoutMpesaPhone] = useState('');
+  const [checkoutCashTendered, setCheckoutCashTendered] = useState<number>(0);
+  const [etimsReceipt, setEtimsReceipt] = useState<EtimsReceiptData | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
+
+  // Orders Filter State (for Tab 2)
+  const [ordersFilterStatus, setOrdersFilterStatus] = useState<'ALL' | 'QUEUED' | 'PAID'>('ALL');
+  const [ordersSearch, setOrdersSearch] = useState('');
+
+  // Affiliate Performance Metrics
+  const commPct = currentUser.agreedCommissionPct || 8;
+  const affiliateCode = `AFF-${currentUser.name.slice(0, 3).toUpperCase()}-${(currentUser.id || '01').slice(-3).toUpperCase()}`;
+
+  const ownTransactions = useMemo(() => {
+    return transactions.filter(
+      (t) =>
+        t.createdBy === currentUser.name ||
+        t.createdBy === currentUser.email ||
+        t.affiliateCode === currentUser.id ||
+        t.affiliateCode === affiliateCode
+    );
+  }, [transactions, currentUser, affiliateCode]);
+
+  const paidTransactions = useMemo(() => {
+    return ownTransactions.filter((t) => t.status === 'Paid' || t.status === 'Approved' || t.status === 'Fulfilled');
+  }, [ownTransactions]);
+
+  const queuedTransactions = useMemo(() => {
+    return ownTransactions.filter(
+      (t) =>
+        t.status === 'Pending Verification' &&
+        (t.channel === 'Affiliate Rep' || t.paymentMethod?.toLowerCase().includes('cashier'))
+    );
+  }, [ownTransactions]);
+
+  const totalSalesVolume = useMemo(() => {
+    return paidTransactions.reduce((acc, t) => acc + (t.totalAmount || 0), 0);
+  }, [paidTransactions]);
+
+  const totalEarnedCommission = useMemo(() => {
+    return Math.round((totalSalesVolume * commPct) / 100);
+  }, [totalSalesVolume, commPct]);
+
+  // Branch stock resolver
+  const getProductBranchStock = (product: Product): number => {
+    const fallbackTotal = product.totalBottles ?? (product.packSize || 12) * 20;
+    if (!product.branchStockSummary) return fallbackTotal;
+    try {
+      const summary = JSON.parse(product.branchStockSummary);
+      if (activeBranch && summary[activeBranch.id] !== undefined) {
+        return summary[activeBranch.id];
+      }
+    } catch {}
+    return fallbackTotal;
+  };
+
+  // Filtered Products
+  const filteredProducts = useMemo(() => {
+    return products.filter((prod) => {
+      if (categoryFilter !== 'ALL') {
+        const matchesCat =
+          prod.subCategory === categoryFilter ||
+          (prod.category && prod.category.toLowerCase() === categoryFilter.toLowerCase()) ||
+          (prod.name && prod.name.toLowerCase().includes(categoryFilter.toLowerCase()));
+        if (!matchesCat) return false;
+      }
+      const stock = getProductBranchStock(prod);
+      if (inStockOnly && stock <= 0) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = prod.name.toLowerCase().includes(q);
+        const matchesSku = prod.sku.toLowerCase().includes(q);
+        const matchesCategory = (prod.category || '').toLowerCase().includes(q);
+        const matchesBrand = (prod.subCategory || '').toLowerCase().includes(q);
+        const matchesBarcode = (prod.barcode || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesSku && !matchesCategory && !matchesBrand && !matchesBarcode) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [products, categoryFilter, inStockOnly, searchQuery, activeBranch]);
+
+  // Pricing helper
+  const getProductPrices = (product: Product) => {
+    const geoPrice = calculateGeoPrice(product, activeRegion, priceType);
+    const packSize = product.packSize || product.bottlesPerCase || 12;
+    const bottlePrice = geoPrice.unitBottlePrice;
+    const casePrice = geoPrice.casePrice;
+
+    return { bottlePrice, casePrice, packSize };
+  };
+
+  // Add Product to Cart
+  const handleAddToCart = (product: Product, unitMode: 'Bottle' | 'Case', qty: number = 1) => {
+    const { bottlePrice, casePrice, packSize } = getProductPrices(product);
+    const unitPrice = unitMode === 'Bottle' ? bottlePrice : casePrice;
+    const totalBottles = unitMode === 'Bottle' ? qty : qty * packSize;
+
+    setCart((prev) => {
+      const existingIdx = prev.findIndex(
+        (item) => item.productId === product.id && item.unitMode === unitMode
+      );
+      if (existingIdx >= 0) {
+        const next = [...prev];
+        const updatedQty = next[existingIdx].quantity + qty;
+        next[existingIdx] = {
+          ...next[existingIdx],
+          quantity: updatedQty,
+          totalBottles: unitMode === 'Bottle' ? updatedQty : updatedQty * packSize,
+          lineTotal: updatedQty * (next[existingIdx].unitPrice + next[existingIdx].affiliateMarkupPerUnit),
+        };
+        return next;
+      }
+      const newItem: CartItem = {
+        productId: product.id,
+        product,
+        unitMode,
+        quantity: qty,
+        unitPrice,
+        packSize,
+        totalBottles,
+        affiliateMarkupPerUnit: 0,
+        lineTotal: qty * unitPrice,
+      };
+      return [...prev, newItem];
+    });
+
+    playPosBeep('success');
+  };
+
+  // Update Cart Item Quantity
+  const handleUpdateQuantity = (index: number, delta: number) => {
+    setCart((prev) => {
+      const next = [...prev];
+      const target = next[index];
+      if (!target) return prev;
+      const newQty = target.quantity + delta;
+      if (newQty <= 0) {
+        next.splice(index, 1);
+        playPosBeep('error');
+        return next;
+      }
+      const totalBottles = target.unitMode === 'Bottle' ? newQty : newQty * target.packSize;
+      next[index] = {
+        ...target,
+        quantity: newQty,
+        totalBottles,
+        lineTotal: newQty * (target.unitPrice + target.affiliateMarkupPerUnit),
+      };
+      playPosBeep('case');
+      return next;
+    });
+  };
+
+  // Update Cart Item Markup
+  const handleUpdateMarkup = (index: number, markup: number) => {
+    setCart((prev) => {
+      const next = [...prev];
+      const target = next[index];
+      if (!target) return prev;
+      const safeMarkup = Math.max(0, markup);
+      next[index] = {
+        ...target,
+        affiliateMarkupPerUnit: safeMarkup,
+        lineTotal: target.quantity * (target.unitPrice + safeMarkup),
+      };
+      return next;
+    });
+  };
+
+  // Remove Item
+  const handleRemoveItem = (index: number) => {
+    setCart((prev) => prev.filter((_, i) => i !== index));
+    playPosBeep('error');
+  };
+
+  // Cart Financials
+  const cartSubtotal = useMemo(() => {
+    return cart.reduce((acc, item) => acc + item.lineTotal, 0);
+  }, [cart]);
+
+  const cartVatAndExcise = useMemo(() => {
+    return Math.round(cartSubtotal * 0.16);
+  }, [cartSubtotal]);
+
+  const cartGrandTotal = useMemo(() => {
+    return cartSubtotal; // VAT is included in quote or added based on wholesale terms
+  }, [cartSubtotal]);
+
+  const cartAffiliateBaseComm = useMemo(() => {
+    return Math.round((cartSubtotal * commPct) / 100);
+  }, [cartSubtotal, commPct]);
+
+  const cartAffiliateMarkupTotal = useMemo(() => {
+    return cart.reduce((acc, item) => acc + item.affiliateMarkupPerUnit * item.quantity, 0);
+  }, [cart]);
+
+  const cartTotalEarnings = useMemo(() => {
+    return cartAffiliateBaseComm + cartAffiliateMarkupTotal;
+  }, [cartAffiliateBaseComm, cartAffiliateMarkupTotal]);
+
+  const totalUnitsInCart = useMemo(() => {
+    return cart.reduce((acc, item) => acc + item.quantity, 0);
+  }, [cart]);
+
+  // -------------------------------------------------------------------------
+  // ACTION 1: QUEUE TO CASHIER (Send Order to Branch Cashier Register)
+  // -------------------------------------------------------------------------
+  const handleQueueToCashier = async () => {
+    if (cart.length === 0) {
+      alert('Your cart is empty. Please add items to queue this order.');
+      return;
+    }
+    if (!customerName.trim()) {
+      alert('Please enter a Customer or Venue Name for this order.');
+      return;
+    }
+
+    setIsProcessing(true);
+    const tokenNumber = `Q-AFF-${Math.floor(1000 + Math.random() * 9000)}`;
+    const docNumber = `ORD-AFF-${Date.now().toString().slice(-6)}`;
+    const now = new Date().toISOString();
+
+    const lineItemsSummary = cart.map((item) => ({
+      productId: item.productId,
+      productName: item.product.name,
+      sku: item.product.sku,
+      unitMode: item.unitMode,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice + item.affiliateMarkupPerUnit,
+      lineTotal: item.lineTotal,
+      packSize: item.packSize,
+      totalBottles: item.totalBottles,
+      affiliateMarkup: item.affiliateMarkupPerUnit,
+    }));
+
+    const txDraft: Omit<TransactionDoc, 'id' | 'createdAt'> = {
+      docNumber,
+      docType: 'Invoice',
+      channel: 'Affiliate Rep',
+      branchId: activeBranch.id,
+      branchName: activeBranch.name,
+      regionId: activeRegion.id,
+      regionName: activeRegion.name,
+      customerName: `${customerName.trim()}${customerPhone ? ` (${customerPhone.trim()})` : ''}`,
+      customerLicenseNo: customerPhone.trim() ? `TEL:${customerPhone.trim()}` : `QUEUE-TOKEN:${tokenNumber}`,
+      itemsSummary: JSON.stringify(lineItemsSummary),
+      subtotal: cartSubtotal,
+      exciseAndTax: cartVatAndExcise,
+      totalAmount: cartGrandTotal,
+      paymentMethod: `Queued at Cashier Counter · Token: ${tokenNumber}`,
+      status: 'Pending Verification',
+      createdBy: currentUser.name,
+      createdByRole: currentUser.role,
+      affiliateCode: currentUser.id || affiliateCode,
+      relatedInvoiceNo: tokenNumber,
+      creditReason: customerNotes ? `Notes: ${customerNotes}` : `Dispatch: ${dispatchType === 'counter_pickup' ? 'Counter Pickup' : 'Field Delivery'}`,
+    };
+
+    try {
+      // Stock is not deducted until payment is finalized by the cashier, so updatedProducts = []
+      const created = await onCommitTransaction(txDraft, []);
+      if (created) {
+        playPosBeep('case');
+        setQueuedSlip({
+          token: tokenNumber,
+          docNumber,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+          items: cart.map((i) => ({
+            name: i.product.name,
+            qty: i.quantity,
+            unitMode: i.unitMode,
+            price: i.unitPrice + i.affiliateMarkupPerUnit,
+          })),
+          subtotal: cartSubtotal,
+          tax: cartVatAndExcise,
+          totalAmount: cartGrandTotal,
+          branchName: activeBranch.name,
+          affiliateName: currentUser.name,
+          affiliateCode,
+          earnedCommission: cartTotalEarnings,
+          notes: customerNotes,
+          createdAt: now,
+        });
+
+        // Reset cart for next customer
+        setCart([]);
+        setCustomerName('');
+        setCustomerPhone('');
+        setCustomerNotes('');
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // ACTION 2: DIRECT CHECKOUT (Instant Payment & eTIMS Receipt)
+  // -------------------------------------------------------------------------
+  const handleOpenCheckoutModal = () => {
+    if (cart.length === 0) {
+      alert('Your cart is empty. Please add items to checkout.');
+      return;
+    }
+    if (!customerName.trim()) {
+      alert('Please enter a Customer or Venue Name for this order.');
+      return;
+    }
+    setCheckoutMpesaPhone(customerPhone || '');
+    setCheckoutCashTendered(cartGrandTotal);
+    setIsCheckoutModalOpen(true);
+  };
+
+  const handleConfirmDirectCheckout = async () => {
+    setIsProcessing(true);
+    const docNumber = `REC-AFF-${Date.now().toString().slice(-6)}`;
+    const now = new Date().toISOString();
+
+    const lineItemsSummary = cart.map((item) => ({
+      productId: item.productId,
+      productName: item.product.name,
+      sku: item.product.sku,
+      unitMode: item.unitMode,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice + item.affiliateMarkupPerUnit,
+      lineTotal: item.lineTotal,
+      packSize: item.packSize,
+      totalBottles: item.totalBottles,
+      affiliateMarkup: item.affiliateMarkupPerUnit,
+    }));
+
+    // Deduct central liquor bottles for this branch
+    const updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[] = [];
+    for (const item of cart) {
+      const prod = products.find((p) => p.id === item.productId);
+      if (prod && item.totalBottles > 0) {
+        const fallbackTotal = prod.totalBottles ?? (prod.packSize || 12) * 20;
+        let branchMap: Record<string, number> = {};
+        try {
+          branchMap = prod.branchStockSummary ? JSON.parse(prod.branchStockSummary) : {};
+        } catch {
+          branchMap = {};
+        }
+        const currentBranchQty = branchMap[activeBranch.id] ?? fallbackTotal;
+        const nextBranchQty = Math.max(0, currentBranchQty - item.totalBottles);
+        branchMap[activeBranch.id] = nextBranchQty;
+        const newTotal = Math.max(0, fallbackTotal - item.totalBottles);
+
+        updatedProducts.push({
+          productId: prod.id,
+          newTotal,
+          newBranchStockJson: JSON.stringify(branchMap),
+        });
+      }
+    }
+
+    const txDraft: Omit<TransactionDoc, 'id' | 'createdAt'> = {
+      docNumber,
+      docType: 'Receipt',
+      channel: 'Affiliate Rep',
+      branchId: activeBranch.id,
+      branchName: activeBranch.name,
+      regionId: activeRegion.id,
+      regionName: activeRegion.name,
+      customerName: `${customerName.trim()}${customerPhone ? ` (${customerPhone.trim()})` : ''}`,
+      customerLicenseNo: customerPhone.trim() ? `TEL:${customerPhone.trim()}` : 'DIRECT-SALE',
+      itemsSummary: JSON.stringify(lineItemsSummary),
+      subtotal: cartSubtotal,
+      exciseAndTax: cartVatAndExcise,
+      totalAmount: cartGrandTotal,
+      paymentMethod: checkoutPaymentMethod,
+      status: 'Paid',
+      createdBy: currentUser.name,
+      createdByRole: currentUser.role,
+      affiliateCode: currentUser.id || affiliateCode,
+      relatedInvoiceNo: `ETIMS-2026-${Date.now().toString().slice(-8)}`,
+      creditReason: `Direct Affiliate Checkout · Commission credited: ${formatKes(cartTotalEarnings)}`,
+    };
+
+    try {
+      const created = await onCommitTransaction(txDraft, updatedProducts);
+      if (created) {
+        playPosBeep('success');
+        setIsCheckoutModalOpen(false);
+
+        // Prepare eTIMS Receipt
+        const receiptData: EtimsReceiptData = {
+          invoiceNumber: docNumber,
+          invoiceDate: now,
+          sellerPin: 'P051239841Z',
+          cuSerialNumber: 'KRA-CU-098418',
+          deviceSerialNumber: `VAAIRO-POS-${activeBranch.code || 'BR01'}`,
+          kraControlCode: `KRA-ETIMS-${Date.now().toString().slice(-8)}`,
+          branchName: activeBranch.name,
+          servedByName: `${currentUser.name} (Field Affiliate Rep)`,
+          buyerName: customerName.trim() || 'Valued Customer',
+          buyerPin: 'AGE-21-VERIFIED',
+          paymentMethod: checkoutPaymentMethod,
+          mpesaReceiptNumber: checkoutPaymentMethod.includes('M-Pesa') ? `Q${Math.random().toString(36).substring(2, 8).toUpperCase()}` : undefined,
+          items: cart.map((i) => ({
+            productName: i.product.name,
+            sku: i.product.sku,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice + i.affiliateMarkupPerUnit,
+            totalAmount: i.lineTotal,
+          })),
+          taxableAmount: Math.round(cartGrandTotal / 1.16),
+          taxAmount: Math.round(cartGrandTotal - cartGrandTotal / 1.16),
+          totalInvoiceAmount: cartGrandTotal,
+          qrCodeUrl: `https://itax.kra.go.ke/KRA-Portal/invoiceConfirmation.htm?invNumber=${docNumber}`,
+          affiliateName: currentUser.name,
+          affiliateProfitAmount: cartTotalEarnings,
+        };
+
+        setEtimsReceipt(receiptData);
+
+        // Clear cart
+        setCart([]);
+        setCustomerName('');
+        setCustomerPhone('');
+        setCustomerNotes('');
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Copy Ticket Details to Clipboard
+  const handleCopyTicket = () => {
+    if (!queuedSlip) return;
+    const text = `VAAIRO POS - QUEUED ORDER TOKEN\nToken: ${queuedSlip.token}\nCustomer: ${queuedSlip.customerName}\nDepot: ${queuedSlip.branchName}\nTotal Amount: ${formatKes(queuedSlip.totalAmount)}\nSales Rep: ${queuedSlip.affiliateName} (${queuedSlip.affiliateCode})\nPlease present this token at the branch cashier counter to pay and collect items.`;
+    navigator.clipboard.writeText(text);
+    setCopiedToken(true);
+    setTimeout(() => setCopiedToken(false), 2000);
+  };
+
+  // Share via WhatsApp
+  const handleShareWhatsApp = () => {
+    if (!queuedSlip) return;
+    const text = `*VAAIRO POS ORDER QUEUE SLIP*\n*Token:* ${queuedSlip.token}\n*Customer:* ${queuedSlip.customerName}\n*Branch Depot:* ${queuedSlip.branchName}\n*Total:* ${formatKes(queuedSlip.totalAmount)}\n*Items:* ${queuedSlip.items.map((i) => `${i.qty}x ${i.name}`).join(', ')}\n*Representative:* ${queuedSlip.affiliateName}\n\nPresent this Token at the Cashier counter to complete payment and collect your order!`;
+    const url = `https://wa.me/${queuedSlip.customerPhone ? queuedSlip.customerPhone.replace(/[^0-9]/g, '') : ''}?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* --------------------------------------------------------------------- */}
+      {/* 1. TOP HEADER BANNER: AFFILIATE SALES POS COMMAND                     */}
+      {/* --------------------------------------------------------------------- */}
+      <div className="bg-[#0A006E] text-white border-2 border-[#0A006E] rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-lg">
+        {/* Subtle decorative background accent */}
+        <div className="absolute -right-10 -bottom-10 w-44 h-44 rounded-full bg-[#FFDE00]/10 pointer-events-none" />
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-montserrat font-black bg-[#FFDE00] text-[#0A006E] uppercase tracking-wider">
+                Field &amp; Affiliate Sales POS
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-montserrat font-bold bg-white/15 text-white">
+                {currentUser.branchName} Depot
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-montserrat font-black bg-[#34D186] text-[#0A006E]">
+                {commPct}% Agreed Commission
+              </span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-montserrat font-black italic text-white mt-1.5 flex items-center gap-2">
+              <span>{currentUser.name}</span>
+              <span className="text-[#FFDE00] text-sm not-italic font-mono font-bold">({affiliateCode})</span>
+            </h1>
+            <p className="text-xs text-white/80 font-medium mt-0.5">
+              Select products from depot inventory, add to cart, and instantly <strong>Checkout</strong> or <strong>Queue to Branch Cashier</strong> for counter pickup.
+            </p>
+          </div>
+
+          {/* Quick Tab Switcher */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('pos')}
+              className={`px-4 py-2.5 rounded-xl font-montserrat font-black text-xs cursor-pointer transition flex items-center gap-2 ${
+                activeTab === 'pos'
+                  ? 'bg-[#FFDE00] text-[#0A006E] shadow-md scale-102'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+            >
+              <ShoppingCart className="w-4 h-4" />
+              <span>Sales POS Terminal</span>
+              {cart.length > 0 && (
+                <span className="w-5 h-5 rounded-full bg-[#0A006E] text-[#FFDE00] text-[10px] flex items-center justify-center font-bold">
+                  {totalUnitsInCart}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('orders')}
+              className={`px-4 py-2.5 rounded-xl font-montserrat font-black text-xs cursor-pointer transition flex items-center gap-2 ${
+                activeTab === 'orders'
+                  ? 'bg-[#FFDE00] text-[#0A006E] shadow-md scale-102'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>My Orders &amp; Queues</span>
+              {queuedTransactions.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-[#0A006E] text-[10px] font-black animate-pulse">
+                  {queuedTransactions.length} Queued
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Affiliate Real-Time KPI Metric Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5 mt-4 pt-4 border-t border-white/15 text-xs">
+          <div className="bg-white/10 rounded-xl p-2.5 sm:p-3">
+            <div className="text-white/70 text-[10px] sm:text-xs font-semibold">Total Fulfilled Sales</div>
+            <div className="text-base sm:text-lg font-montserrat font-black text-white font-mono-tabular mt-0.5">
+              {formatKes(totalSalesVolume)}
+            </div>
+            <div className="text-[10px] text-white/60">{paidTransactions.length} Paid Orders</div>
+          </div>
+
+          <div className="bg-[#34D186]/20 border border-[#34D186]/40 rounded-xl p-2.5 sm:p-3">
+            <div className="text-[#34D186] text-[10px] sm:text-xs font-bold">Earned Commission</div>
+            <div className="text-base sm:text-lg font-montserrat font-black text-[#FFDE00] font-mono-tabular mt-0.5">
+              {formatKes(totalEarnedCommission)}
+            </div>
+            <div className="text-[10px] text-[#34D186] font-semibold">{commPct}% Rate on Fulfilled Volume</div>
+          </div>
+
+          <div className="bg-amber-400/20 border border-amber-400/40 rounded-xl p-2.5 sm:p-3">
+            <div className="text-[#FFDE00] text-[10px] sm:text-xs font-bold">Queued to Cashier</div>
+            <div className="text-base sm:text-lg font-montserrat font-black text-white font-mono-tabular mt-0.5">
+              {queuedTransactions.length} <span className="text-xs text-white/70">pending</span>
+            </div>
+            <div className="text-[10px] text-[#FFDE00] font-semibold">
+              {formatKes(queuedTransactions.reduce((acc, t) => acc + (t.totalAmount || 0), 0))} waiting
+            </div>
+          </div>
+
+          <div className="bg-white/10 rounded-xl p-2.5 sm:p-3">
+            <div className="text-white/70 text-[10px] sm:text-xs font-semibold">Depot Stock Access</div>
+            <div className="text-base sm:text-lg font-montserrat font-black text-white font-mono-tabular mt-0.5">
+              {filteredProducts.length} <span className="text-xs text-white/70">SKUs</span>
+            </div>
+            <div className="text-[10px] text-white/60">{activeBranch.name}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* --------------------------------------------------------------------- */}
+      {/* 2. TAB 1: FULL SALES POS TERMINAL WORKSPACE                           */}
+      {/* --------------------------------------------------------------------- */}
+      {activeTab === 'pos' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* LEFT 7-8 COLUMNS: PRODUCT SEARCH, CATEGORIES & PRODUCT GRID */}
+          <div className="lg:col-span-7 xl:col-span-8 space-y-3.5">
+            {/* Top Toolbar: Search, Branch Selector, Price Type */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs space-y-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                {/* Search Bar */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by whisky, gin, brand, barcode, SKU..."
+                    className="w-full pl-9 pr-8 py-2 bg-[#F0F2F0] border border-slate-200 focus:border-[#0A006E] rounded-xl text-xs font-semibold text-slate-900 outline-none transition"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Branch Depot Selector (if staff authorized across depots) */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="py-2 px-3 bg-[#F0F2F0] border border-slate-200 rounded-xl text-xs font-montserrat font-bold text-[#0A006E] outline-none"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Price Mode: Wholesale vs Retail */}
+                  <div className="flex items-center bg-[#F0F2F0] rounded-xl p-0.5 border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setPriceType('wholesale')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-montserrat font-black cursor-pointer transition ${
+                        priceType === 'wholesale'
+                          ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Wholesale
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPriceType('retail')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-montserrat font-black cursor-pointer transition ${
+                        priceType === 'retail'
+                          ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Retail
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Pills Scroller */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                {DRINK_CATEGORIES.map((cat) => {
+                  const isActive = categoryFilter === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setCategoryFilter(cat.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap cursor-pointer transition shrink-0 ${
+                        isActive
+                          ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs scale-102'
+                          : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Products Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filteredProducts.length === 0 ? (
+                <div className="col-span-full py-12 text-center bg-white border border-slate-200 rounded-2xl p-6">
+                  <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <h4 className="text-sm font-montserrat font-bold text-slate-700">No products match your filter</h4>
+                  <p className="text-xs text-slate-500 mt-1">Try clearing your search query or selecting a different category.</p>
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setCategoryFilter('ALL');
+                    }}
+                    className="mt-3 px-3.5 py-1.5 bg-[#0A006E] text-[#FFDE00] text-xs font-montserrat font-bold rounded-xl cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              ) : (
+                filteredProducts.map((prod) => {
+                  const stock = getProductBranchStock(prod);
+                  const { bottlePrice, casePrice, packSize } = getProductPrices(prod);
+                  const isOutOfStock = stock <= 0;
+
+                  return (
+                    <div
+                      key={prod.id}
+                      className={`bg-white border-2 rounded-2xl p-3 flex flex-col justify-between transition-all hover:shadow-md ${
+                        isOutOfStock ? 'border-slate-200 opacity-60' : 'border-slate-200 hover:border-[#0A006E]'
+                      }`}
+                    >
+                      {/* Product Visual Header */}
+                      <div className="space-y-2">
+                        <div className="relative aspect-4/3 rounded-xl overflow-hidden bg-[#F0F2F0] flex items-center justify-center p-2">
+                          <ProductImage
+                            product={{
+                              ...prod,
+                              category: prod.category === 'LPS' ? 'LPS' : 'IPS',
+                            }}
+                            size="md"
+                            className="max-h-full max-w-full object-contain drop-shadow-sm"
+                          />
+                          {/* Stock Badge */}
+                          <div className="absolute top-2 left-2">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-montserrat font-black ${
+                                stock > 10
+                                  ? 'bg-[#34D186] text-[#0A006E]'
+                                  : stock > 0
+                                  ? 'bg-amber-400 text-[#0A006E]'
+                                  : 'bg-rose-500 text-white'
+                              }`}
+                            >
+                              {stock > 0 ? `${stock} in stock` : 'Out of stock'}
+                            </span>
+                          </div>
+
+                          {/* Category Tag */}
+                          <div className="absolute top-2 right-2">
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-montserrat font-bold bg-[#0A006E]/80 text-white">
+                              {prod.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Title & Specs */}
+                        <div>
+                          <div className="text-[10px] font-mono font-bold text-slate-500">{prod.sku}</div>
+                          <h4 className="text-xs font-montserrat font-black text-slate-900 leading-tight line-clamp-1">
+                            {prod.name}
+                          </h4>
+                          <div className="text-[11px] text-slate-600 font-medium">
+                            {prod.volumeMl}ml · {prod.abv}% ABV · Pack: {packSize}s
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Pricing & Add to Cart Controls */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-2">
+                        {/* Pricing Details */}
+                        <div className="flex items-baseline justify-between">
+                          <div>
+                            <div className="text-[10px] text-slate-500 font-medium">Per Bottle:</div>
+                            <div className="text-xs font-montserrat font-black text-[#0A006E] font-mono-tabular">
+                              {formatKes(bottlePrice)}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] text-slate-500 font-medium">Per Case ({packSize}s):</div>
+                            <div className="text-xs font-montserrat font-black text-slate-800 font-mono-tabular">
+                              {formatKes(casePrice)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Fast Add Buttons: Bottle vs Case */}
+                        <div className="grid grid-cols-2 gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            disabled={isOutOfStock}
+                            onClick={() => handleAddToCart(prod, 'Bottle', 1)}
+                            className="py-1.5 px-2 bg-[#F0F2F0] hover:bg-slate-200 active:bg-slate-300 text-[#0A006E] rounded-xl text-[11px] font-montserrat font-bold cursor-pointer transition flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Add 1 Single Bottle to Cart"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Bottle</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={isOutOfStock}
+                            onClick={() => handleAddToCart(prod, 'Case', 1)}
+                            className="py-1.5 px-2 bg-[#0A006E] hover:bg-[#080055] active:bg-[#060044] text-[#FFDE00] rounded-xl text-[11px] font-montserrat font-black cursor-pointer transition flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                            title={`Add 1 Full Case (${packSize} bottles) to Cart`}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Case</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT 4-5 COLUMNS: ACTIVE SALES CART & THE 2 PRIMARY ACTIONS */}
+          <div className="lg:col-span-5 xl:col-span-4 space-y-3.5">
+            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md p-4 space-y-4 sticky top-20">
+              {/* Cart Header */}
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center font-bold">
+                    <ShoppingCart className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-montserrat font-black text-[#0A006E]">Sales POS Cart</h3>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      {cart.length} line items · {totalUnitsInCart} total units
+                    </div>
+                  </div>
+                </div>
+
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Clear all items from your sales cart?')) {
+                        setCart([]);
+                        playPosBeep('error');
+                      }
+                    }}
+                    className="text-xs text-rose-600 hover:text-rose-800 font-montserrat font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Clear</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Customer & Destination Details Form */}
+              <div className="bg-[#F0F2F0] border border-slate-200 rounded-xl p-3 space-y-2.5 text-xs">
+                <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+                  Client &amp; Destination Details
+                </div>
+
+                {/* Customer Name */}
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                    Customer / Venue / Buyer Name *
+                  </label>
+                  <div className="relative">
+                    <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="e.g. Club Casablanca, John Mwangi (VIP)"
+                      className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 focus:border-[#0A006E] rounded-lg text-xs font-semibold text-slate-900 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Customer Phone */}
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                    Client Phone / M-PESA Number
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="e.g. 0712 345 678"
+                      className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 focus:border-[#0A006E] rounded-lg text-xs font-semibold text-slate-900 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Dispatch Mode */}
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                    Fulfillment Destination
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setDispatchType('counter_pickup')}
+                      className={`py-1.5 px-2 rounded-lg text-[10px] font-montserrat font-bold cursor-pointer transition text-center ${
+                        dispatchType === 'counter_pickup'
+                          ? 'bg-[#0A006E] text-[#FFDE00]'
+                          : 'bg-white text-slate-700 border border-slate-200'
+                      }`}
+                    >
+                      Counter Pickup
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDispatchType('field_delivery')}
+                      className={`py-1.5 px-2 rounded-lg text-[10px] font-montserrat font-bold cursor-pointer transition text-center ${
+                        dispatchType === 'field_delivery'
+                          ? 'bg-[#0A006E] text-[#FFDE00]'
+                          : 'bg-white text-slate-700 border border-slate-200'
+                      }`}
+                    >
+                      Field / Direct Delivery
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cart Line Items */}
+              <div className="max-h-60 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100">
+                {cart.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400">
+                    <ShoppingCart className="w-8 h-8 mx-auto mb-1 opacity-40" />
+                    <p className="text-xs">Cart is empty. Tap &ldquo;+ Bottle&rdquo; or &ldquo;+ Case&rdquo; on any item.</p>
+                  </div>
+                ) : (
+                  cart.map((item, idx) => (
+                    <div key={`${item.productId}-${item.unitMode}`} className="pt-2 first:pt-0 space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h5 className="text-xs font-montserrat font-bold text-slate-900 truncate">
+                            {item.product.name}
+                          </h5>
+                          <div className="text-[10px] text-slate-500 font-medium">
+                            <span className="font-bold text-[#0A006E]">{item.unitMode}</span> · {formatKes(item.unitPrice)} each
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="text-xs font-montserrat font-black text-[#0A006E] font-mono-tabular">
+                            {formatKes(item.lineTotal)}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Quantity Controls & Markup field */}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        {/* Stepper */}
+                        <div className="flex items-center bg-[#F0F2F0] rounded-lg border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQuantity(idx, -1)}
+                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-8 text-center text-xs font-montserrat font-black text-slate-900">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQuantity(idx, 1)}
+                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        {/* Optional Markup Per Unit */}
+                        <div className="flex items-center gap-1 text-[11px]">
+                          <span className="text-slate-500 font-medium text-[10px]">Markup:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="50"
+                            value={item.affiliateMarkupPerUnit || ''}
+                            onChange={(e) => handleUpdateMarkup(idx, Number(e.target.value))}
+                            placeholder="+0"
+                            className="w-16 px-1.5 py-0.5 bg-[#F0F2F0] border border-slate-200 rounded text-center text-[10px] font-mono font-bold text-[#1E9E60] outline-none"
+                            title="Add your custom profit markup per unit"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Financial Calculation Summary */}
+              {cart.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-slate-200 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Subtotal:</span>
+                    <span className="font-mono-tabular font-bold">{formatKes(cartSubtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-500 text-[11px]">
+                    <span>16% VAT &amp; Excise Included:</span>
+                    <span className="font-mono-tabular">{formatKes(cartVatAndExcise)}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-montserrat font-black text-[#0A006E] pt-1 border-t border-slate-200">
+                    <span>Total Order Amount:</span>
+                    <span className="font-mono-tabular text-lg">{formatKes(cartGrandTotal)}</span>
+                  </div>
+
+                  {/* Affiliate Commission Preview Card */}
+                  <div className="bg-[#34D186]/15 border border-[#34D186]/40 rounded-xl p-2.5 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-[#0A006E]">
+                      <span className="flex items-center gap-1">
+                        <TrendingUp className="w-3.5 h-3.5 text-[#1E9E60]" />
+                        Your Commission Earnings:
+                      </span>
+                      <span className="font-mono-tabular text-sm text-[#1E9E60] font-black">
+                        +{formatKes(cartTotalEarnings)}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-600 flex justify-between">
+                      <span>Base {commPct}% Rate: +{formatKes(cartAffiliateBaseComm)}</span>
+                      {cartAffiliateMarkupTotal > 0 && (
+                        <span>Added Markup: +{formatKes(cartAffiliateMarkupTotal)}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* --------------------------------------------------------------- */}
+              {/* THE TWO CORE PRIMARY ACTIONS: QUEUE TO CASHIER vs CHECKOUT      */}
+              {/* --------------------------------------------------------------- */}
+              <div className="space-y-2 pt-2">
+                {/* 1. BUTTON: QUEUE TO CASHIER */}
+                <button
+                  type="button"
+                  disabled={isProcessing || cart.length === 0}
+                  onClick={handleQueueToCashier}
+                  className="w-full py-3.5 px-4 bg-[#FFDE00] hover:bg-amber-400 active:bg-amber-500 text-[#0A006E] border-2 border-[#0A006E] rounded-2xl font-montserrat font-black text-xs cursor-pointer shadow-md transition-all active:scale-98 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-2.5 text-left">
+                    <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0">
+                      <Send className="w-4 h-4 stroke-[2.5]" />
+                    </div>
+                    <div>
+                      <div className="leading-tight text-sm font-black">Queue to Cashier</div>
+                      <div className="text-[10px] text-slate-800 font-semibold">
+                        Customer pays cashier at counter &amp; collects
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-[#0A006E]" />
+                </button>
+
+                {/* 2. BUTTON: DIRECT CHECKOUT */}
+                <button
+                  type="button"
+                  disabled={isProcessing || cart.length === 0}
+                  onClick={handleOpenCheckoutModal}
+                  className="w-full py-3.5 px-4 bg-[#0A006E] hover:bg-[#080055] active:bg-[#060044] text-white border-2 border-[#0A006E] rounded-2xl font-montserrat font-black text-xs cursor-pointer shadow-md transition-all active:scale-98 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-2.5 text-left">
+                    <div className="w-8 h-8 rounded-xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shrink-0">
+                      <CreditCard className="w-4 h-4 stroke-[2.5]" />
+                    </div>
+                    <div>
+                      <div className="leading-tight text-sm font-black text-[#FFDE00]">Direct Checkout</div>
+                      <div className="text-[10px] text-white/80 font-medium">
+                        Collect payment now · Instant eTIMS receipt
+                      </div>
+                    </div>
+                  </div>
+                  <CheckCircle2 className="w-5 h-5 text-[#34D186]" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------------------- */}
+      {/* 3. TAB 2: MY ORDERS & REAL-TIME QUEUED SALES TRACKER                  */}
+      {/* --------------------------------------------------------------------- */}
+      {activeTab === 'orders' && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#0A006E]" />
+                Affiliate Sales &amp; Queued Order Ledger
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Real-time tracking of orders queued to branch cashiers and completed commercial sales.
+              </p>
+            </div>
+
+            {/* Filter Chips */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setOrdersFilterStatus('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
+                  ordersFilterStatus === 'ALL'
+                    ? 'bg-[#0A006E] text-[#FFDE00]'
+                    : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                All Orders ({ownTransactions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrdersFilterStatus('QUEUED')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
+                  ordersFilterStatus === 'QUEUED'
+                    ? 'bg-amber-400 text-[#0A006E]'
+                    : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Queued ({queuedTransactions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrdersFilterStatus('PAID')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
+                  ordersFilterStatus === 'PAID'
+                    ? 'bg-[#1E9E60] text-white'
+                    : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Paid &amp; Fulfilled ({paidTransactions.length})
+              </button>
+            </div>
+          </div>
+
+          {/* Search box inside orders */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={ordersSearch}
+              onChange={(e) => setOrdersSearch(e.target.value)}
+              placeholder="Search by customer name, order doc number, or token..."
+              className="w-full pl-9 pr-3 py-2 bg-[#F0F2F0] border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 outline-none"
+            />
+          </div>
+
+          {/* Table of Orders */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                  <th className="py-2.5 px-3 font-black">Document / Token</th>
+                  <th className="py-2.5 px-3 font-black">Customer</th>
+                  <th className="py-2.5 px-3 font-black">Branch Depot</th>
+                  <th className="py-2.5 px-3 font-black text-right">Order Amount</th>
+                  <th className="py-2.5 px-3 font-black text-right">My Commission</th>
+                  <th className="py-2.5 px-3 font-black text-center">Status</th>
+                  <th className="py-2.5 px-3 font-black text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {ownTransactions
+                  .filter((tx) => {
+                    if (ordersFilterStatus === 'QUEUED') {
+                      return tx.status === 'Pending Verification';
+                    }
+                    if (ordersFilterStatus === 'PAID') {
+                      return tx.status === 'Paid' || tx.status === 'Approved' || tx.status === 'Fulfilled';
+                    }
+                    return true;
+                  })
+                  .filter((tx) => {
+                    if (!ordersSearch.trim()) return true;
+                    const q = ordersSearch.toLowerCase().trim();
+                    return (
+                      tx.docNumber.toLowerCase().includes(q) ||
+                      tx.customerName.toLowerCase().includes(q) ||
+                      (tx.relatedInvoiceNo || '').toLowerCase().includes(q)
+                    );
+                  })
+                  .map((tx) => {
+                    const isQueued = tx.status === 'Pending Verification';
+                    const isPaid = tx.status === 'Paid' || tx.status === 'Approved' || tx.status === 'Fulfilled';
+                    const commAmount = Math.round((tx.totalAmount * commPct) / 100);
+
+                    return (
+                      <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-3">
+                          <div className="font-mono-tabular font-bold text-[#0A006E]">{tx.docNumber}</div>
+                          {tx.relatedInvoiceNo && (
+                            <div className="text-[10px] font-mono font-bold text-amber-700">
+                              Token: {tx.relatedInvoiceNo}
+                            </div>
+                          )}
+                          <div className="text-[10px] text-slate-500">
+                            {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(tx.createdAt).toLocaleDateString()}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="font-montserrat font-bold text-slate-900">{tx.customerName}</div>
+                          <div className="text-[10px] text-slate-500">{tx.channel}</div>
+                        </td>
+
+                        <td className="py-3 px-3 text-slate-700 font-medium">
+                          {tx.branchName}
+                        </td>
+
+                        <td className="py-3 px-3 text-right font-mono-tabular font-black text-slate-900 text-sm">
+                          {formatKes(tx.totalAmount)}
+                        </td>
+
+                        <td className="py-3 px-3 text-right font-mono-tabular font-bold text-[#1E9E60]">
+                          {formatKes(commAmount)}
+                        </td>
+
+                        <td className="py-3 px-3 text-center">
+                          {isQueued ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-montserrat font-black bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                              <Clock className="w-3 h-3 text-amber-700" />
+                              QUEUED AT CASHIER
+                            </span>
+                          ) : isPaid ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-montserrat font-black bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40">
+                              <CheckCircle2 className="w-3 h-3 text-[#1E9E60]" />
+                              PAID &amp; FULFILLED
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                              {tx.status}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
+                          {/* View PDF / Print Modal */}
+                          <button
+                            type="button"
+                            onClick={() => onPreviewDoc(tx)}
+                            className="px-2.5 py-1 bg-[#0A006E] hover:bg-[#080055] text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-bold cursor-pointer"
+                          >
+                            View PDF
+                          </button>
+
+                          {/* If Queued, show button to re-display token slip */}
+                          {isQueued && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                let parsedItems = [];
+                                try {
+                                  parsedItems = JSON.parse(tx.itemsSummary);
+                                } catch {}
+                                setQueuedSlip({
+                                  token: tx.relatedInvoiceNo || tx.docNumber,
+                                  docNumber: tx.docNumber,
+                                  customerName: tx.customerName,
+                                  customerPhone: '',
+                                  items: parsedItems.map((p: any) => ({
+                                    name: p.productName || p.name,
+                                    qty: p.quantity || 1,
+                                    unitMode: p.unitMode || 'Bottle',
+                                    price: p.unitPrice || 0,
+                                  })),
+                                  subtotal: tx.subtotal,
+                                  tax: tx.exciseAndTax,
+                                  totalAmount: tx.totalAmount,
+                                  branchName: tx.branchName,
+                                  affiliateName: currentUser.name,
+                                  affiliateCode,
+                                  earnedCommission: commAmount,
+                                  createdAt: tx.createdAt,
+                                });
+                              }}
+                              className="px-2.5 py-1 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-lg text-[11px] font-montserrat font-black cursor-pointer shadow-xs"
+                            >
+                              Token Slip
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------------------- */}
+      {/* MODAL 1: QUEUED ORDER TOKEN SLIP (Presented to Customer / Cashier)    */}
+      {/* --------------------------------------------------------------------- */}
+      {queuedSlip && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-md w-full overflow-hidden p-5 sm:p-6 space-y-4">
+            {/* Header Badge */}
+            <div className="text-center space-y-1">
+              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-montserrat font-black bg-[#FFDE00] text-[#0A006E] border border-[#0A006E]">
+                <Clock className="w-3.5 h-3.5" />
+                QUEUED TO BRANCH CASHIER
+              </span>
+              <h2 className="text-2xl font-montserrat font-black text-[#0A006E] tracking-tight">
+                Order Token Slip
+              </h2>
+              <p className="text-xs text-slate-600">
+                Show this token to any cashier at <strong>{queuedSlip.branchName}</strong> to pay and receive goods.
+              </p>
+            </div>
+
+            {/* Giant Token Code Display */}
+            <div className="bg-[#0A006E] text-white rounded-2xl p-4 text-center space-y-1 relative overflow-hidden shadow-inner">
+              <div className="text-[11px] font-montserrat font-black text-[#FFDE00] uppercase tracking-widest">
+                CASHIER QUEUE TOKEN
+              </div>
+              <div className="text-3xl sm:text-4xl font-mono font-black tracking-wider text-white">
+                {queuedSlip.token}
+              </div>
+              <div className="text-[10px] text-white/70 font-mono">
+                Ref: {queuedSlip.docNumber}
+              </div>
+            </div>
+
+            {/* Order Details Summary */}
+            <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Customer:</span>
+                <span className="font-montserrat font-bold text-slate-900">{queuedSlip.customerName}</span>
+              </div>
+              {queuedSlip.customerPhone && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Phone:</span>
+                  <span className="font-mono font-bold text-slate-900">{queuedSlip.customerPhone}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Branch Depot:</span>
+                <span className="font-bold text-[#0A006E]">{queuedSlip.branchName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Sales Representative:</span>
+                <span className="font-semibold text-slate-900">{queuedSlip.affiliateName} ({queuedSlip.affiliateCode})</span>
+              </div>
+              <div className="border-t border-slate-200 pt-2 flex justify-between text-sm font-montserrat font-black text-[#0A006E]">
+                <span>Total Due at Counter:</span>
+                <span className="font-mono-tabular text-base">{formatKes(queuedSlip.totalAmount)}</span>
+              </div>
+              <div className="text-[10px] text-[#1E9E60] font-bold text-right">
+                Your Commission on Payment: {formatKes(queuedSlip.earnedCommission)}
+              </div>
+            </div>
+
+            {/* Action Buttons: Copy, WhatsApp, Print, Done */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCopyTicket}
+                className="py-2.5 px-3 bg-[#F0F2F0] hover:bg-slate-200 text-[#0A006E] rounded-xl text-xs font-montserrat font-bold cursor-pointer transition flex items-center justify-center gap-1.5"
+              >
+                {copiedToken ? <Check className="w-4 h-4 text-[#1E9E60]" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedToken ? 'Copied!' : 'Copy Slip'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShareWhatsApp}
+                className="py-2.5 px-3 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer transition flex items-center justify-center gap-1.5"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>WhatsApp</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setQueuedSlip(null)}
+              className="w-full py-3 bg-[#0A006E] hover:bg-[#080055] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition"
+            >
+              Done · Take Next Order
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------------------- */}
+      {/* MODAL 2: DIRECT CHECKOUT MODAL (Payment Method & Commission Credit)   */}
+      {/* --------------------------------------------------------------------- */}
+      {isCheckoutModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-md w-full overflow-hidden p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider block">
+                  Field POS Direct Settlement
+                </span>
+                <h3 className="text-lg font-montserrat font-black text-[#0A006E]">
+                  Complete Customer Checkout
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCheckoutModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Total and Commission Preview */}
+            <div className="bg-[#0A006E] text-white rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-montserrat font-bold text-white/70">TOTAL AMOUNT PAYABLE</div>
+                <div className="text-2xl font-montserrat font-black text-[#FFDE00] font-mono-tabular">
+                  {formatKes(cartGrandTotal)}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-montserrat font-bold text-[#34D186]">COMMISSION CREDITED</div>
+                <div className="text-lg font-montserrat font-black text-white font-mono-tabular">
+                  +{formatKes(cartTotalEarnings)}
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Method Selector */}
+            <div className="space-y-2">
+              <label className="block text-xs font-montserrat font-bold text-slate-700">
+                Select Customer Payment Method:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {(['M-Pesa Express', 'Cash', 'Bank EFT / Cheque', 'Credit'] as const).map((method) => {
+                  const isSelected = checkoutPaymentMethod === method;
+                  return (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setCheckoutPaymentMethod(method)}
+                      className={`p-2.5 rounded-xl border-2 text-left cursor-pointer transition ${
+                        isSelected
+                          ? 'bg-[#FFDE00]/20 border-[#0A006E] text-[#0A006E] font-montserrat font-black shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 font-semibold'
+                      }`}
+                    >
+                      <div className="text-xs leading-tight">{method}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* M-PESA Specific Input */}
+            {checkoutPaymentMethod === 'M-Pesa Express' && (
+              <div className="bg-[#34D186]/15 border border-[#34D186]/40 rounded-xl p-3 space-y-1.5 text-xs">
+                <div className="font-montserrat font-bold text-[#0A006E] flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-[#1E9E60]" />
+                  M-Pesa Customer Mobile Number
+                </div>
+                <input
+                  type="text"
+                  value={checkoutMpesaPhone}
+                  onChange={(e) => setCheckoutMpesaPhone(e.target.value)}
+                  placeholder="e.g. 0712 345 678"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 outline-none"
+                />
+                <p className="text-[10px] text-slate-600">
+                  Instant STK Push or M-PESA Till payment will be recorded and attached to the eTIMS invoice.
+                </p>
+              </div>
+            )}
+
+            {/* Cash Tendered Input */}
+            {checkoutPaymentMethod === 'Cash' && (
+              <div className="bg-[#F0F2F0] border border-slate-200 rounded-xl p-3 space-y-2 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="font-montserrat font-bold text-slate-700">Cash Received (KES):</span>
+                  <input
+                    type="number"
+                    value={checkoutCashTendered || ''}
+                    onChange={(e) => setCheckoutCashTendered(Number(e.target.value))}
+                    className="w-28 px-2 py-1 bg-white border border-slate-200 rounded-lg text-right font-mono font-bold text-[#0A006E] outline-none"
+                  />
+                </div>
+                <div className="flex justify-between text-xs pt-1 border-t border-slate-200">
+                  <span className="text-slate-600 font-medium">Change Due:</span>
+                  <span className="font-mono font-black text-[#1E9E60]">
+                    {formatKes(Math.max(0, checkoutCashTendered - cartGrandTotal))}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Confirm Sale Button */}
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsCheckoutModalOpen(false)}
+                className="flex-1 py-3 bg-[#F0F2F0] hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isProcessing}
+                onClick={handleConfirmDirectCheckout}
+                className="flex-2 py-3 bg-[#0A006E] hover:bg-[#080055] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition disabled:opacity-50"
+              >
+                {isProcessing ? 'Processing Sale...' : 'Confirm & Complete Sale'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------------------- */}
+      {/* MODAL 3: KRA eTIMS RECEIPT MODAL                                      */}
+      {/* --------------------------------------------------------------------- */}
+      {etimsReceipt && (
+        <EtimsReceiptModal receipt={etimsReceipt} onClose={() => setEtimsReceipt(null)} />
+      )}
+    </div>
+  );
+};
