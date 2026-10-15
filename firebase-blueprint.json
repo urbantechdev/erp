@@ -266,31 +266,6 @@
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["businessUnitId", "branchId", "name", "category", "itemType", "portionUnit", "costPriceKes", "sellingPriceKes", "portionsAvailable", "createdAt"]
-    },
-    "ActivePosCart": {
-      "title": "ActivePosCart",
-      "description": "Real-time POS cart synchronization between phone scanner companion and cashier register",
-      "type": "object",
-      "properties": {
-        "staffId": { "type": "string", "maxLength": 128 },
-        "staffName": { "type": "string", "maxLength": 120 },
-        "staffEmail": { "type": "string", "maxLength": 180 },
-        "staffRole": { "type": "string", "maxLength": 64 },
-        "branchId": { "type": "string", "maxLength": 128 },
-        "cartJson": { "type": "string", "maxLength": 100000 },
-        "activatedProductIdsJson": { "type": "string", "maxLength": 10000 },
-        "totalUnits": { "type": "number" },
-        "subtotal": { "type": "number" },
-        "exciseAndTax": { "type": "number" },
-        "grandTotal": { "type": "number" },
-        "lastScannedBarcode": { "type": "string", "maxLength": 128 },
-        "lastScannedProductName": { "type": "string", "maxLength": 200 },
-        "lastScannedUnitMode": { "type": "string", "maxLength": 32 },
-        "lastScannedAt": { "type": "string", "maxLength": 64 },
-        "updatedAt": { "type": "string", "maxLength": 64 },
-        "createdAt": { "type": "string", "maxLength": 64 }
-      },
-      "required": ["staffId", "cartJson", "totalUnits", "grandTotal", "updatedAt"]
     }
   },
   "firestore": {
@@ -341,10 +316,6 @@
     "/audit_logs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLog" },
       "description": "User monitoring, device tracking, and transaction security logs"
-    },
-    "/active_pos_carts/{cartId}": {
-      "schema": { "$ref": "#/entities/ActivePosCart" },
-      "description": "Real-time active POS cart synchronized between phone scanner and cashier station"
     }
   }
 }
