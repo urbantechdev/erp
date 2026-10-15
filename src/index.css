@@ -314,9 +314,7 @@ button:not(:disabled):active {
   z-index: 5;
 }
 
-div.bg-white.rounded-3xl,
-div.bg-white.rounded-2xl,
-div.bg-white.rounded-xl,
+.silent-surface-scanner,
 .hover-card-lift {
   background-image: linear-gradient(
     115deg,
@@ -333,7 +331,8 @@ div.bg-white.rounded-xl,
 }
 
 /* Yellow Dashboard Hero Banners with Moving Silent Scanner Sweep */
-div.bg-\[\#FFDE00\].hover-card-lift {
+div.bg-\[\#FFDE00\].hover-card-lift,
+.silent-surface-scanner-gold {
   background-color: #FFDE00;
   background-image: linear-gradient(
     115deg,
@@ -348,10 +347,7 @@ div.bg-\[\#FFDE00\].hover-card-lift {
   box-shadow: 0 12px 28px -4px rgba(10, 0, 110, 0.18), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
 }
 
-div.bg-\[\#F0F2F0\].rounded-2xl,
-div.bg-\[\#F0F2F0\].rounded-xl,
-div.bg-slate-50.rounded-2xl,
-div.bg-slate-50.rounded-xl {
+.silent-surface-scanner-subtle {
   background-image: linear-gradient(
     115deg,
     rgba(255, 255, 255, 0) 38%,
@@ -365,12 +361,16 @@ div.bg-slate-50.rounded-xl {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-div.bg-white.rounded-3xl:not(.fixed *):hover,
-div.bg-white.rounded-2xl:not(.fixed *):hover,
-div.bg-white.rounded-xl:not(.fixed *):hover,
 .hover-card-lift:hover {
   transform: translateY(-3px);
   box-shadow: 0 18px 36px -6px rgba(10, 0, 110, 0.22), 0 8px 16px -4px rgba(15, 23, 42, 0.12);
+}
+
+/* High-performance storefront card optimizations */
+.storefront-product-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 440px;
+  contain: layout style paint;
 }
 
 /* Print optimization for receipts, invoices, packing lists, delivery notes, quotes, and credit notes */

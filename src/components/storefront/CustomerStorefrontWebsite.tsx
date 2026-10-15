@@ -5,6 +5,7 @@ import { useErp } from '../../context/ErpContext';
 import { Product, WebsiteDeliveryOrder, ETimsInvoice, SaleOrder } from '../../types';
 import { formatKes } from '../../utils/kenyaTax';
 import { getProductImageUrl } from '../../utils/productImages';
+import { isProductAvailableForSale } from '../../erpUtils';
 import {
   buildProductJsonLdSchema,
   buildStorefrontCatalogJsonLd,
@@ -21,7 +22,7 @@ import {
   AnimatedSuccessTickLogo,
   AnimatedErrorLogo
 } from '../common/CenterScreenFeedback';
-import { scatterAndReshuffleProducts, useAutoReshuffleTimer } from '../../utils/productScattering';
+import { scatterAndReshuffleProducts, useAutoReshuffle } from '../../utils/productScattering';
 import {
   isPlatformFullscreen,
   requestPlatformFullscreen,
@@ -164,6 +165,36 @@ const DRINK_CATEGORIES = [
 ];
 
 const DELIVERY_ZONES = DELIVERY_ZONE_GEO_DIRECTORY.map(z => z.label);
+
+// Isolated timer badge that updates its 1-second countdown in its own boundary
+// without causing the entire 4,700-line storefront to re-render every second!
+const StorefrontReshuffleCountdownBadge = React.memo(({ onReshuffle }: { onReshuffle: () => void }) => {
+  const [secondsLeft, setSecondsLeft] = useState(20);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsLeft(prev => (prev <= 1 ? 20 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleClick = () => {
+    setSecondsLeft(20);
+    onReshuffle();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="text-[10px] font-mono font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 active:scale-95 px-2.5 py-1 rounded-full border border-amber-300 flex items-center gap-1.5 transition cursor-pointer"
+      title="Products of the same brand are scattered and automatically reshuffled every 20 seconds. Click to reshuffle now."
+    >
+      <RotateCcw className="w-3 h-3 text-amber-600 animate-spin" style={{ animationDuration: '20s' }} />
+      <span>Scattered Brands • Reshuffling in {secondsLeft}s</span>
+    </button>
+  );
+});
 
 export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) => {
   const {
@@ -505,23 +536,44 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     }
   };
 
+  // High-performance live ERP stock maps for instantaneous O(1) lookups across all catalog items
+  const branchStockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of inventoryItems) {
+      if (item.branchId === selectedFulfillingBranch.id) {
+        map.set(item.productId, item.bottlesOnHand);
+      }
+    }
+    return map;
+  }, [inventoryItems, selectedFulfillingBranch.id]);
+
+  const maxBranchStockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of inventoryItems) {
+      const cur = map.get(item.productId) || 0;
+      if (item.bottlesOnHand > cur) {
+        map.set(item.productId, item.bottlesOnHand);
+      }
+    }
+    return map;
+  }, [inventoryItems]);
+
   // Live ERP Inventory stock lookup scoped to the customer's Nearest Fulfilling Branch (falling back to platform-wide stock when not restricted)
   const getProductStock = (productId: string, branchIdOverride?: string): number => {
-    const targetBranchId = branchIdOverride || selectedFulfillingBranch.id;
-    const branchInv = inventoryItems.find(
-      i => i.productId === productId && i.branchId === targetBranchId
-    );
-    if (branchInv && branchInv.bottlesOnHand > 0) {
-      return branchInv.bottlesOnHand;
-    }
-    if (onlyInStockAtNearestBranch) {
+    if (branchIdOverride && branchIdOverride !== selectedFulfillingBranch.id) {
+      const branchInv = inventoryItems.find(
+        i => i.productId === productId && i.branchId === branchIdOverride
+      );
       return branchInv ? Math.max(0, branchInv.bottlesOnHand) : 0;
     }
-    const anyBranchInv = inventoryItems.filter(i => i.productId === productId);
-    if (anyBranchInv.length > 0) {
-      return Math.max(0, anyBranchInv.reduce((sum, item) => Math.max(sum, item.bottlesOnHand), 0));
+    const branchStock = branchStockMap.get(productId);
+    if (branchStock !== undefined && branchStock > 0) {
+      return branchStock;
     }
-    return 0;
+    if (onlyInStockAtNearestBranch) {
+      return branchStock !== undefined ? Math.max(0, branchStock) : 0;
+    }
+    return maxBranchStockMap.get(productId) || 0;
   };
 
   // Independent Website Cart State (Completely separate from ERP POS Cart; persisted so guests can add to cart before signing in)
@@ -589,12 +641,46 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
   const [detailQty, setDetailQty] = useState(1);
   const [isMerchantSeoModalOpen, setIsMerchantSeoModalOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isPlatformFullscreen());
-  // Automatic 20-second catalog reshuffle tick with live countdown
+  // High-performance 20-second catalog reshuffle tick without 1-second parent re-render cascade
   const {
     tick: storefrontShuffleTick,
-    secondsLeft: storefrontSecondsLeft,
     reshuffleNow: reshuffleStorefrontNow
-  } = useAutoReshuffleTimer(20000);
+  } = useAutoReshuffle(20000);
+
+  // Progressive Catalog Windowing / Infinite Scroll Pagination
+  const [visibleProductCount, setVisibleProductCount] = useState<number>(24);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // High-performance O(1) map for customer cart quantities
+  const cartQtyMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of webCart) {
+      map.set(item.product.id, item.quantity);
+    }
+    return map;
+  }, [webCart]);
+
+  // High-performance O(1) map for product customer ratings
+  const productRatingSummaryMap = useMemo(() => {
+    const map = new Map<string, { rating: number; count: number }>();
+    const accumulator = new Map<string, { sum: number; count: number }>();
+    for (const r of productRatings) {
+      const stars = Number(r.stars);
+      if (stars >= 1 && stars <= 5) {
+        const cur = accumulator.get(r.productId) || { sum: 0, count: 0 };
+        cur.sum += stars;
+        cur.count += 1;
+        accumulator.set(r.productId, cur);
+      }
+    }
+    for (const [productId, data] of accumulator.entries()) {
+      map.set(productId, {
+        rating: Number((data.sum / data.count).toFixed(1)),
+        count: data.count
+      });
+    }
+    return map;
+  }, [productRatings]);
 
   useEffect(() => {
     const syncFullscreenState = () => {
@@ -1262,9 +1348,37 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     onlyInStockAtNearestBranch,
     selectedFulfillingBranch.id,
     inventoryItems,
-    scanHistory,
     storefrontShuffleTick
   ]);
+
+  // Progressive Catalog Windowing: Reset when search query or category filters change
+  useEffect(() => {
+    setVisibleProductCount(24);
+  }, [searchQuery, activeCategory, onlyInStockAtNearestBranch]);
+
+  // Buttery-smooth infinite scroll intersection observer
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+    if (visibleProductCount >= filteredProducts.length) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0] && entries[0].isIntersecting) {
+          setVisibleProductCount(prev => Math.min(prev + 24, filteredProducts.length));
+        }
+      },
+      { rootMargin: '450px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [visibleProductCount, filteredProducts.length]);
+
+  // Sliced subset rendered in DOM (initial 24 items, progressively expanding)
+  const visibleProducts = useMemo(() => {
+    return filteredProducts.slice(0, visibleProductCount);
+  }, [filteredProducts, visibleProductCount]);
 
   // Cart Helpers — Strictly Company Price & Enforced Against Live ERP Inventory Stock
   const addToWebCart = (product: Product, qty: number = 1) => {
@@ -2415,40 +2529,25 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                   Direct Company Price
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={reshuffleStorefrontNow}
-                className="text-[10px] font-mono font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 active:scale-95 px-2.5 py-1 rounded-full border border-amber-300 flex items-center gap-1.5 transition cursor-pointer"
-                title="Products of the same brand are scattered and automatically reshuffled every 20 seconds. Click to reshuffle now."
-              >
-                <RotateCcw className="w-3 h-3 text-amber-600 animate-spin" style={{ animationDuration: '20s' }} />
-                <span>Scattered Brands • Reshuffling in {storefrontSecondsLeft}s</span>
-              </button>
+              <StorefrontReshuffleCountdownBadge onReshuffle={reshuffleStorefrontNow} />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-              {filteredProducts.map(product => {
-                const inCartItem = webCart.find(i => i.product.id === product.id);
+              {visibleProducts.map(product => {
+                const inCartQty = cartQtyMap.get(product.id) || 0;
                 const imgUrl = product.image || getProductImageUrl(product);
                 const stock = getProductStock(product.id);
                 const isOutOfStock = stock <= 0;
-                const highResImgUrl = resolveHighResProductImageUrl(product, siteOrigin, imgUrl);
-                const itemSchemaJson = buildProductJsonLdSchema(product, stock, siteOrigin, highResImgUrl);
 
                 return (
                   <div
                     key={product.id}
-                    className={`bg-white rounded-2xl border overflow-hidden shadow-xs transition-all flex flex-col justify-between group ${
+                    className={`bg-white rounded-2xl border overflow-hidden shadow-xs transition-all flex flex-col justify-between group storefront-product-card ${
                       isOutOfStock
                         ? 'border-slate-200/80 bg-slate-50/60'
                         : 'border-slate-200 hover:shadow-md hover:-translate-y-0.5'
                     }`}
                   >
-                    {/* Step 1: Embedded JSON-LD Product Schema strictly aligned with visible card data */}
-                    <script
-                      type="application/ld+json"
-                      dangerouslySetInnerHTML={{ __html: JSON.stringify(itemSchemaJson) }}
-                    />
                     <div>
                       {/* Product Image Area — Full-Fit Edge-to-Edge inside Product Box */}
                       <div
@@ -2500,13 +2599,13 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                             {product.brand}
                           </div>
                           {(() => {
-                            const ratingInfo = getProductRatingInfo(product);
+                            const ratingInfo = productRatingSummaryMap.get(product.id) || { rating: 0, count: 0 };
                             return (
                               <div
                                 onClick={() => {
                                   setSelectedProductDetail(product);
                                   setDetailQty(1);
-                                  setReviewCommentDraft(ratingInfo.userComment || '');
+                                  setReviewCommentDraft('');
                                 }}
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border cursor-pointer shrink-0 transition ${
                                   ratingInfo.count > 0
@@ -2622,29 +2721,29 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                             <span>Out of Stock • Add to Cart</span>
                           </button>
                         );
-                      })() : inCartItem ? (
+                      })() : inCartQty > 0 ? (
                         <div className="flex items-center justify-between bg-emerald-50 border border-emerald-300 rounded-xl p-1.5">
                           <button
                             type="button"
-                            onClick={() => updateWebCartQty(product.id, inCartItem.quantity - 1)}
+                            onClick={() => updateWebCartQty(product.id, inCartQty - 1)}
                             className="w-8 h-8 rounded-lg bg-white hover:bg-slate-100 text-slate-800 flex items-center justify-center font-bold shadow-2xs cursor-pointer"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <div className="text-center">
                             <div className="font-mono font-black text-xs text-[#1E9E60]">
-                              {inCartItem.quantity} in Cart
+                              {inCartQty} in Cart
                             </div>
                             <div className="text-[10px] font-mono text-emerald-800">
-                              {formatKes(inCartItem.quantity * (product.retailPriceKes || 0))}
+                              {formatKes(inCartQty * (product.retailPriceKes || 0))}
                             </div>
                           </div>
                           <button
                             type="button"
-                            disabled={inCartItem.quantity >= stock}
-                            onClick={() => updateWebCartQty(product.id, inCartItem.quantity + 1)}
+                            disabled={inCartQty >= stock}
+                            onClick={() => updateWebCartQty(product.id, inCartQty + 1)}
                             className={`w-8 h-8 rounded-lg bg-[#34D186] text-[#FFDE00] flex items-center justify-center font-bold shadow-2xs ${
-                              inCartItem.quantity >= stock
+                              inCartQty >= stock
                                 ? 'opacity-40 cursor-not-allowed'
                                 : 'hover:bg-emerald-950 cursor-pointer'
                             }`}
@@ -2667,6 +2766,30 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                 );
               })}
             </div>
+
+            {/* Infinite Scroll Intersection Sentinel */}
+            <div ref={loadMoreSentinelRef} className="h-4 w-full" />
+
+            {/* Progressive Catalog Loading Controls */}
+            {visibleProductCount < filteredProducts.length && (
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setVisibleProductCount(prev => Math.min(prev + 24, filteredProducts.length))}
+                  className="w-full sm:w-auto px-8 py-3 rounded-xl bg-[#0A006E] hover:bg-[#060046] text-white font-montserrat font-bold text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition cursor-pointer active:scale-98"
+                >
+                  <Plus className="w-4 h-4 text-[#FFDE00]" />
+                  <span>Load More Drinks ({filteredProducts.length - visibleProductCount} Remaining)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibleProductCount(filteredProducts.length)}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-montserrat font-bold text-xs transition cursor-pointer border border-slate-300"
+                >
+                  Show All Drinks ({filteredProducts.length})
+                </button>
+              </div>
+            )}
           </div>
 
           {/* =================================================================

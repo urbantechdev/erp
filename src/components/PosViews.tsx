@@ -31,6 +31,7 @@ import {
   Layers,
   Clock,
   Send,
+  QrCode,
 } from 'lucide-react';
 import {
   Product,

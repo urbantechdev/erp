@@ -419,7 +419,11 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
         } = p;
         return {
           ...rest,
+          isUploaded: true,
           isOnboarded: false,
+          hasRealBarcode: false,
+          awaitingBarcodeScan: true,
+          barcodeVerificationStatus: 'UNVERIFIED_SOURCE' as const,
           status: 'Pending Onboarding' as const,
           pendingActivationBottles: p.pendingActivationBottles ?? 12,
           totalBottles: 0,
@@ -436,8 +440,8 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
         count: importedCount,
         message:
           skippedCount > 0
-            ? `Successfully uploaded ${importedCount} unique products as Pending Onboarding. ${skippedCount} duplicate items were automatically skipped to protect database catalog integrity.`
-            : `Successfully uploaded ${importedCount} products as Pending Onboarding. In compliance with branch inventory governance, all items remain unavailable on dashboards until the Branch Manager scans barcodes in "Onboard Items" to activate stock and branch assets.`,
+            ? `Successfully uploaded ${importedCount} unique products. All uploaded products are set to "Pending Onboarding" and must wait for barcode scanning before being made available for sale. ${skippedCount} duplicate items were skipped.`
+            : `Successfully uploaded ${importedCount} products. In compliance with inventory governance, all uploaded products are set to "Pending Onboarding" and must wait for barcode scanning before being made available for sale on the storefront or POS.`,
       });
 
       // Clear file after short delay

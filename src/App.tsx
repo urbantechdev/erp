@@ -1073,9 +1073,15 @@ export default function App() {
 
   const handleCreateProduct = async (prodDraft: Omit<Product, 'id' | 'createdAt'>) => {
     const id = `prod-${Date.now()}`;
+    const hasRealBarcode = Boolean(prodDraft.hasRealBarcode && prodDraft.barcode);
     const fullProd: Product = cleanFirestoreData({
       ...prodDraft,
       id,
+      isUploaded: true,
+      hasRealBarcode,
+      awaitingBarcodeScan: !hasRealBarcode,
+      status: hasRealBarcode ? 'Active' : 'Pending Onboarding',
+      barcodeVerificationStatus: hasRealBarcode ? 'APPROVED_MASTER' : 'UNVERIFIED_SOURCE',
       createdAt: new Date().toISOString(),
     });
     try {
@@ -1159,6 +1165,10 @@ export default function App() {
         branchStockSummary: JSON.stringify(branchMap),
         isOnboarded: true,
         status: 'Active',
+        hasRealBarcode: true,
+        isUploaded: false,
+        awaitingBarcodeScan: false,
+        barcodeVerificationStatus: 'APPROVED_MASTER',
         onboardedAt: new Date().toISOString(),
         onboardedBy: currentUser?.name || 'Branch Manager',
         onboardedBranchId: branchId,
@@ -1367,9 +1377,15 @@ export default function App() {
         }
 
         const id = `prod-${now}-${i}`;
+        const hasRealBarcode = Boolean(prod.hasRealBarcode && prod.barcode);
         const fullProd: Product = cleanFirestoreData({
           ...prod,
           id,
+          isUploaded: true,
+          hasRealBarcode,
+          awaitingBarcodeScan: !hasRealBarcode,
+          status: hasRealBarcode ? 'Active' : 'Pending Onboarding',
+          barcodeVerificationStatus: hasRealBarcode ? 'APPROVED_MASTER' : 'UNVERIFIED_SOURCE',
           createdAt: new Date().toISOString(),
         });
         await setDoc(doc(db, 'products', id), fullProd);

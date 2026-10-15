@@ -54,12 +54,24 @@ export function useAutoReshuffleTimer(intervalMs: number = 20000): AutoReshuffle
 }
 
 /**
- * Hook that emits an incrementing tick every `intervalMs` (default 20,000ms = 20s)
- * so catalogs can automatically reshuffle.
+ * High-performance hook that ONLY emits a tick on the full `intervalMs` (e.g. every 20 seconds)
+ * without triggering costly 1-second re-renders in parent catalog components.
  */
-export function useAutoReshuffle(intervalMs: number = 20000): number {
-  const timer = useAutoReshuffleTimer(intervalMs);
-  return timer.tick;
+export function useAutoReshuffle(intervalMs: number = 20000): { tick: number; reshuffleNow: () => void } {
+  const [tick, setTick] = useState<number>(0);
+
+  const reshuffleNow = useCallback(() => {
+    setTick(prev => (prev + 1) % 1000000);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(prev => (prev + 1) % 1000000);
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+
+  return { tick, reshuffleNow };
 }
 
 /**

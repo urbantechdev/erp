@@ -337,6 +337,10 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
         barcode: clean,
         hasRealBarcode: true,
         barcodeVerificationStatus: 'APPROVED_MASTER',
+        status: 'Active',
+        isOnboarded: true,
+        isUploaded: false,
+        awaitingBarcodeScan: false,
         barcodeRegisteredAt: new Date().toISOString(),
         barcodeRegisteredBy: currentUser.name,
         barcodeRegisteredByRole: currentUser.role,
@@ -351,7 +355,7 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
       playPosBeep('success');
       setStatusMessage({
         type: 'success',
-        text: `Successfully registered real barcode ${clean} to "${selectedProduct.name}"!`,
+        text: `Successfully scanned & registered real barcode ${clean} for "${selectedProduct.name}"! Product is now Active and Available for Sale.`,
       });
 
       // Clear scanned code for next bottle
