@@ -23,6 +23,7 @@ import {
   MapPin,
   ChevronRight,
   ExternalLink,
+  Smartphone,
   Globe,
 } from 'lucide-react';
 import { StaffMember, StaffRole, Branch } from '../types';
@@ -393,6 +394,18 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
         </a>
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0 relative z-10">
+          {onOpenPhoneScanner && (
+            <button
+              type="button"
+              onClick={onOpenPhoneScanner}
+              className="h-9 sm:h-12 px-2.5 sm:px-4 rounded-xl sm:rounded-2xl bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#FFDE00] shadow-sm transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 text-[11px] sm:text-xs font-montserrat font-black"
+              title="Mobile Barcode Scanner Station"
+            >
+              <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0A006E]" />
+              <span>Scanner</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onOpenCustomerPortal}
@@ -548,6 +561,23 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Quick Mobile Barcode Scanner Access Bar */}
+            {onOpenPhoneScanner && (
+              <div className="pt-2 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={onOpenPhoneScanner}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-slate-50 hover:bg-[#FFDE00] text-[#0A006E] border-2 border-slate-200 hover:border-[#0A006E] text-xs font-montserrat font-black flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs hover:shadow-sm"
+                >
+                  <Smartphone className="w-4 h-4 text-[#0A006E]" />
+                  <span>📱 Phone Barcode Scanner Station</span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#0A006E] text-[#FFDE00] font-mono font-bold">
+                    BEAM TO CART
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
