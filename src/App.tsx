@@ -105,6 +105,7 @@ import { DocumentPrintModal } from './components/DocumentPrintModal';
 import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { OnboardItemsModal } from './components/OnboardItemsModal';
 import { AccessModelMatrixModal } from './components/AccessModelMatrixModal';
+import { AdminInventoryUploader } from './components/AdminInventoryUploader';
 import { UserFeatureAccessModal } from './components/UserFeatureAccessModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
@@ -1970,6 +1971,7 @@ export default function App() {
       await setDoc(doc(db, 'staff', id), fullStaff);
     } catch (error) {
       console.warn('[Firestore] Staff saved locally, cloud sync pending:', error);
+      throw error;
     }
 
     triggerToast(
@@ -3173,6 +3175,7 @@ export default function App() {
                 setUserFeatureModalStaff(staff);
                 setIsUserFeatureModalOpen(true);
               }}
+              onTriggerToast={triggerToast}
             />
           )}
 
@@ -3296,6 +3299,10 @@ export default function App() {
             setIsUserFeatureModalOpen(true);
           }}
         />
+      )}
+
+      {currentUser?.role === 'Admin' && (
+        <AdminInventoryUploader onBatchImport={handleBatchCreateProducts} />
       )}
 
       {/* Admin User Feature Access & Feature Stripping Modal */}

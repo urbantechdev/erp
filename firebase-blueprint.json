@@ -1,321 +1,80 @@
 {
   "entities": {
-    "Staff": {
-      "title": "Staff",
-      "description": "ERP employee and role-based user record",
+    "Product": {
+      "title": "Product",
+      "description": "Liquor/Beverage product entity",
       "type": "object",
       "properties": {
-        "name": { "type": "string", "maxLength": 120 },
-        "email": { "type": "string", "maxLength": 180 },
-        "role": {
-          "type": "string",
-          "enum": [
-            "Admin",
-            "Accountant",
-            "HR",
-            "Sales Manager",
-            "Branch Manager",
-            "Inventory Controller",
-            "Counter Cashier",
-            "Affiliate Sales Representative"
-          ]
-        },
-        "authMethod": { "type": "string", "enum": ["google", "pin"] },
-        "pin": { "type": "string", "maxLength": 6 },
-        "branchId": { "type": "string", "maxLength": 128 },
-        "branchName": { "type": "string", "maxLength": 120 },
-        "status": { "type": "string", "enum": ["Active", "Suspended", "Terminated"] },
-        "createdBy": { "type": "string", "maxLength": 128 },
-        "createdByRole": { "type": "string", "maxLength": 64 },
-        "lastLoginAt": { "type": "string", "maxLength": 64 },
-        "lastDevice": { "type": "string", "maxLength": 200 },
-        "createdAt": { "type": "string", "maxLength": 64 }
+        "id": { "type": "string" },
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" }
       },
-      "required": ["name", "email", "role", "authMethod", "status", "createdAt"]
+      "required": ["id", "sku", "name"]
     },
     "Branch": {
       "title": "Branch",
-      "description": "Physical distribution hub, bonded warehouse, or retail branch",
+      "description": "ERP Branch entity",
       "type": "object",
       "properties": {
-        "code": { "type": "string", "maxLength": 32 },
-        "name": { "type": "string", "maxLength": 120 },
-        "regionId": { "type": "string", "maxLength": 128 },
-        "regionName": { "type": "string", "maxLength": 120 },
-        "address": { "type": "string", "maxLength": 250 },
-        "managerName": { "type": "string", "maxLength": 120 },
-        "exciseBondLicense": { "type": "string", "maxLength": 80 },
-        "status": { "type": "string", "enum": ["Operational", "Audit Hold", "Closed"] },
-        "createdAt": { "type": "string", "maxLength": 64 }
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" }
       },
-      "required": ["code", "name", "regionId", "regionName", "address", "exciseBondLicense", "status", "createdAt"]
+      "required": ["id", "code", "name"]
     },
-    "GeoRegion": {
-      "title": "GeoRegion",
-      "description": "Geographical pricing zone and excise freight differential rule",
+    "WebsiteDeliveryOrder": {
+      "title": "WebsiteDeliveryOrder",
+      "description": "Website delivery order entity",
       "type": "object",
       "properties": {
-        "code": { "type": "string", "maxLength": 32 },
-        "name": { "type": "string", "maxLength": 120 },
-        "tierType": { "type": "string", "enum": ["Metro Core", "Suburban Ring", "Upcountry / Lower Region", "Duty-Free / Export"] },
-        "wholesaleMultiplier": { "type": "number" },
-        "retailMultiplier": { "type": "number" },
-        "freightLevyPerCase": { "type": "number" },
-        "regionalTaxRate": { "type": "number" },
-        "notes": { "type": "string", "maxLength": 300 },
-        "createdAt": { "type": "string", "maxLength": 64 }
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "branchId": { "type": "string" }
       },
-      "required": ["code", "name", "tierType", "wholesaleMultiplier", "retailMultiplier", "freightLevyPerCase", "regionalTaxRate", "createdAt"]
+      "required": ["id", "orderNumber", "branchId"]
     },
-    "Product": {
-      "title": "Product",
-      "description": "Liquor, wine, beer, or spirits product with auto-generated SKU and branch stock",
+    "SaleOrder": {
+      "title": "SaleOrder",
+      "description": "Sale order entity",
       "type": "object",
       "properties": {
-        "sku": { "type": "string", "maxLength": 48 },
-        "name": { "type": "string", "maxLength": 160 },
-        "category": { "type": "string", "enum": ["Whisky", "Vodka", "Gin", "Rum", "Tequila", "Cognac", "Wine", "Liqueur", "Craft Beer", "RTD"] },
-        "volumeMl": { "type": "number" },
-        "abv": { "type": "number" },
-        "bottlesPerCase": { "type": "number" },
-        "originCountry": { "type": "string", "maxLength": 80 },
-        "supplierName": { "type": "string", "maxLength": 120 },
-        "importEntryRef": { "type": "string", "maxLength": 80 },
-        "exciseStampSeries": { "type": "string", "maxLength": 80 },
-        "baseLandedCost": { "type": "number" },
-        "baseWholesalePrice": { "type": "number" },
-        "baseRetailPrice": { "type": "number" },
-        "totalBottles": { "type": "number" },
-        "branchStockSummary": { "type": "string", "maxLength": 1000 },
-        "geoPriceOverrides": { "type": "string", "maxLength": 1500 },
-        "createdAt": { "type": "string", "maxLength": 64 }
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "branchId": { "type": "string" }
       },
-      "required": ["sku", "name", "category", "volumeMl", "abv", "bottlesPerCase", "baseWholesalePrice", "baseRetailPrice", "totalBottles", "createdAt"]
+      "required": ["id", "orderNumber", "branchId"]
     },
-    "Partner": {
-      "title": "Partner",
-      "description": "Onboarded Supplier, Licensed Retailer, or Logistics Provider",
+    "ApprovalRequest": {
+      "title": "ApprovalRequest",
+      "description": "Request for approval on critical functionality",
       "type": "object",
       "properties": {
-        "partnerType": { "type": "string", "enum": ["Supplier", "Retailer", "Logistics"] },
-        "code": { "type": "string", "maxLength": 40 },
-        "companyName": { "type": "string", "maxLength": 160 },
-        "contactPerson": { "type": "string", "maxLength": 120 },
-        "phone": { "type": "string", "maxLength": 40 },
-        "email": { "type": "string", "maxLength": 160 },
-        "regionId": { "type": "string", "maxLength": 128 },
-        "regionName": { "type": "string", "maxLength": 120 },
-        "liquorLicenseNo": { "type": "string", "maxLength": 80 },
-        "taxPin": { "type": "string", "maxLength": 60 },
-        "licenseExpiry": { "type": "string", "maxLength": 40 },
-        "creditLimit": { "type": "number" },
-        "fleetCapacity": { "type": "string", "maxLength": 120 },
-        "complianceStatus": { "type": "string", "enum": ["Verified", "Pending Review", "Expired"] },
-        "createdAt": { "type": "string", "maxLength": 64 }
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "targetId": { "type": "string" },
+        "requesterId": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
       },
-      "required": ["partnerType", "code", "companyName", "contactPerson", "liquorLicenseNo", "complianceStatus", "createdAt"]
+      "required": ["id", "type", "targetId", "requesterId", "status", "createdAt"]
     },
-    "StockTransfer": {
-      "title": "StockTransfer",
-      "description": "Inter-branch stock movement under customs/excise bond",
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin entity",
       "type": "object",
       "properties": {
-        "transferNo": { "type": "string", "maxLength": 48 },
-        "fromBranchId": { "type": "string", "maxLength": 128 },
-        "fromBranchName": { "type": "string", "maxLength": 120 },
-        "toBranchId": { "type": "string", "maxLength": 128 },
-        "toBranchName": { "type": "string", "maxLength": 120 },
-        "productId": { "type": "string", "maxLength": 128 },
-        "sku": { "type": "string", "maxLength": 48 },
-        "productName": { "type": "string", "maxLength": 160 },
-        "quantityBottles": { "type": "number" },
-        "logisticsPartnerName": { "type": "string", "maxLength": 140 },
-        "vehicleReg": { "type": "string", "maxLength": 40 },
-        "excisePermitNo": { "type": "string", "maxLength": 80 },
-        "status": { "type": "string", "enum": ["Dispatched", "In Transit", "Received"] },
-        "initiatedBy": { "type": "string", "maxLength": 120 },
-        "createdAt": { "type": "string", "maxLength": 64 }
+        "id": { "type": "string" }
       },
-      "required": ["transferNo", "fromBranchName", "toBranchName", "sku", "productName", "quantityBottles", "status", "createdAt"]
-    },
-    "TransactionDoc": {
-      "title": "TransactionDoc",
-      "description": "Commercial ERP document: Receipt, Invoice, Quote, Packing List, Delivery Note, Credit Note, or Online Order",
-      "type": "object",
-      "properties": {
-        "docNumber": { "type": "string", "maxLength": 48 },
-        "docType": { "type": "string", "enum": ["Receipt", "Invoice", "Quote", "Packing List", "Delivery Note", "Credit Note", "Online Order"] },
-        "channel": { "type": "string", "enum": ["Retail Counter POS", "B2B Wholesale POS", "Customer Online Portal", "Affiliate Rep"] },
-        "branchId": { "type": "string", "maxLength": 128 },
-        "branchName": { "type": "string", "maxLength": 120 },
-        "regionId": { "type": "string", "maxLength": 128 },
-        "regionName": { "type": "string", "maxLength": 120 },
-        "customerName": { "type": "string", "maxLength": 160 },
-        "customerLicenseNo": { "type": "string", "maxLength": 80 },
-        "itemsSummary": { "type": "string", "maxLength": 2000 },
-        "subtotal": { "type": "number" },
-        "exciseAndTax": { "type": "number" },
-        "totalAmount": { "type": "number" },
-        "paymentMethod": { "type": "string", "maxLength": 60 },
-        "status": { "type": "string", "enum": ["Paid", "Issued", "Approved", "Fulfilled", "Credited", "Pending Verification"] },
-        "relatedInvoiceNo": { "type": "string", "maxLength": 48 },
-        "creditReason": { "type": "string", "maxLength": 250 },
-        "createdBy": { "type": "string", "maxLength": 120 },
-        "createdByRole": { "type": "string", "maxLength": 80 },
-        "affiliateCode": { "type": "string", "maxLength": 48 },
-        "createdAt": { "type": "string", "maxLength": 64 }
-      },
-      "required": ["docNumber", "docType", "channel", "branchName", "regionName", "customerName", "itemsSummary", "totalAmount", "status", "createdBy", "createdAt"]
-    },
-    "ComplianceRecord": {
-      "title": "ComplianceRecord",
-      "description": "Excise stamp batch, customs bond entry, or health/KEBS clearance certificate",
-      "type": "object",
-      "properties": {
-        "certificateNo": { "type": "string", "maxLength": 80 },
-        "recordType": { "type": "string", "enum": ["Customs Import Bond", "Digital Excise Stamp Batch", "Standard Bureau Certificate", "Distributor Liquor Permit"] },
-        "skuRef": { "type": "string", "maxLength": 48 },
-        "branchName": { "type": "string", "maxLength": 120 },
-        "stampRangeStart": { "type": "string", "maxLength": 60 },
-        "stampRangeEnd": { "type": "string", "maxLength": 60 },
-        "dutyPaidAmount": { "type": "number" },
-        "expiryDate": { "type": "string", "maxLength": 40 },
-        "status": { "type": "string", "enum": ["Active", "Cleared", "Expiring Soon", "Flagged"] },
-        "inspectorName": { "type": "string", "maxLength": 120 },
-        "createdAt": { "type": "string", "maxLength": 64 }
-      },
-      "required": ["certificateNo", "recordType", "branchName", "status", "createdAt"]
-    },
-    "AuditLog": {
-      "title": "AuditLog",
-      "description": "Immutable user activity, device fingerprint, login status, and transaction security log",
-      "type": "object",
-      "properties": {
-        "actorName": { "type": "string", "maxLength": 120 },
-        "actorRole": { "type": "string", "maxLength": 80 },
-        "actorEmailOrPinId": { "type": "string", "maxLength": 160 },
-        "action": { "type": "string", "maxLength": 160 },
-        "module": { "type": "string", "maxLength": 80 },
-        "details": { "type": "string", "maxLength": 500 },
-        "deviceFingerprint": { "type": "string", "maxLength": 240 },
-        "branchName": { "type": "string", "maxLength": 120 },
-        "severity": { "type": "string", "enum": ["Info", "Security", "Financial", "Critical"] },
-        "createdAt": { "type": "string", "maxLength": 64 }
-      },
-      "required": ["actorName", "actorRole", "action", "module", "details", "deviceFingerprint", "severity", "createdAt"]
-    },
-    "PayrollRun": {
-      "title": "PayrollRun",
-      "description": "Executed payroll disbursement batch and serialized employee thermal payslips",
-      "type": "object",
-      "properties": {
-        "period": { "type": "string", "maxLength": 60 },
-        "runDate": { "type": "string", "maxLength": 64 },
-        "runBy": { "type": "string", "maxLength": 120 },
-        "runByRole": { "type": "string", "maxLength": 80 },
-        "totalDisbursed": { "type": "number" },
-        "totalEmployees": { "type": "number" },
-        "status": { "type": "string", "enum": ["Draft", "Finalized", "Paid"] },
-        "recordsJson": { "type": "string", "maxLength": 200000 },
-        "createdAt": { "type": "string", "maxLength": 64 }
-      },
-      "required": ["period", "runDate", "runBy", "totalDisbursed", "totalEmployees", "status", "recordsJson", "createdAt"]
-    },
-    "BusinessUnit": {
-      "title": "BusinessUnit",
-      "description": "Sub-business unit or commercial outlet under a branch, such as a restaurant/club or merchant liquor supermarket",
-      "type": "object",
-      "properties": {
-        "code": { "type": "string", "maxLength": 48 },
-        "name": { "type": "string", "maxLength": 160 },
-        "branchId": { "type": "string", "maxLength": 128 },
-        "branchName": { "type": "string", "maxLength": 120 },
-        "unitType": { "type": "string", "enum": ["restaurant_club", "merchant_shop", "bar_lounge", "retail_store", "store", "shop", "warehouse"] },
-        "description": { "type": "string", "maxLength": 300 },
-        "managerName": { "type": "string", "maxLength": 120 },
-        "assignedStaffIds": { "type": "array", "items": { "type": "string" } },
-        "status": { "type": "string", "enum": ["Active", "Inactive"] },
-        "foodCategories": { "type": "array", "items": { "type": "string" } },
-        "beverageCategories": { "type": "array", "items": { "type": "string" } },
-        "allowLiquorTopup": { "type": "boolean" },
-        "tableCount": { "type": "number" },
-        "createdAt": { "type": "string", "maxLength": 64 }
-      },
-      "required": ["code", "name", "branchId", "branchName", "unitType", "status", "createdAt"]
-    },
-    "RestaurantInventoryItem": {
-      "title": "RestaurantInventoryItem",
-      "description": "Separate pantry, kitchen, or club inventory item for restaurant outlets with custom pricing and categories",
-      "type": "object",
-      "properties": {
-        "businessUnitId": { "type": "string", "maxLength": 128 },
-        "businessUnitName": { "type": "string", "maxLength": 160 },
-        "branchId": { "type": "string", "maxLength": 128 },
-        "name": { "type": "string", "maxLength": 180 },
-        "category": { "type": "string", "maxLength": 80 },
-        "itemType": { "type": "string", "enum": ["food", "beverage", "club_amenity", "tobacco_sigger", "shisha"] },
-        "portionUnit": { "type": "string", "maxLength": 40 },
-        "costPriceKes": { "type": "number" },
-        "sellingPriceKes": { "type": "number" },
-        "portionsAvailable": { "type": "number" },
-        "minStockAlert": { "type": "number" },
-        "prepTimeMinutes": { "type": "number" },
-        "isAvailable": { "type": "boolean" },
-        "description": { "type": "string", "maxLength": 400 },
-        "allergens": { "type": "string", "maxLength": 200 },
-        "createdAt": { "type": "string", "maxLength": 64 }
-      },
-      "required": ["businessUnitId", "branchId", "name", "category", "itemType", "portionUnit", "costPriceKes", "sellingPriceKes", "portionsAvailable", "createdAt"]
+      "required": ["id"]
     }
   },
   "firestore": {
-    "/payroll_runs/{runId}": {
-      "schema": { "$ref": "#/entities/PayrollRun" },
-      "description": "Payroll disbursement runs and employee thermal payslip records"
-    },
-    "/staff/{staffId}": {
-      "schema": { "$ref": "#/entities/Staff" },
-      "description": "Staff accounts for Google and 6-digit PIN authentication"
-    },
-    "/branches/{branchId}": {
-      "schema": { "$ref": "#/entities/Branch" },
-      "description": "Distribution branches and warehouses"
-    },
-    "/business_units/{unitId}": {
-      "schema": { "$ref": "#/entities/BusinessUnit" },
-      "description": "Commercial outlets (restaurants, clubs, liquor supermarkets) operating under a branch"
-    },
-    "/restaurant_inventory/{itemId}": {
-      "schema": { "$ref": "#/entities/RestaurantInventoryItem" },
-      "description": "Separate food, beverage, and club amenity inventory items scoped to restaurant outlets"
-    },
-    "/geo_regions/{regionId}": {
-      "schema": { "$ref": "#/entities/GeoRegion" },
-      "description": "Geographical pricing zones and multipliers"
-    },
-    "/products/{productId}": {
-      "schema": { "$ref": "#/entities/Product" },
-      "description": "Liquor inventory items with auto SKU and regional pricing"
-    },
-    "/partners/{partnerId}": {
-      "schema": { "$ref": "#/entities/Partner" },
-      "description": "Suppliers, Retailers, and Logistics providers"
-    },
-    "/stock_transfers/{transferId}": {
-      "schema": { "$ref": "#/entities/StockTransfer" },
-      "description": "Inter-branch stock transfers"
-    },
-    "/transactions/{transactionId}": {
-      "schema": { "$ref": "#/entities/TransactionDoc" },
-      "description": "Receipts, Invoices, Quotes, Packing Lists, Delivery Notes, Credit Notes, Online Orders"
-    },
-    "/compliance_records/{recordId}": {
-      "schema": { "$ref": "#/entities/ComplianceRecord" },
-      "description": "Excise stamps, customs bonds, and regulatory permits"
-    },
-    "/audit_logs/{logId}": {
-      "schema": { "$ref": "#/entities/AuditLog" },
-      "description": "User monitoring, device tracking, and transaction security logs"
-    }
+    "products": { "schema": "Product", "description": "Products collection" },
+    "branches": { "schema": "Branch", "description": "Branches collection" },
+    "website_delivery_orders": { "schema": "WebsiteDeliveryOrder", "description": "Website orders collection" },
+    "sale_orders": { "schema": "SaleOrder", "description": "Sale orders collection" },
+    "approval_requests": { "schema": "ApprovalRequest", "description": "Approval requests collection" },
+    "admins": { "schema": "Admin", "description": "Admins collection" }
   }
 }

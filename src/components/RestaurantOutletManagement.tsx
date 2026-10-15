@@ -40,6 +40,8 @@ import {
   Product,
 } from '../types';
 import { formatKes, exportToCSV } from '../erpUtils';
+import { ConfirmationModal } from './common/ConfirmationModal';
+import { StatusFeedbackToast } from './AnimatedFeedback';
 import {
   PRESET_SIGGER_ITEMS,
   PRESET_SHISHA_ITEMS,
@@ -121,6 +123,7 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
   // Instant delete confirmation state
   const [confirmDeleteUnit, setConfirmDeleteUnit] = useState<BusinessUnit | null>(null);
   const [isDeletingOutletId, setIsDeletingOutletId] = useState<string | null>(null);
+  const [feedbackToast, setFeedbackToast] = useState<{ type: 'success' | 'error'; title: string; message: string; } | null>(null);
 
   // Open modal to create a new outlet (optionally with preset type: store, shop, warehouse, etc.)
   const handleOpenCreateOutletModal = (presetType?: BusinessUnitType | React.MouseEvent) => {
@@ -358,6 +361,11 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
     setNewOutletDesc('');
     setIsCreateOutletModalOpen(false);
     setEditingOutlet(null);
+    setFeedbackToast({
+      type: 'success',
+      title: editingOutlet ? 'Outlet Updated' : 'Outlet Created',
+      message: `Successfully ${editingOutlet ? 'updated' : 'created'} the sub-business: ${newOutletName.trim()}.`,
+    });
   };
 
   // Handle Add Category to current unit
@@ -470,6 +478,11 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
     }
 
     setIsItemModalOpen(false);
+    setFeedbackToast({
+      type: 'success',
+      title: editingItem ? 'Item Updated' : 'Item Created',
+      message: `Successfully ${editingItem ? 'updated' : 'created'} the inventory item: ${itemName.trim()}.`,
+    });
   };
 
   // Handle Quick Price Update
@@ -1936,51 +1949,14 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
           MODAL: INSTANT DELETE SUB-BUSINESS CONFIRMATION
          ========================================================================= */}
       {confirmDeleteUnit && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in"
-        >
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border-2 border-rose-600 space-y-4">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
-                <Trash2 className="w-5 h-5 text-rose-600" />
-              </div>
-              <div>
-                <h3 className="font-montserrat font-black text-base text-slate-900">
-                  Instant Delete Sub-Business
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Permanent removal of outlet &amp; configuration
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Are you sure you want to delete <strong className="text-slate-900">{confirmDeleteUnit.name}</strong> ({confirmDeleteUnit.code})? 
-              This will instantly remove this sub-business from the directory and unassign staff members.
-            </p>
-
-            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteUnit(null)}
-                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-bold cursor-pointer hover:bg-slate-100 text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeletingOutletId === confirmDeleteUnit.id}
-                onClick={() => handleInstantDeleteOutlet(confirmDeleteUnit)}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-montserrat font-black cursor-pointer shadow-md text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                {isDeletingOutletId === confirmDeleteUnit.id ? 'Deleting...' : 'Confirm Instant Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmationModal
+          isOpen={true}
+          title="Instant Delete Sub-Business"
+          message={`Are you sure you want to delete ${confirmDeleteUnit.name} (${confirmDeleteUnit.code})? This will instantly remove this sub-business from the directory and unassign staff members.`}
+          onConfirm={() => handleInstantDeleteOutlet(confirmDeleteUnit)}
+          onCancel={() => setConfirmDeleteUnit(null)}
+          isConfirming={isDeletingOutletId === confirmDeleteUnit.id}
+        />
       )}
 
       {/* =========================================================================
@@ -2195,6 +2171,7 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
           </div>
         </div>
       )}
+      <StatusFeedbackToast status={feedbackToast} onDismiss={() => setFeedbackToast(null)} />
     </div>
   );
 };

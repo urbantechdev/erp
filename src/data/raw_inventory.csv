@@ -1,0 +1,11 @@
+Auto SKU,Stock Class,Subcategory,Product Name,Brand,Barcode (EAN-13),Volume (ml),ABV (%),Pack Size,Origin,Wholesale (KES),Retail (KES),Total Bottles
+IPS-WHISKY-002,IPS,Whisky,Johnnie Walker Black Label 12 Years (750ml),Johnnie Walker,,750,40.0,12.0,Scotland,3850.0,4500.0,360
+IPS-WHISKY-002-1L,IPS,Whisky,Johnnie Walker Black Label 12 Years (1 Litre),Johnnie Walker,,1000,40.0,12.0,Scotland,4250.0,4999.0,360
+ND-WHS-003,IPS,Whisky,Johnnie Walker Red Label (750ml),Johnnie Walker,,750,40.0,12.0,Scotland,2080.0,2499.0,360
+ND-WHS-004,IPS,Whisky,Johnnie Walker Double Black (750ml),Johnnie Walker,,750,40.0,6.0,Scotland,5100.0,5999.0,180
+ND-WHS-005,IPS,Whisky,Johnnie Walker Gold Label Reserve (750ml),Johnnie Walker,,750,40.0,6.0,Scotland,6800.0,7999.0,180
+ND-WHS-006,IPS,Whisky,Jameson Triple Distilled Irish Whiskey (750ml),Jameson,,750,40.0,12.0,Ireland,2950.0,3500.0,360
+ND-WHS-007,IPS,Whisky,Jameson Black Barrel Irish Whiskey (750ml),Jameson,,750,40.0,6.0,Ireland,4680.0,5499.0,180
+ND-WHS-008,IPS,Whisky,Jack Daniel's Old No. 7 Tennessee Whiskey (700ml),Jack Daniel's,,700,40.0,12.0,USA,3820.0,4500.0,360
+ND-WHS-009,IPS,Whisky,Jack Daniel's Tennessee Honey (750ml),Jack Daniel's,,750,35.0,12.0,USA,3400.0,3999.0,360
+ND-WHS-010,IPS,Whisky,The Singleton of Dufftown 12 Years (750ml),Singleton,,750,40.0,6.0,Scotland,5100.0,5999.0,180

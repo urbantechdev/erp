@@ -10,11 +10,26 @@ import {
   LiveLoggedInCustomer,
   SaleOrder,
   ETimsInvoice,
-  BarcodeScanRecord
+  BarcodeScanRecord,
+  ApprovalRequest
 } from '../types';
 import { MASTER_IMPORTED_INVENTORY } from '../erpUtils';
 import { auth, db } from '../firebase';
-import { collection, doc, setDoc, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  console.error(`Firestore Error: ${operationType} on ${path}`, error);
+  throw error;
+}
 
 export interface ErpContextType {
   products: Product[];
@@ -67,6 +82,9 @@ export interface ErpContextType {
   currentRole: string;
   logout: () => void;
   orders: SaleOrder[];
+  approvalRequests: ApprovalRequest[];
+  submitApprovalRequest: (request: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
+  updateApprovalRequestStatus: (requestId: string, status: 'APPROVED' | 'REJECTED') => Promise<void>;
 }
 
 const ErpContext = createContext<ErpContextType | null>(null);
@@ -158,47 +176,57 @@ export const ErpProvider: React.FC<{
   }, [products, activeBranch]);
 
   // Website delivery orders
-  const [websiteDeliveryOrders, setWebsiteDeliveryOrders] = useState<WebsiteDeliveryOrder[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const saved = localStorage.getItem(WEB_ORDERS_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return [];
-  });
-
-  // Save delivery orders locally
-  useEffect(() => {
-    try {
-      localStorage.setItem(WEB_ORDERS_STORAGE_KEY, JSON.stringify(websiteDeliveryOrders));
-    } catch {
-      // ignore
-    }
-  }, [websiteDeliveryOrders]);
-
-  // Product ratings
-  const [productRatings, setProductRatings] = useState<ProductRatingRecord[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const saved = localStorage.getItem(RATINGS_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return [];
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(RATINGS_STORAGE_KEY, JSON.stringify(productRatings));
-    } catch {
-      // ignore
-    }
-  }, [productRatings]);
-
+  const [websiteDeliveryOrders, setWebsiteDeliveryOrders] = useState<WebsiteDeliveryOrder[]>([]);
   const [orders, setOrders] = useState<SaleOrder[]>([]);
+
+  // Sync orders and website orders from Firestore
+  useEffect(() => {
+    const unsubOrders = onSnapshot(collection(db, 'sale_orders'), (snapshot) => {
+      setOrders(snapshot.docs.map(doc => doc.data() as SaleOrder));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'sale_orders'));
+
+    const unsubWebOrders = onSnapshot(collection(db, 'website_delivery_orders'), (snapshot) => {
+      setWebsiteDeliveryOrders(snapshot.docs.map(doc => doc.data() as WebsiteDeliveryOrder));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'website_delivery_orders'));
+
+    return () => {
+      unsubOrders();
+      unsubWebOrders();
+    };
+  }, []);
+
+  // Approval Requests
+  const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'approval_requests'), (snapshot) => {
+      setApprovalRequests(snapshot.docs.map(doc => doc.data() as ApprovalRequest));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'approval_requests'));
+    return () => unsub();
+  }, []);
+
+  const submitApprovalRequest = useCallback(async (request: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => {
+    const id = `req-${Date.now()}`;
+    const newRequest: ApprovalRequest = {
+      ...request,
+      id,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await setDoc(doc(db, 'approval_requests', id), newRequest);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'approval_requests');
+    }
+  }, []);
+
+  const updateApprovalRequestStatus = useCallback(async (requestId: string, status: 'APPROVED' | 'REJECTED') => {
+    try {
+      await updateDoc(doc(db, 'approval_requests', requestId), { status });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'approval_requests');
+    }
+  }, []);
 
   // Function to place website delivery order
   const placeWebsiteDeliveryOrder = useCallback(
@@ -256,14 +284,9 @@ export const ErpProvider: React.FC<{
         createdAt: new Date().toISOString()
       };
 
-      setWebsiteDeliveryOrders(prev => [newOrder, ...prev]);
-
-      // Fire and forget Firestore backup if collection exists
-      try {
-        setDoc(doc(db, 'website_delivery_orders', newOrder.id), newOrder).catch(() => {});
-      } catch {
-        // ignore
-      }
+      // Save to Firestore
+      setDoc(doc(db, 'website_delivery_orders', newOrder.id), newOrder)
+        .catch(error => handleFirestoreError(error, OperationType.CREATE, 'website_delivery_orders'));
 
       return newOrder;
     },
@@ -332,18 +355,32 @@ export const ErpProvider: React.FC<{
         customerEmail: targetWebOrder.customerEmail,
         customerPhone: mpesaPhone || targetWebOrder.customerPhone,
         saleType: 'RETAIL',
-        items: targetWebOrder.items.map(it => ({
-          productId: it.product.id,
-          productName: it.product.name,
-          sku: it.product.sku,
-          barcode: it.product.barcode,
-          quantity: it.quantity,
-          companyUnitPrice: it.companyUnitPrice,
-          unitPrice: it.companyUnitPrice,
-          costPrice: it.product.warehouseCostKes || 0,
-          vatAmount: Math.round((it.totalAmount - it.totalAmount / 1.16) * 100) / 100,
-          totalAmount: it.totalAmount
-        })),
+        items: targetWebOrder.items.map(it => {
+          const unitPrice = it.companyUnitPrice;
+          const costPrice = it.product.warehouseCostKes || 0;
+          const vatAmount = Math.round((it.totalAmount - it.totalAmount / 1.16) * 100) / 100;
+          const commissionEarnedKes = Math.round(it.totalAmount * 0.05); // Example: 5% commission
+          const expensesKes = Math.round(it.totalAmount * 0.02); // Example: 2% operational expenses
+          const recurringBillsContributionKes = Math.round(it.totalAmount * 0.01); // Example: 1% recurring
+          const instantProfitKes = Math.round(it.totalAmount - (costPrice * it.quantity) - commissionEarnedKes - expensesKes - recurringBillsContributionKes);
+
+          return {
+            productId: it.product.id,
+            productName: it.product.name,
+            sku: it.product.sku,
+            barcode: it.product.barcode,
+            quantity: it.quantity,
+            companyUnitPrice: it.companyUnitPrice,
+            unitPrice,
+            costPrice,
+            vatAmount,
+            totalAmount: it.totalAmount,
+            commissionEarnedKes,
+            expensesKes,
+            recurringBillsContributionKes,
+            instantProfitKes
+          };
+        }),
         subtotalKes: Math.round((targetWebOrder.totalCompanyPriceKes / 1.16) * 100) / 100,
         vatAmountKes:
           Math.round((targetWebOrder.totalCompanyPriceKes - targetWebOrder.totalCompanyPriceKes / 1.16) * 100) / 100,
@@ -352,7 +389,17 @@ export const ErpProvider: React.FC<{
         createdAt: new Date().toISOString(),
         paymentMethod: 'MPESA',
         mpesaReceiptNumber: receiptNumber,
-        etimsInvoiceNumber: `KRA-ETIMS-${Date.now().toString().slice(-6)}`
+        etimsInvoiceNumber: `KRA-ETIMS-${Date.now().toString().slice(-6)}`,
+        totalCommissionEarnedKes: targetWebOrder.items.reduce((sum, it) => sum + Math.round(it.totalAmount * 0.05), 0),
+        totalExpensesKes: targetWebOrder.items.reduce((sum, it) => sum + Math.round(it.totalAmount * 0.02), 0),
+        totalRecurringBillsContributionKes: targetWebOrder.items.reduce((sum, it) => sum + Math.round(it.totalAmount * 0.01), 0),
+        totalInstantProfitKes: targetWebOrder.items.reduce((sum, it) => {
+          const costPrice = it.product.warehouseCostKes || 0;
+          const commissionEarnedKes = Math.round(it.totalAmount * 0.05);
+          const expensesKes = Math.round(it.totalAmount * 0.02);
+          const recurringBillsContributionKes = Math.round(it.totalAmount * 0.01);
+          return sum + Math.round(it.totalAmount - (costPrice * it.quantity) - commissionEarnedKes - expensesKes - recurringBillsContributionKes);
+        }, 0)
       };
 
       const etimsInvoice: ETimsInvoice = {
@@ -454,7 +501,10 @@ export const ErpProvider: React.FC<{
     currentUser,
     currentRole: currentUser?.role || 'CUSTOMER',
     logout,
-    orders
+    orders,
+    approvalRequests,
+    submitApprovalRequest,
+    updateApprovalRequestStatus
   };
 
   return <ErpContext.Provider value={value}>{children}</ErpContext.Provider>;

@@ -608,6 +608,12 @@ export interface SaleItem {
   itemType?: 'ALCOHOL' | 'FOOD';
   foodCategoryName?: string;
   notes?: string;
+
+  // Granular Financial Breakdown
+  commissionEarnedKes?: number;
+  expensesKes?: number;
+  recurringBillsContributionKes?: number;
+  instantProfitKes?: number;
 }
 
 export interface SaleOrder {
@@ -644,6 +650,12 @@ export interface SaleOrder {
   paymentStatus?: string;
   mpesaReceiptNumber?: string;
   etimsInvoiceNumber?: string;
+
+  // Aggregate Financials
+  totalCommissionEarnedKes?: number;
+  totalExpensesKes?: number;
+  totalRecurringBillsContributionKes?: number;
+  totalInstantProfitKes?: number;
 }
 
 export interface ETimsInvoice {
@@ -674,5 +686,14 @@ export interface BarcodeScanRecord {
   branchId: string;
   scannedAt: string;
   scannerId: string;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  type: 'USER_DELETE' | 'ROLE_CHANGE';
+  targetId: string;
+  requesterId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
 }
 

@@ -72,7 +72,6 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
   const [importProgress, setImportProgress] = useState(0);
   const [importSummary, setImportSummary] = useState<{ count: number; message: string } | null>(null);
 
-  if (!isOpen) return null;
 
   // Handle sample CSV template download
   const handleDownloadTemplate = () => {
@@ -299,6 +298,8 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
 
   const validProducts = useMemo(() => parsedRows.filter((r) => r.isValid), [parsedRows]);
   const invalidProducts = useMemo(() => parsedRows.filter((r) => !r.isValid), [parsedRows]);
+
+  if (!isOpen) return null;
 
   const handleExecuteImport = async () => {
     if (validProducts.length === 0) return;

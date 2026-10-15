@@ -55,7 +55,8 @@ import {
   isUserFeaturePermitted,
 } from '../erpUtils';
 import { cleanFirestoreData } from '../firebase';
-import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
+import { AnimatedSuccessTickIcon, StatusFeedbackToast } from './AnimatedFeedback';
+import { ConfirmationModal } from './common/ConfirmationModal';
 
 // ---------------------------------------------------------------------------
 // 5. SUPPLIERS, LICENSED RETAILERS & LOGISTICS ONBOARDING MODULE
@@ -103,6 +104,7 @@ export const PartnersOnboardingModule: React.FC<{
 
   const [deletingPartner, setDeletingPartner] = useState<Partner | null>(null);
   const [isDeletingPartner, setIsDeletingPartner] = useState(false);
+  const [feedbackToast, setFeedbackToast] = useState<{ type: 'success' | 'error'; title: string; message: string; } | null>(null);
 
   const handleAddPartner = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,6 +135,11 @@ export const PartnersOnboardingModule: React.FC<{
     setTaxPin('');
     setCreditLimit(0);
     setFleetCapacity('');
+    setFeedbackToast({
+      type: 'success',
+      title: 'Partner Onboarded',
+      message: `Successfully onboarded the trade partner: ${companyName.trim()}.`,
+    });
   };
 
   const handleOpenEditPartner = (p: Partner) => {
@@ -163,6 +170,11 @@ export const PartnersOnboardingModule: React.FC<{
       complianceStatus: editStatus,
     });
     setEditingPartner(null);
+    setFeedbackToast({
+      type: 'success',
+      title: 'Partner Updated',
+      message: `Successfully updated the trade partner: ${editCompanyName.trim()}.`,
+    });
   };
 
   const handleConfirmDeletePartner = async () => {
@@ -639,45 +651,14 @@ export const PartnersOnboardingModule: React.FC<{
 
       {/* Delete Partner Confirmation Modal */}
       {deletingPartner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-rose-600 shadow-2xl max-w-none sm:max-w-md w-full h-full sm:h-auto overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
-            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-7 h-7" />
-            </div>
-            <div className="text-center space-y-1">
-              <h3 className="text-lg font-montserrat font-black text-slate-900">
-                Delete Trade Partner Permanently?
-              </h3>
-              <p className="text-xs text-slate-600">
-                Are you sure you want to delete this partner record? This action is permanent and cannot be undone.
-              </p>
-            </div>
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 space-y-1 text-xs">
-              <div className="font-montserrat font-bold text-slate-900">{deletingPartner.companyName}</div>
-              <div className="text-slate-600">Code: <span className="font-mono font-bold text-[#0A006E]">{deletingPartner.code}</span> · {deletingPartner.partnerType}</div>
-              <div className="text-slate-500">License: {deletingPartner.liquorLicenseNo}</div>
-            </div>
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                disabled={isDeletingPartner}
-                onClick={() => setDeletingPartner(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-montserrat font-bold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeletingPartner}
-                onClick={handleConfirmDeletePartner}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md flex items-center justify-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                {isDeletingPartner ? 'Deleting...' : 'Permanently Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmationModal
+          isOpen={true}
+          title="Delete Trade Partner Permanently?"
+          message={`Are you sure you want to delete ${deletingPartner.companyName} (${deletingPartner.code})? This action is permanent and cannot be undone.`}
+          onConfirm={handleConfirmDeletePartner}
+          onCancel={() => setDeletingPartner(null)}
+          isConfirming={isDeletingPartner}
+        />
       )}
     </div>
   );
@@ -1422,6 +1403,7 @@ export const HrAndRbacModule: React.FC<{
   onOpenPayslip?: (record: PayrollRecord) => void;
   onOpenAccessMatrix?: () => void;
   onOpenUserFeatureModal?: (staff: StaffMember) => void;
+  onTriggerToast: (type: 'success' | 'error', title: string, message: string) => void;
 }> = ({
   currentUser,
   staffList,
@@ -1435,6 +1417,7 @@ export const HrAndRbacModule: React.FC<{
   onOpenPayslip,
   onOpenAccessMatrix,
   onOpenUserFeatureModal,
+  onTriggerToast,
 }) => {
   const creatableRoles = ROLE_PERMISSIONS[currentUser.role].canCreateRoles;
   const canManagePayroll =
@@ -1559,7 +1542,7 @@ export const HrAndRbacModule: React.FC<{
       : creatableRoles[0];
 
     if (effectiveRole === 'Admin' && email.trim().toLowerCase() !== 'feminiholdings@gmail.com') {
-      setFeedback('Restriction: Only feminiholdings@gmail.com is authorized as System Administrator.');
+      onTriggerToast('error', 'Provisioning Failed', 'Restriction: Only feminiholdings@gmail.com is authorized as System Administrator.');
       return;
     }
 
@@ -1573,38 +1556,41 @@ export const HrAndRbacModule: React.FC<{
 
     const isCasualSalesRep = effectiveRole === 'Affiliate Sales Representative';
 
-    await onCreateStaff(
-      cleanFirestoreData({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        role: effectiveRole,
-        authMethod: effectiveAuthMethod,
-        pin: effectiveAuthMethod === 'pin' ? pin : undefined,
-        branchId: assignedBranch?.id || '',
-        branchName: assignedBranch?.name || 'Main Branch',
-        status: 'Active',
-        createdBy: currentUser.name,
-        createdByRole: currentUser.role,
-        baseSalaryKes: Number(baseSalary),
-        deductionsKes: Number(deductions),
-        penaltiesKes: Number(penalties),
-        deductionsBreakdown: deductionsBreakdown.trim(),
-        penaltiesReason: penaltiesReason.trim(),
-        kraPin: kraPin.trim(),
-        nssfNo: nssfNo.trim(),
-        nhifNo: nhifNo.trim(),
-        isCasual: isCasualSalesRep || isCasual,
-        agreedCommissionPct: isCasualSalesRep ? Number(agreedCommissionPct) : undefined,
-      })
-    );
+    try {
+      await onCreateStaff(
+        cleanFirestoreData({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          role: effectiveRole,
+          authMethod: effectiveAuthMethod,
+          pin: effectiveAuthMethod === 'pin' ? pin : undefined,
+          branchId: assignedBranch?.id || '',
+          branchName: assignedBranch?.name || 'Main Branch',
+          status: 'Active',
+          createdBy: currentUser.name,
+          createdByRole: currentUser.role,
+          baseSalaryKes: Number(baseSalary),
+          deductionsKes: Number(deductions),
+          penaltiesKes: Number(penalties),
+          deductionsBreakdown: deductionsBreakdown.trim(),
+          penaltiesReason: penaltiesReason.trim(),
+          kraPin: kraPin.trim(),
+          nssfNo: nssfNo.trim(),
+          nhifNo: nhifNo.trim(),
+          isCasual: isCasualSalesRep || isCasual,
+          agreedCommissionPct: isCasualSalesRep ? Number(agreedCommissionPct) : undefined,
+        })
+      );
+    } catch(e) {
+      onTriggerToast('error', 'Provisioning Failed', 'An unexpected error occurred while creating staff member.');
+      return;
+    }
 
-    setFeedback(
-      isCasualSalesRep
+    onTriggerToast('success', 'Staff Provisioned', isCasualSalesRep
         ? `Provisioned Casual Sales Rep "${name}" with 6-Digit PIN: ${pin}, Base Pay KES ${Number(baseSalary).toLocaleString()} & Agreed Commission: ${agreedCommissionPct}%.`
         : effectiveAuthMethod === 'pin'
         ? `Provisioned ${effectiveRole} "${name}" with 6-Digit PIN: ${pin} & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`
-        : `Provisioned ${effectiveRole} "${name}" (${email}) for Google Authentication & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`
-    );
+        : `Provisioned ${effectiveRole} "${name}" (${email}) for Google Authentication & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`);
     setName('');
     setEmail('');
     handleRandomizePin();
@@ -1662,8 +1648,10 @@ export const HrAndRbacModule: React.FC<{
         isCasual: compIsCasual,
         agreedCommissionPct: compIsCasual ? Number(compCommissionPct) : undefined,
       });
-      setFeedback(`Compensation details updated for ${compStaff.name}. Net take-home: KES ${(compBase - compDed - compPen).toLocaleString()}`);
+      onTriggerToast('success', 'Compensation Updated', `Compensation details updated for ${compStaff.name}. Net take-home: KES ${(compBase - compDed - compPen).toLocaleString()}`);
       setCompStaff(null);
+    } catch(e) {
+      onTriggerToast('error', 'Compensation Update Failed', 'Unable to update compensation.');
     } finally {
       setIsSavingComp(false);
     }
@@ -1674,7 +1662,7 @@ export const HrAndRbacModule: React.FC<{
     if (!editingStaff || !onUpdateStaff) return;
 
     if (editRole === 'Admin' && editEmail.trim().toLowerCase() !== 'feminiholdings@gmail.com') {
-      setFeedback('Restriction: Only feminiholdings@gmail.com is authorized as System Administrator.');
+      onTriggerToast('error', 'Update Failed', 'Restriction: Only feminiholdings@gmail.com is authorized as System Administrator.');
       return;
     }
 
@@ -1705,7 +1693,7 @@ export const HrAndRbacModule: React.FC<{
       })
     );
 
-    setFeedback(`Updated staff account for ${editName.trim()} successfully.`);
+    onTriggerToast('success', 'Staff Updated', `Updated staff account for ${editName.trim()} successfully.`);
     setEditingStaff(null);
   };
 
@@ -3265,6 +3253,7 @@ export const AuditAndSecurityModule: React.FC<{
           </table>
         </div>
       </div>
+      <StatusFeedbackToast status={feedbackToast} onDismiss={() => setFeedbackToast(null)} />
     </div>
   );
 };
