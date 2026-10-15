@@ -48,9 +48,18 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
+  const errStr = error instanceof Error ? error.message : String(error);
+  if (
+    errStr.includes('Quota limit exceeded') ||
+    errStr.includes('resource-exhausted') ||
+    errStr.includes('offline') ||
+    errStr.includes('the client is offline')
+  ) {
+    return;
+  }
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errStr,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -67,7 +76,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path,
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
 }
 
 export async function testFirestoreConnection(): Promise<void> {

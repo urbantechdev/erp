@@ -20,6 +20,7 @@ interface CsvInventoryImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   branches: Branch[];
+  existingProducts?: Product[];
   onBatchImport: (products: Omit<Product, 'id' | 'createdAt'>[]) => Promise<number>;
 }
 
@@ -27,6 +28,10 @@ interface ParsedProductDraft extends Omit<Product, 'id' | 'createdAt'> {
   rowNumber: number;
   isValid: boolean;
   validationError?: string;
+  isDuplicate?: boolean;
+  duplicateReason?: string;
+  matchedExistingProductName?: string;
+  matchedExistingProductId?: string;
 }
 
 const SAMPLE_CSV_HEADERS = [
@@ -61,6 +66,7 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
   isOpen,
   onClose,
   branches,
+  existingProducts = [],
   onBatchImport,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,8 +77,8 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importSummary, setImportSummary] = useState<{ count: number; message: string } | null>(null);
-
-  if (!isOpen) return null;
+  const [duplicateHandling, setDuplicateHandling] = useState<'skip' | 'update' | 'keep_all'>('skip');
+  const [previewFilter, setPreviewFilter] = useState<'all' | 'valid' | 'duplicates' | 'invalid'>('all');
 
   // Handle sample CSV template download
   const handleDownloadTemplate = () => {
@@ -297,20 +303,127 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
     }
   };
 
-  const validProducts = useMemo(() => parsedRows.filter((r) => r.isValid), [parsedRows]);
-  const invalidProducts = useMemo(() => parsedRows.filter((r) => !r.isValid), [parsedRows]);
+  // Automated Duplicate Detection Engine
+  const parsedRowsWithDuplicates = useMemo(() => {
+    const existing = existingProducts || [];
+    const seenBarcodes = new Set<string>();
+    const seenNames = new Set<string>();
+
+    return parsedRows.map((row) => {
+      if (!row.isValid) return row;
+
+      const cleanBarcode = (row.barcode || '').trim();
+      const normName = row.name.trim().toLowerCase();
+      const nameVolKey = `${normName}_${row.volumeMl || 750}`;
+
+      // 1. Check against existing catalog in database
+      if (cleanBarcode) {
+        const existingByBarcode = existing.find(
+          (p) => p.barcode && p.barcode.trim() === cleanBarcode
+        );
+        if (existingByBarcode) {
+          return {
+            ...row,
+            isDuplicate: true,
+            duplicateReason: `Barcode ${cleanBarcode} already matches existing catalog item "${existingByBarcode.name}"`,
+            matchedExistingProductName: existingByBarcode.name,
+            matchedExistingProductId: existingByBarcode.id,
+          };
+        }
+      }
+
+      const existingByNameVol = existing.find(
+        (p) =>
+          p.name.trim().toLowerCase() === normName &&
+          Number(p.volumeMl || 750) === Number(row.volumeMl || 750)
+      );
+      if (existingByNameVol) {
+        return {
+          ...row,
+          isDuplicate: true,
+          duplicateReason: `Product "${existingByNameVol.name}" (${existingByNameVol.volumeMl}ml) already exists in database`,
+          matchedExistingProductName: existingByNameVol.name,
+          matchedExistingProductId: existingByNameVol.id,
+        };
+      }
+
+      // 2. Check for intra-file duplicates within this same CSV upload
+      if (cleanBarcode && seenBarcodes.has(cleanBarcode)) {
+        return {
+          ...row,
+          isDuplicate: true,
+          duplicateReason: `Duplicate barcode ${cleanBarcode} appears multiple times in this CSV upload`,
+        };
+      }
+      if (seenNames.has(nameVolKey)) {
+        return {
+          ...row,
+          isDuplicate: true,
+          duplicateReason: `Product "${row.name} (${row.volumeMl}ml)" is repeated multiple times in this CSV`,
+        };
+      }
+
+      if (cleanBarcode) seenBarcodes.add(cleanBarcode);
+      seenNames.add(nameVolKey);
+
+      return {
+        ...row,
+        isDuplicate: false,
+      };
+    });
+  }, [parsedRows, existingProducts]);
+
+  const uniqueValidProducts = useMemo(
+    () => parsedRowsWithDuplicates.filter((r) => r.isValid && !r.isDuplicate),
+    [parsedRowsWithDuplicates]
+  );
+  const duplicateProducts = useMemo(
+    () => parsedRowsWithDuplicates.filter((r) => r.isValid && r.isDuplicate),
+    [parsedRowsWithDuplicates]
+  );
+  const invalidProducts = useMemo(
+    () => parsedRowsWithDuplicates.filter((r) => !r.isValid),
+    [parsedRowsWithDuplicates]
+  );
+
+  const displayedRows = useMemo(() => {
+    if (previewFilter === 'valid') return uniqueValidProducts;
+    if (previewFilter === 'duplicates') return duplicateProducts;
+    if (previewFilter === 'invalid') return invalidProducts;
+    return parsedRowsWithDuplicates;
+  }, [parsedRowsWithDuplicates, previewFilter, uniqueValidProducts, duplicateProducts, invalidProducts]);
+
+  const targetsToImport = useMemo(() => {
+    if (duplicateHandling === 'skip') {
+      return uniqueValidProducts;
+    }
+    return parsedRowsWithDuplicates.filter((r) => r.isValid);
+  }, [duplicateHandling, uniqueValidProducts, parsedRowsWithDuplicates]);
 
   const handleExecuteImport = async () => {
-    if (validProducts.length === 0) return;
+    if (targetsToImport.length === 0) return;
     setIsImporting(true);
     setImportProgress(10);
 
     try {
-      const productsToSave = validProducts.map((p) => {
-        const { rowNumber, isValid, validationError, ...rest } = p;
+      const productsToSave = targetsToImport.map((p) => {
+        const {
+          rowNumber,
+          isValid,
+          validationError,
+          isDuplicate,
+          duplicateReason,
+          matchedExistingProductName,
+          matchedExistingProductId,
+          ...rest
+        } = p;
         return {
           ...rest,
+          isUploaded: true,
           isOnboarded: false,
+          hasRealBarcode: false,
+          awaitingBarcodeScan: true,
+          barcodeVerificationStatus: 'UNVERIFIED_SOURCE' as const,
           status: 'Pending Onboarding' as const,
           pendingActivationBottles: p.pendingActivationBottles ?? 12,
           totalBottles: 0,
@@ -322,10 +435,13 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
       const importedCount = await onBatchImport(productsToSave);
       setImportProgress(100);
 
-      const targetBranchName = branches.find((b) => b.id === targetBranchId)?.name || 'HQ - Main Branch';
+      const skippedCount = duplicateHandling === 'skip' ? duplicateProducts.length : 0;
       setImportSummary({
         count: importedCount,
-        message: `Successfully uploaded ${importedCount} products as Pending Onboarding. In compliance with branch inventory governance, all items remain unavailable on dashboards until the Branch Manager scans barcodes in "Onboard Items" to activate stock and branch assets.`,
+        message:
+          skippedCount > 0
+            ? `Successfully uploaded ${importedCount} unique products. All uploaded products are set to "Pending Onboarding" and must wait for barcode scanning before being made available for sale. ${skippedCount} duplicate items were skipped.`
+            : `Successfully uploaded ${importedCount} products. In compliance with inventory governance, all uploaded products are set to "Pending Onboarding" and must wait for barcode scanning before being made available for sale on the storefront or POS.`,
       });
 
       // Clear file after short delay
@@ -344,6 +460,8 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
       setIsImporting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-0 sm:p-5 overflow-y-auto">
@@ -479,23 +597,123 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
             </div>
           )}
 
-          {/* Parsed Preview Table */}
+          {/* Parsed Preview Table & Duplicate Governance */}
           {parsedRows.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-montserrat font-black text-sm text-[#0A006E]">
-                    File Preview & Validation
-                  </h4>
-                  <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-xs font-montserrat font-bold">
-                    {validProducts.length} Valid Products Ready
-                  </span>
+            <div className="space-y-4">
+              {/* Duplicate Governance Banner */}
+              <div className="bg-amber-50/80 border-2 border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Layers className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-montserrat font-black text-xs text-amber-950 uppercase tracking-wider">
+                        Automated Duplicate Check:
+                      </span>
+                      {duplicateProducts.length > 0 ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-montserrat font-black bg-amber-200 text-amber-950 border border-amber-400">
+                          {duplicateProducts.length} Duplicates Detected
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-montserrat font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          0 Duplicates (100% Clean Catalog)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-amber-900/80 mt-0.5">
+                      {duplicateProducts.length > 0
+                        ? `${duplicateProducts.length} items match existing database barcodes or product names.`
+                        : 'Every item in this CSV is unique and ready to onboard as a new SKU.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Duplicate Strategy Toggle */}
+                {duplicateProducts.length > 0 && (
+                  <div className="flex items-center gap-1.5 bg-white border border-amber-300 rounded-xl p-1.5 shrink-0 shadow-xs">
+                    <span className="text-[11px] font-montserrat font-bold text-amber-900 px-1">Action:</span>
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateHandling('skip')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-montserrat font-black cursor-pointer transition ${
+                        duplicateHandling === 'skip'
+                          ? 'bg-[#0A006E] text-white shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                      title="Only import unique products, skip duplicates"
+                    >
+                      Auto-Skip Duplicates
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateHandling('update')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-montserrat font-black cursor-pointer transition ${
+                        duplicateHandling === 'update'
+                          ? 'bg-[#0A006E] text-white shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                      title="Merge incoming bottles into existing product stock"
+                    >
+                      Merge Stock
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Filter Tabs & Quick Actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('all')}
+                    className={`px-3 py-1 rounded-full text-xs font-montserrat font-bold cursor-pointer transition ${
+                      previewFilter === 'all'
+                        ? 'bg-[#0A006E] text-[#FFDE00]'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    All Rows ({parsedRows.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('valid')}
+                    className={`px-3 py-1 rounded-full text-xs font-montserrat font-bold cursor-pointer transition ${
+                      previewFilter === 'valid'
+                        ? 'bg-emerald-700 text-white'
+                        : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                    }`}
+                  >
+                    New Unique ({uniqueValidProducts.length})
+                  </button>
+                  {duplicateProducts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewFilter('duplicates')}
+                      className={`px-3 py-1 rounded-full text-xs font-montserrat font-bold cursor-pointer transition ${
+                        previewFilter === 'duplicates'
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300'
+                      }`}
+                    >
+                      Duplicates ({duplicateProducts.length})
+                    </button>
+                  )}
                   {invalidProducts.length > 0 && (
-                    <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 rounded-full text-xs font-montserrat font-bold">
-                      {invalidProducts.length} Incomplete Rows Skipped
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewFilter('invalid')}
+                      className={`px-3 py-1 rounded-full text-xs font-montserrat font-bold cursor-pointer transition ${
+                        previewFilter === 'invalid'
+                          ? 'bg-rose-700 text-white'
+                          : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
+                      }`}
+                    >
+                      Errors ({invalidProducts.length})
+                    </button>
                   )}
                 </div>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -503,34 +721,48 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
                     setParsedRows([]);
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
-                  className="text-xs text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                  className="text-xs text-slate-500 hover:text-slate-800 underline cursor-pointer self-end sm:self-auto"
                 >
                   Clear File
                 </button>
               </div>
 
-              <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
+              {/* Table */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-72 overflow-y-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-[#0A006E] text-[#FFDE00] font-montserrat sticky top-0 z-10">
                     <tr>
                       <th className="py-2.5 px-3 font-black">#</th>
-                      <th className="py-2.5 px-3 font-black">Product Name</th>
+                      <th className="py-2.5 px-3 font-black">Product Name &amp; Duplicate Status</th>
                       <th className="py-2.5 px-3 font-black">Class / Subcategory</th>
                       <th className="py-2.5 px-3 font-black">Barcode (EAN-13)</th>
                       <th className="py-2.5 px-3 font-black text-right">Wholesale KES</th>
                       <th className="py-2.5 px-3 font-black text-right">Retail KES</th>
-                      <th className="py-2.5 px-3 font-black text-right">Stock (Btls)</th>
+                      <th className="py-2.5 px-3 font-black text-right">Batch Stock</th>
+                      <th className="py-2.5 px-3 font-black text-center">Import Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
-                    {parsedRows.slice(0, 50).map((p, idx) => (
+                    {displayedRows.slice(0, 100).map((p, idx) => (
                       <tr
                         key={idx}
-                        className={!p.isValid ? 'bg-rose-50/60' : 'hover:bg-slate-50'}
+                        className={
+                          !p.isValid
+                            ? 'bg-rose-50/70'
+                            : p.isDuplicate
+                            ? 'bg-amber-50/80 border-l-4 border-l-amber-500'
+                            : 'hover:bg-slate-50'
+                        }
                       >
                         <td className="py-2 px-3 font-mono-tabular text-slate-500">{p.rowNumber}</td>
                         <td className="py-2 px-3 font-bold text-slate-900">
-                          {p.name}
+                          <div>{p.name}</div>
+                          {p.isDuplicate && (
+                            <div className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              <span>⚠️ Duplicate:</span>
+                              <span className="font-normal">{p.duplicateReason}</span>
+                            </div>
+                          )}
                           {!p.isValid && (
                             <span className="block text-[10px] text-rose-600 font-normal">
                               {p.validationError}
@@ -538,9 +770,13 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
                           )}
                         </td>
                         <td className="py-2 px-3">
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            p.category === 'IPS' ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
-                          }`}>
+                          <span
+                            className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              p.category === 'IPS'
+                                ? 'bg-indigo-100 text-indigo-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
                             {p.category}
                           </span>{' '}
                           <span className="text-slate-600">{p.subCategory}</span>
@@ -555,16 +791,37 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
                           KES {Math.round(p.baseRetailPrice ?? 0).toLocaleString()}
                         </td>
                         <td className="py-2 px-3 text-right font-mono-tabular font-bold text-emerald-700">
-                          {p.totalBottles}
+                          {p.pendingActivationBottles ?? p.totalBottles ?? 0}
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          {p.isDuplicate ? (
+                            duplicateHandling === 'skip' ? (
+                              <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                Auto-Skipped
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                Will Merge Stock
+                              </span>
+                            )
+                          ) : p.isValid ? (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-emerald-100 text-emerald-800">
+                              New Item
+                            </span>
+                          ) : (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-rose-100 text-rose-800">
+                              Error
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {parsedRows.length > 50 && (
+              {displayedRows.length > 100 && (
                 <p className="text-[11px] text-slate-500 text-right">
-                  Showing first 50 rows of {parsedRows.length} total rows.
+                  Showing first 100 rows of {displayedRows.length} displayed items.
                 </p>
               )}
             </div>
@@ -590,13 +847,17 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
             )}
             <button
               type="button"
-              disabled={validProducts.length === 0 || isImporting}
+              disabled={targetsToImport.length === 0 || isImporting}
               onClick={handleExecuteImport}
               className="px-6 py-2.5 bg-[#FFDE00] hover:bg-amber-400 disabled:opacity-40 text-[#0A006E] font-montserrat font-black text-xs sm:text-sm rounded-xl cursor-pointer shadow-md transition flex items-center gap-2"
             >
               <Package className="w-4 h-4" />
               <span>
-                Commit {validProducts.length > 0 ? `${validProducts.length} Products` : 'CSV'} to Inventory
+                {targetsToImport.length > 0
+                  ? duplicateHandling === 'skip' && duplicateProducts.length > 0
+                    ? `Import ${targetsToImport.length} Unique Items (${duplicateProducts.length} duplicates auto-skipped)`
+                    : `Import ${targetsToImport.length} Products into Inventory`
+                  : 'No Valid Products to Import'}
               </span>
             </button>
           </div>
