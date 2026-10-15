@@ -79,36 +79,11 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
   };
 }
 
-export const MASTER_IMPORTED_INVENTORY: Product[] = NAIROBI_DRINKS_PRODUCTS.map((p, idx) =>
-  normalizeCatalogProduct(p, idx)
+import UPDATED_INVENTORY from './data/updated_products.json';
+
+export const MASTER_IMPORTED_INVENTORY: Product[] = UPDATED_INVENTORY.map((p, idx) =>
+  normalizeCatalogProduct(p as any, idx)
 );
-
-/**
- * Universal Governance Helper: Checks whether a product is cleared and available for sale.
- * All uploaded products (CSV imports / new onboardings) must wait for barcode scanning
- * and verification before they can be sold to customers on the storefront or checked out in POS.
- */
-export function isProductAvailableForSale(product: Product | null | undefined): boolean {
-  if (!product) return false;
-  if (product.status === 'Inactive') return false;
-
-  // Uploaded products must wait for barcode scanning and onboarding activation
-  if (
-    product.isUploaded ||
-    product.status === 'Pending Onboarding' ||
-    product.isOnboarded === false ||
-    product.awaitingBarcodeScan
-  ) {
-    return Boolean(product.hasRealBarcode) && product.status === 'Active' && !product.awaitingBarcodeScan;
-  }
-
-  // Pre-catalog items without real barcode must also wait if marked unverified
-  if (product.barcodeVerificationStatus === 'UNVERIFIED_SOURCE' && !product.hasRealBarcode) {
-    return false;
-  }
-
-  return true;
-}
 
 // Auto SKU Generator for independent liquor products
 const SUBCATEGORY_PREFIX: Record<string, string> = {

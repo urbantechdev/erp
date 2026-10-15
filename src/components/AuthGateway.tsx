@@ -23,10 +23,17 @@ import {
   MapPin,
   ChevronRight,
   ExternalLink,
-  Globe,
+  Smartphone,
+  Menu,
+  X,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { StaffMember, StaffRole, Branch } from '../types';
 import { AnimatedErrorPromptIcon } from './AnimatedFeedback';
+import { isAudioMuted, toggleAudioMuted, playPosBeep } from '../utils/audioBeep';
 
 interface AuthGatewayProps {
   staffList: StaffMember[];
@@ -131,6 +138,51 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
   const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
   const pinInputRef = useRef<HTMLInputElement>(null);
   const lastSubmittedPinRef = useRef<string>('');
+
+  // Login Header Hamburger Menu & System Controls
+  const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(() => isAudioMuted());
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      if (typeof document !== 'undefined') {
+        setIsFullscreen(Boolean(document.fullscreenElement));
+      }
+    };
+    handleFsChange();
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+    };
+  }, []);
+
+  const handleToggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch {
+      // Browser permissions fallback
+    }
+  };
+
+  const handleToggleSound = () => {
+    const nextState = toggleAudioMuted();
+    setSoundMuted(nextState);
+    if (!nextState) {
+      playPosBeep('success');
+    }
+  };
+
+  const handleReplaySplash = () => {
+    setIsHamburgerOpen(false);
+    window.dispatchEvent(new CustomEvent('vaairo-replay-splash'));
+  };
 
   // Auto-focus hidden input whenever entering the PIN screen
   useEffect(() => {
@@ -338,7 +390,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
       map.set('br-hq-001', {
         id: 'br-hq-001',
         name: 'HQ - Main Branch',
-        regionName: 'Metropolitan CBD & High-Street Zone',
+        regionName: 'Metropolitan Nairobi West & Parklands Zone',
         code: 'BR-HQ-001',
         isMain: true,
         count: 0,
@@ -372,19 +424,20 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
       {/* VAAIRO Deep Navy Header with Curved Single-Wave Bottom Edge */}
-      <header className="relative bg-[#0A006E] text-white sticky top-0 z-40 pt-3.5 sm:pt-6 pb-8 sm:pb-14 px-3 sm:px-8 flex items-center justify-between gap-3 sm:gap-8 overflow-hidden shadow-lg">
+      <header className="relative bg-[#0A006E] text-white sticky top-0 z-40 pt-5 sm:pt-6 pb-12 sm:pb-14 px-4 sm:px-8 flex items-center justify-between gap-4 sm:gap-8 overflow-hidden shadow-lg">
+        <div className="silent-scanner-beam" />
         <a
           href="#top"
           onClick={(e) => {
             e.preventDefault();
             setScreenView('boxes');
           }}
-          className="flex items-center gap-2.5 sm:gap-4 relative z-10 whitespace-nowrap shrink-0"
+          className="flex items-center gap-3 sm:gap-4 relative z-10 whitespace-nowrap shrink-0"
         >
-          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white text-[#0A006E] flex items-center justify-center shadow-lg border-2 border-white">
-            <Wine className="w-5 h-5 sm:w-7 sm:h-7 stroke-[2.5]" />
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white text-[#0A006E] flex items-center justify-center shadow-lg border-2 border-white">
+            <Wine className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.5]" />
           </div>
-          <span className="font-montserrat font-black italic text-xl sm:text-4xl lg:text-5xl tracking-tighter text-white">
+          <span className="font-montserrat font-black italic text-2xl sm:text-4xl lg:text-5xl tracking-tighter text-white">
             VAAIRO{' '}
             <span className="text-[#FFDE00] not-italic text-xs sm:text-base font-black px-2 sm:px-2.5 py-0.5 sm:py-1 bg-white/10 rounded-xl ml-1 sm:ml-1.5 align-middle">
               ERP
@@ -392,22 +445,26 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
           </span>
         </a>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0 relative z-10">
+        {/* Login Header Actions: Clean Hamburger Button with All Relevant Features inside */}
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 relative z-10">
           <button
             type="button"
-            onClick={onOpenCustomerPortal}
-            className="h-9 sm:h-12 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-white hover:bg-[#FFDE00] text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 text-[11px] sm:text-xs font-montserrat font-black group"
-            title="Customer Website & Online Storefront"
-            aria-label="Customer Website & Online Storefront"
+            onClick={() => setIsHamburgerOpen((prev) => !prev)}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white hover:bg-slate-100 text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center justify-center active:scale-95"
+            title={isHamburgerOpen ? 'Close Menu' : 'Open Portal Features Menu'}
+            aria-label={isHamburgerOpen ? 'Close Menu' : 'Open Portal Features Menu'}
           >
-            <Globe className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.3] text-[#0A006E] group-hover:rotate-12 transition-transform" />
-            <span className="hidden sm:inline font-bold">Customer Website</span>
+            {isHamburgerOpen ? (
+              <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.4]" />
+            ) : (
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.4]" />
+            )}
           </button>
         </div>
 
         {/* Single Smooth Curved Wave Bottom Edge */}
         <svg
-          className="absolute bottom-0 left-0 w-full h-6 sm:h-12 pointer-events-none block"
+          className="absolute bottom-0 left-0 w-full h-10 sm:h-12 pointer-events-none block"
           viewBox="0 0 1440 80"
           preserveAspectRatio="none"
         >
@@ -424,127 +481,307 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
         </svg>
       </header>
 
+      {/* =====================================================================
+          LOGIN PORTAL HAMBURGER DRAWER / MODAL
+          Contains All Relevant Features inside:
+          1. Handheld Phone Scanner
+          2. Customer Online Storefront Portal
+          3. Fullscreen Display Mode
+          4. Terminal Sound Beep Mute/Unmute
+          5. Replay Brand Splash Animation
+          6. Branch & Network Information
+          7. Technical Support & System Version
+          ===================================================================== */}
+      {isHamburgerOpen && (
+        <div
+          onClick={() => setIsHamburgerOpen(false)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-start justify-end sm:p-6 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white w-full sm:w-96 sm:rounded-3xl h-full sm:h-auto sm:max-h-[90vh] shadow-2xl border-l-0 sm:border-2 border-[#0A006E] flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+          >
+            {/* Drawer Header */}
+            <div className="p-5 bg-[#0A006E] text-white flex items-center justify-between border-b-2 border-[#FFDE00]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white text-[#0A006E] flex items-center justify-center font-black">
+                  <Wine className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-montserrat font-black italic text-base text-white">
+                    VAAIRO <span className="text-[#FFDE00]">ERP</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-300 font-montserrat">
+                    Portal Utilities & Features
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHamburgerOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition"
+                aria-label="Close Menu"
+              >
+                <X className="w-4 h-4 stroke-[2.5]" />
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="p-4 overflow-y-auto space-y-3 font-montserrat">
+              {/* Feature 1: Phone Barcode Scanner */}
+              {onOpenPhoneScanner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHamburgerOpen(false);
+                    onOpenPhoneScanner();
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-amber-50 hover:bg-amber-100 border-2 border-amber-300 text-left flex items-start gap-3 transition cursor-pointer group shadow-2xs"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                    <Smartphone className="w-5 h-5 stroke-[2.3]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-black text-[#0A006E] flex items-center justify-between">
+                      <span>Phone Barcode Scanner</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0A006E] text-[#FFDE00] uppercase">
+                        Handheld
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
+                      Connect your phone camera to scan physical bottle barcodes directly into register.
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {/* Feature 2: Customer Online Storefront Portal */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsHamburgerOpen(false);
+                  onOpenCustomerPortal();
+                }}
+                className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-300 text-left flex items-start gap-3 transition cursor-pointer group shadow-2xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                  <ShoppingBag className="w-5 h-5 stroke-[2.3]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-black text-emerald-950 flex items-center justify-between">
+                    <span>Customer Online Store</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-700 text-white uppercase">
+                      Catalog
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
+                    Browse customer retail storefront and place direct orders.
+                  </p>
+                </div>
+              </button>
+
+              {/* Feature 3: Replay Brand Splash Intro Animation */}
+              <button
+                type="button"
+                onClick={handleReplaySplash}
+                className="w-full p-3.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-left flex items-start gap-3 transition cursor-pointer group shadow-2xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                  <Sparkles className="w-5 h-5 stroke-[2.3]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-black text-[#0A006E]">
+                    Replay Brand Splash Screen
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
+                    Replay the signature VAAIRO ERP animated startup screen.
+                  </p>
+                </div>
+              </button>
+
+              {/* Feature 4: Fullscreen Toggle */}
+              <button
+                type="button"
+                onClick={handleToggleFullscreen}
+                className="w-full p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left flex items-start gap-3 transition cursor-pointer group shadow-2xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                  {isFullscreen ? (
+                    <Minimize2 className="w-5 h-5 stroke-[2.3]" />
+                  ) : (
+                    <Maximize2 className="w-5 h-5 stroke-[2.3]" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-black text-slate-900 flex items-center justify-between">
+                    <span>Fullscreen Display Mode</span>
+                    <span className="text-[10px] font-bold text-slate-500">
+                      {isFullscreen ? 'Active' : 'Windowed'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
+                    Maximize window for kiosk terminals, tablets, and POS registers.
+                  </p>
+                </div>
+              </button>
+
+              {/* Feature 5: Sound Beeps Toggle */}
+              <button
+                type="button"
+                onClick={handleToggleSound}
+                className="w-full p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left flex items-start gap-3 transition cursor-pointer group shadow-2xs"
+              >
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform ${
+                    soundMuted ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                  }`}
+                >
+                  {soundMuted ? (
+                    <VolumeX className="w-5 h-5 stroke-[2.3]" />
+                  ) : (
+                    <Volume2 className="w-5 h-5 stroke-[2.3]" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-black text-slate-900 flex items-center justify-between">
+                    <span>Terminal Audio Feedback</span>
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        soundMuted ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}
+                    >
+                      {soundMuted ? 'Muted' : 'Sound ON'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
+                    {soundMuted
+                      ? 'Terminal beeps are muted for silent environments.'
+                      : 'Audio beeps sound on successful barcode and PIN scans.'}
+                  </p>
+                </div>
+              </button>
+
+              {/* Section: Operational Network Info */}
+              <div className="p-3.5 rounded-2xl bg-[#0A006E]/5 border border-[#0A006E]/15 text-xs space-y-1.5 text-slate-700">
+                <div className="flex items-center gap-2 font-black text-[#0A006E] text-[11px] uppercase tracking-wider">
+                  <Building2 className="w-4 h-4 text-[#0A006E]" />
+                  <span>Distribution Hub & Network</span>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-800">
+                  Main Branch: {branches[0]?.name || 'Nairobi West & Parklands (HQ)'}
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  Network: {branches.length || 1} Operational Hubs · {staffList.length} Registered Staff
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between font-montserrat text-xs text-slate-500">
+              <span className="text-[11px]">VAAIRO Enterprise ERP</span>
+              <a
+                href="https://urbantechdev.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 font-bold text-[#0A006E] hover:underline"
+              >
+                <span>urbantechdev.com</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* On-Screen Login Canvas */}
-      <main className="flex-1 flex flex-col justify-center max-w-6xl w-full mx-auto px-3 sm:px-8 py-2.5 sm:py-6 space-y-3 sm:space-y-6">
+      <main className="flex-1 flex flex-col justify-center max-w-6xl w-full mx-auto px-4 sm:px-8 py-6 space-y-6">
         {authError && (
-          <div className="max-w-5xl mx-auto w-full p-3 sm:p-4 rounded-2xl bg-red-50 border-2 border-red-500 text-xs sm:text-sm text-red-950 flex items-center gap-3 font-montserrat font-bold animate-error-shake shadow-lg">
+          <div className="max-w-5xl mx-auto w-full p-4 rounded-2xl bg-red-50 border-2 border-red-500 text-sm text-red-950 flex items-center gap-3.5 font-montserrat font-bold animate-error-shake shadow-lg">
             <AnimatedErrorPromptIcon size="md" />
             <span>{authError}</span>
           </div>
         )}
 
-        {/* VIEW 1: THREE LOGIN BOXES (RESPONSIVE CARDS ON MOBILE · 2X SQUARES ON DESKTOP) */}
+        {/* VIEW 1: THREE 2X SQUARE LOGIN BOXES (ADMIN | ACCOUNTS | STAFFS) */}
         {screenView === 'boxes' && (
-          <div className="space-y-3 max-w-5xl mx-auto w-full">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-8 lg:gap-10 w-full items-stretch sm:items-center">
-              {/* BOX 1: ADMIN */}
-              <div className="flex flex-col items-center w-full">
-                <div
-                  onClick={() => {
-                    if (isSubmitting) return;
-                    setSelectedBox('Admin');
-                    onGoogleLogin('Admin');
-                  }}
-                  className={`w-full group min-h-[68px] sm:min-h-0 aspect-auto sm:aspect-square rounded-2xl sm:rounded-3xl p-3 sm:p-8 flex flex-row sm:flex-col items-center justify-between sm:justify-center gap-3 sm:gap-6 text-left sm:text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 sm:hover:-translate-y-3 hover:scale-[1.01] sm:hover:scale-[1.04] hover:shadow-[0_20px_40px_-12px_rgba(10,0,110,0.5)] ${
-                    selectedBox === 'Admin'
-                      ? 'bg-[#0A006E] text-white border-[#FFDE00] shadow-xl ring-3 sm:ring-4 ring-[#FFDE00]/40'
-                      : 'bg-[#0A006E] text-white border-[#0A006E] hover:border-[#FFDE00]'
-                  } ${isSubmitting && selectedBox === 'Admin' ? 'opacity-80 pointer-events-none' : ''}`}
-                >
-                  <div className="silent-scanner-beam" />
-                  <div className="flex items-center gap-3 sm:flex-col sm:gap-6 min-w-0">
-                    <div className="w-12 h-12 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-md sm:shadow-xl border-2 sm:border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110 group-hover:rotate-3 relative z-10">
-                      {isSubmitting && selectedBox === 'Admin' ? (
-                        <Loader2 className="w-6 h-6 sm:w-14 sm:h-14 animate-spin text-[#0A006E]" />
-                      ) : (
-                        <ShieldCheck className="w-6 h-6 sm:w-14 sm:h-14 stroke-[2.2]" />
-                      )}
-                    </div>
-                    <div className="relative z-10 min-w-0">
-                      <h2 className="text-base sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-white leading-tight">
-                        ADMIN
-                      </h2>
-                      <p className="text-[11px] sm:hidden font-montserrat font-semibold text-white/80 mt-0.5 truncate">
-                        Executive Google Sign-In
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="sm:hidden flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/15 text-[#FFDE00] font-montserrat font-black text-xs shrink-0 border border-white/20 relative z-10">
-                    <span>Sign In</span>
-                    <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
-                  </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 lg:gap-10 max-w-5xl mx-auto w-full items-center">
+            {/* BOX 1: ADMIN (2x Square) */}
+            <div className="flex flex-col items-center">
+              <div
+                onClick={() => {
+                  if (isSubmitting) return;
+                  setSelectedBox('Admin');
+                  onGoogleLogin('Admin');
+                }}
+                className={`w-full group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(10,0,110,0.5)] ${
+                  selectedBox === 'Admin'
+                    ? 'bg-[#0A006E] text-white border-[#FFDE00] shadow-2xl ring-4 ring-[#FFDE00]/40'
+                    : 'bg-[#0A006E] text-white border-[#0A006E] hover:border-[#FFDE00]'
+                } ${isSubmitting && selectedBox === 'Admin' ? 'opacity-80 pointer-events-none' : ''}`}
+              >
+                <div className="silent-scanner-beam" />
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-xl border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10">
+                  {isSubmitting && selectedBox === 'Admin' ? (
+                    <Loader2 className="w-12 h-12 sm:w-14 sm:h-14 animate-spin text-[#0A006E]" />
+                  ) : (
+                    <ShieldCheck className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+                  )}
+                </div>
+                <div className="relative z-10">
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-white">
+                    ADMIN
+                  </h2>
                 </div>
               </div>
+            </div>
 
-              {/* BOX 2: ACCOUNTS */}
-              <div className="flex flex-col items-center w-full">
-                <div
-                  onClick={() => {
-                    if (isSubmitting) return;
-                    setSelectedBox('Accountant');
-                    onGoogleLogin('Accountant');
-                  }}
-                  className={`w-full group min-h-[68px] sm:min-h-0 aspect-auto sm:aspect-square rounded-2xl sm:rounded-3xl p-3 sm:p-8 flex flex-row sm:flex-col items-center justify-between sm:justify-center gap-3 sm:gap-6 text-left sm:text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 sm:hover:-translate-y-3 hover:scale-[1.01] sm:hover:scale-[1.04] hover:shadow-[0_20px_40px_-12px_rgba(255,222,0,0.6)] ${
-                    selectedBox === 'Accountant'
-                      ? 'bg-[#FFDE00] text-[#0A006E] border-[#0A006E] shadow-xl ring-3 sm:ring-4 ring-[#0A006E]/30'
-                      : 'bg-[#FFDE00] text-[#0A006E] border-amber-400 hover:border-[#0A006E]'
-                  } ${isSubmitting && selectedBox === 'Accountant' ? 'opacity-80 pointer-events-none' : ''}`}
-                >
-                  <div className="silent-scanner-beam-dark" />
-                  <div className="flex items-center gap-3 sm:flex-col sm:gap-6 min-w-0">
-                    <div className="w-12 h-12 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-md sm:shadow-xl border-2 sm:border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110 group-hover:-rotate-3 relative z-10">
-                      {isSubmitting && selectedBox === 'Accountant' ? (
-                        <Loader2 className="w-6 h-6 sm:w-14 sm:h-14 animate-spin text-[#FFDE00]" />
-                      ) : (
-                        <Calculator className="w-6 h-6 sm:w-14 sm:h-14 stroke-[2.2]" />
-                      )}
-                    </div>
-                    <div className="relative z-10 min-w-0">
-                      <h2 className="text-base sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E] leading-tight">
-                        ACCOUNTS
-                      </h2>
-                      <p className="text-[11px] sm:hidden font-montserrat font-semibold text-[#0A006E]/80 mt-0.5 truncate">
-                        Finance & Ledger Google Auth
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="sm:hidden flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#0A006E]/15 text-[#0A006E] font-montserrat font-black text-xs shrink-0 border border-[#0A006E]/20 relative z-10">
-                    <span>Sign In</span>
-                    <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
-                  </div>
+            {/* BOX 2: ACCOUNTS (2x Square) */}
+            <div className="flex flex-col items-center">
+              <div
+                onClick={() => {
+                  if (isSubmitting) return;
+                  setSelectedBox('Accountant');
+                  onGoogleLogin('Accountant');
+                }}
+                className={`w-full group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(255,222,0,0.6)] ${
+                  selectedBox === 'Accountant'
+                    ? 'bg-[#FFDE00] text-[#0A006E] border-[#0A006E] shadow-2xl ring-4 ring-[#0A006E]/30'
+                    : 'bg-[#FFDE00] text-[#0A006E] border-amber-400 hover:border-[#0A006E]'
+                } ${isSubmitting && selectedBox === 'Accountant' ? 'opacity-80 pointer-events-none' : ''}`}
+              >
+                <div className="silent-scanner-beam-dark" />
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xl border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3 relative z-10">
+                  {isSubmitting && selectedBox === 'Accountant' ? (
+                    <Loader2 className="w-12 h-12 sm:w-14 sm:h-14 animate-spin text-[#FFDE00]" />
+                  ) : (
+                    <Calculator className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+                  )}
+                </div>
+                <div className="relative z-10">
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E]">
+                    ACCOUNTS
+                  </h2>
                 </div>
               </div>
+            </div>
 
-              {/* BOX 3: STAFFS (Tapping switches on-screen to Departments) */}
-              <div className="flex flex-col items-center w-full">
-                <div
-                  onClick={handleOpenStaffDepartments}
-                  className={`w-full group min-h-[68px] sm:min-h-0 aspect-auto sm:aspect-square rounded-2xl sm:rounded-3xl p-3 sm:p-8 flex flex-row sm:flex-col items-center justify-between sm:justify-center gap-3 sm:gap-6 text-left sm:text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 sm:hover:-translate-y-3 hover:scale-[1.01] sm:hover:scale-[1.04] hover:shadow-[0_20px_40px_-12px_rgba(52,209,134,0.5)] ${
-                    selectedBox === 'Staff'
-                      ? 'bg-[#F0F2F0] text-slate-900 border-[#34D186] shadow-xl ring-3 sm:ring-4 ring-[#34D186]/35'
-                      : 'bg-[#F0F2F0] text-slate-900 border-slate-300 hover:border-[#0A006E] hover:bg-emerald-50/40'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 sm:flex-col sm:gap-6 min-w-0">
-                    <div className="w-12 h-12 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shadow-md sm:shadow-xl border-2 sm:border-3 border-[#0A006E] shrink-0 transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110 group-hover:rotate-3 relative z-10">
-                      <KeyRound className="w-6 h-6 sm:w-14 sm:h-14 stroke-[2.2]" />
-                    </div>
-                    <div className="relative z-10 min-w-0">
-                      <h2 className="text-base sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E] leading-tight">
-                        STAFFS
-                      </h2>
-                      <p className="text-[11px] sm:hidden font-montserrat font-semibold text-slate-600 mt-0.5 truncate">
-                        Counter POS & Warehouse PIN
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="sm:hidden flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#34D186]/25 text-[#0A006E] font-montserrat font-black text-xs shrink-0 border border-[#34D186]/40 relative z-10">
-                    <span>Enter PIN</span>
-                    <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
-                  </div>
+            {/* BOX 3: STAFFS (2x Square - Tapping switches on-screen to Departments) */}
+            <div className="flex flex-col items-center">
+              <div
+                onClick={handleOpenStaffDepartments}
+                className={`w-full group aspect-square rounded-3xl p-8 flex flex-col items-center justify-center gap-6 text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-3 hover:scale-[1.04] hover:shadow-[0_28px_56px_-12px_rgba(52,209,134,0.5)] ${
+                  selectedBox === 'Staff'
+                    ? 'bg-[#F0F2F0] text-slate-900 border-[#34D186] shadow-2xl ring-4 ring-[#34D186]/35'
+                    : 'bg-[#F0F2F0] text-slate-900 border-slate-300 hover:border-[#0A006E] hover:bg-emerald-50/40'
+                }`}
+              >
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shadow-xl border-3 border-[#0A006E] shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10">
+                  <KeyRound className="w-12 h-12 sm:w-14 sm:h-14 stroke-[2.2]" />
+                </div>
+                <div className="relative z-10">
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-montserrat font-black italic tracking-tight text-[#0A006E]">
+                    STAFFS
+                  </h2>
                 </div>
               </div>
             </div>
@@ -569,7 +806,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
               <div className="w-20" />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-7">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-5 sm:gap-7">
               {STAFF_DEPARTMENTS.map((dept) => {
                 const DeptIcon = dept.icon;
                 const count = staffList.filter((s) => s.role === dept.role && s.status === 'Active').length;
@@ -577,23 +814,23 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                   <div
                     key={dept.role}
                     onClick={() => handleSelectDepartment(dept.role)}
-                    className={`group aspect-square rounded-2xl sm:rounded-3xl p-3 sm:p-6 ${dept.cardBg} ${dept.cardBorder} border-3 flex flex-col items-center justify-center gap-2.5 sm:gap-4 text-center cursor-pointer relative overflow-hidden transition-all duration-300 hover:-translate-y-2.5 hover:scale-[1.03] shadow-md hover:shadow-2xl`}
+                    className={`group aspect-square rounded-3xl p-6 ${dept.cardBg} ${dept.cardBorder} border-3 flex flex-col items-center justify-center gap-4 text-center cursor-pointer relative overflow-hidden transition-all duration-300 hover:-translate-y-2.5 hover:scale-[1.03] shadow-lg hover:shadow-2xl`}
                   >
                     <div
-                      className={`w-13 h-13 sm:w-22 sm:h-22 rounded-2xl sm:rounded-3xl ${dept.badgeBg} ${dept.badgeText} flex items-center justify-center border-2 border-white shadow-lg sm:shadow-xl transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10 shrink-0`}
+                      className={`w-18 h-18 sm:w-22 sm:h-22 rounded-3xl ${dept.badgeBg} ${dept.badgeText} flex items-center justify-center border-2 border-white shadow-xl transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10`}
                     >
-                      <DeptIcon className="w-6 h-6 sm:w-11 sm:h-11 stroke-[2.2]" />
+                      <DeptIcon className="w-9 h-9 sm:w-11 sm:h-11 stroke-[2.2]" />
                     </div>
-                    <div className="relative z-10 min-w-0">
+                    <div className="relative z-10">
                       <h3
-                        className={`text-xs sm:text-lg font-montserrat font-black italic tracking-tight ${dept.titleText} leading-snug sm:leading-tight`}
+                        className={`text-base sm:text-lg font-montserrat font-black italic tracking-tight ${dept.titleText} leading-tight`}
                       >
                         {dept.title}
                       </h3>
-                      <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-montserrat font-bold ${
+                      <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-montserrat font-bold ${
                         dept.badgeBg === 'bg-[#FFDE00]' ? 'bg-white/20 text-white' : 'bg-[#0A006E]/15 text-[#0A006E]'
                       }`}>
-                        {count} Staff{count === 1 ? '' : 's'}
+                        {count} Staff Member{count === 1 ? '' : 's'}
                       </span>
                     </div>
                   </div>

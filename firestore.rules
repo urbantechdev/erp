@@ -157,24 +157,18 @@ service cloud.firestore {
     }
 
     match /payroll_runs/{runId} {
-      allow get: if isValidId(runId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(runId) && isValidPayrollRun(incoming());
-      allow delete: if isValidId(runId) && resource.data.createdAt >= '';
+      allow read: if true;
+      allow write: if isValidId(runId) && isValidPayrollRun(incoming());
     }
 
     match /staff/{staffId} {
-      allow get: if isValidId(staffId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(staffId) && isValidStaff(incoming());
-      allow delete: if isValidId(staffId) && resource.data.createdAt >= '';
+      allow read: if true;
+      allow write: if isValidId(staffId) && isValidStaff(incoming());
     }
 
     match /branches/{branchId} {
-      allow get: if isValidId(branchId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(branchId) && isValidBranch(incoming());
-      allow delete: if isValidId(branchId) && resource.data.createdAt >= '';
+      allow read: if true;
+      allow write: if isValidId(branchId) && isValidBranch(incoming());
     }
 
     match /business_units/{unitId} {
@@ -200,17 +194,13 @@ service cloud.firestore {
     }
 
     match /products/{productId} {
-      allow get: if isValidId(productId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(productId) && isValidProduct(incoming());
-      allow delete: if isValidId(productId) && resource.data.createdAt >= '';
+      allow read: if true;
+      allow write: if isValidId(productId) && isValidProduct(incoming());
     }
 
     match /partners/{partnerId} {
-      allow get: if isValidId(partnerId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(partnerId) && isValidPartner(incoming());
-      allow delete: if isValidId(partnerId) && resource.data.createdAt >= '';
+      allow read: if true;
+      allow write: if isValidId(partnerId) && isValidPartner(incoming());
     }
 
     match /stock_transfers/{transferId} {
@@ -221,23 +211,18 @@ service cloud.firestore {
     }
 
     match /transactions/{transactionId} {
-      allow get: if isValidId(transactionId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(transactionId) && isValidTransaction(incoming());
-      allow delete: if isValidId(transactionId) && resource.data.createdAt >= '';
+      allow read: if true;
+      allow write: if isValidId(transactionId) && isValidTransaction(incoming());
     }
 
     match /compliance_records/{recordId} {
-      allow get: if isValidId(recordId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(recordId) && isValidCompliance(incoming());
-      allow delete: if isValidId(recordId) && resource.data.createdAt >= '';
+      allow read: if true;
+      allow write: if isValidId(recordId) && isValidCompliance(incoming());
     }
 
     match /audit_logs/{logId} {
-      allow get: if isValidId(logId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create: if isValidId(logId) && isValidAuditLog(incoming());
+      allow read: if true;
+      allow write: if isValidId(logId) && isValidAuditLog(incoming());
     }
 
     match /website_delivery_orders/{orderId} {
@@ -246,19 +231,14 @@ service cloud.firestore {
       allow delete: if isValidId(orderId);
     }
 
-    function isValidActivePosCart(data) {
-      return data.keys().hasAll(['staffId', 'cartJson', 'totalUnits', 'grandTotal', 'updatedAt']) &&
-             data.staffId is string && data.staffId.size() <= 128 &&
-             data.cartJson is string && data.cartJson.size() <= 100000 &&
-             data.totalUnits is number &&
-             data.grandTotal is number &&
-             data.updatedAt is string && data.updatedAt.size() <= 64;
+    match /product_ratings/{ratingId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(ratingId);
+      allow delete: if isValidId(ratingId);
     }
 
     match /active_pos_carts/{cartId} {
-      allow get, list: if isValidId(cartId);
-      allow create, update: if isValidId(cartId) && isValidActivePosCart(incoming());
-      allow delete: if isValidId(cartId);
+      allow get, list, create, update, delete: if isValidId(cartId);
     }
   }
 }

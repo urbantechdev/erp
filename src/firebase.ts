@@ -49,17 +49,13 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
-  const errStr = error instanceof Error ? error.message : String(error);
-  if (
-    errStr.includes('Quota limit exceeded') ||
-    errStr.includes('resource-exhausted') ||
-    errStr.includes('offline') ||
-    errStr.includes('the client is offline')
-  ) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  if (errMsg.includes('Quota limit exceeded') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+    console.warn(`[Firestore Quota Exceeded] Operation '${operationType}' on path '${path}' fell back to local offline mode.`);
     return;
   }
   const errInfo: FirestoreErrorInfo = {
-    error: errStr,
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,

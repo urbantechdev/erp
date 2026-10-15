@@ -29,9 +29,6 @@ import {
   Wine,
   ChefHat,
   Layers,
-  Clock,
-  Send,
-  QrCode,
 } from 'lucide-react';
 import {
   Product,
@@ -75,16 +72,10 @@ interface PosViewsProps {
   partners: Partner[];
   businessUnits?: BusinessUnit[];
   restaurantInventory?: RestaurantInventoryItem[];
-  transactions?: TransactionDoc[];
   onCommitTransaction: (
     txDraft: Omit<TransactionDoc, 'id' | 'createdAt'>,
     updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[]
   ) => Promise<TransactionDoc | null>;
-  onUpdateTransaction?: (
-    txId: string,
-    updates: Partial<TransactionDoc>,
-    updatedProducts?: { productId: string; newTotal: number; newBranchStockJson: string }[]
-  ) => Promise<boolean>;
   onPreviewDoc: (doc: TransactionDoc) => void;
   onUpdateRestaurantItem?: (itemId: string, updates: Partial<RestaurantInventoryItem>) => Promise<void>;
 }
@@ -98,9 +89,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
   partners,
   businessUnits = [],
   restaurantInventory = [],
-  transactions = [],
   onCommitTransaction,
-  onUpdateTransaction,
   onPreviewDoc,
   onUpdateRestaurantItem,
 }) => {
@@ -240,7 +229,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
   useEffect(() => {
     if (isPhonePairModalOpen) {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const url = `${origin}/?phone_scanner=true&channel=cashier_main&staffId=${encodeURIComponent(currentUser.id)}&staffName=${encodeURIComponent(currentUser.name)}&staffRole=${encodeURIComponent(currentUser.role)}&staffEmail=${encodeURIComponent(currentUser.email || '')}`;
+      const url = `${origin}/?phone_scanner=true&staffId=${encodeURIComponent(currentUser.id)}&staffName=${encodeURIComponent(currentUser.name)}&staffRole=${encodeURIComponent(currentUser.role)}&staffEmail=${encodeURIComponent(currentUser.email || '')}`;
       setPairingUrl(url);
       QRCode.toDataURL(url, { width: 280, margin: 2, color: { dark: '#0A006E', light: '#FFFFFF' } })
         .then((dataUrl) => setPairingQrDataUrl(dataUrl))
@@ -248,135 +237,19 @@ export const PosViews: React.FC<PosViewsProps> = ({
     }
   }, [isPhonePairModalOpen, currentUser]);
 
-  // Queued Affiliate Orders for this branch
-  const queuedAffiliateOrders = useMemo(() => {
-    return transactions.filter(
-      (t) =>
-        t.status === 'Pending Verification' &&
-        (t.channel === 'Affiliate Rep' || t.paymentMethod?.toLowerCase().includes('cashier') || t.paymentMethod?.toLowerCase().includes('queued')) &&
-        (!activeBranch || t.branchId === activeBranch.id || !t.branchId)
-    );
-  }, [transactions, activeBranch]);
-
-  const [isQueuedOrdersModalOpen, setIsQueuedOrdersModalOpen] = useState(false);
-  const [settlingOrder, setSettlingOrder] = useState<TransactionDoc | null>(null);
-  const [settlingMethod, setSettlingMethod] = useState<'Cash' | 'M-Pesa'>('Cash');
-  const [settlingMpesaCode, setSettlingMpesaCode] = useState('');
-  const [isSettlingProcessing, setIsSettlingProcessing] = useState(false);
-
-  const handleSettleQueuedOrder = async () => {
-    if (!settlingOrder || !onUpdateTransaction) return;
-    setIsSettlingProcessing(true);
-
-    try {
-      let parsedItems: any[] = [];
-      try {
-        parsedItems = JSON.parse(settlingOrder.itemsSummary);
-      } catch {}
-
-      const updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[] = [];
-      for (const line of parsedItems) {
-        const prod = products.find((p) => p.id === line.productId || p.sku === line.sku);
-        const bottlesToDeduct = line.totalBottles || (line.unitMode === 'Case' ? line.quantity * (prod?.packSize || 12) : line.quantity);
-        if (prod && bottlesToDeduct > 0) {
-          const fallbackTotal = prod.totalBottles ?? (prod.packSize || 12) * 20;
-          let branchMap: Record<string, number> = {};
-          try {
-            branchMap = prod.branchStockSummary ? JSON.parse(prod.branchStockSummary) : {};
-          } catch {
-            branchMap = {};
-          }
-          const currentBranchQty = branchMap[activeBranch.id] ?? fallbackTotal;
-          const nextBranchQty = Math.max(0, currentBranchQty - bottlesToDeduct);
-          branchMap[activeBranch.id] = nextBranchQty;
-          const newTotal = Math.max(0, fallbackTotal - bottlesToDeduct);
-
-          updatedProducts.push({
-            productId: prod.id,
-            newTotal,
-            newBranchStockJson: JSON.stringify(branchMap),
-          });
-        }
-      }
-
-      const receiptNumber = `REC-CSH-${Date.now().toString().slice(-6)}`;
-      const success = await onUpdateTransaction(
-        settlingOrder.id,
-        {
-          status: 'Paid',
-          paymentMethod: `${settlingMethod} (Settled at Cashier Counter by ${currentUser.name})`,
-          relatedInvoiceNo: receiptNumber,
-        },
-        updatedProducts
-      );
-
-      if (success) {
-        playPosBeep('success');
-        const updatedDoc: TransactionDoc = {
-          ...settlingOrder,
-          status: 'Paid',
-          paymentMethod: `${settlingMethod} (Cashier: ${currentUser.name})`,
-          relatedInvoiceNo: receiptNumber,
-        };
-        setSettlingOrder(null);
-        setIsQueuedOrdersModalOpen(false);
-        onPreviewDoc(updatedDoc);
-      }
-    } finally {
-      setIsSettlingProcessing(false);
-    }
-  };
-
-  const handleLoadQueuedOrderToCart = (order: TransactionDoc) => {
-    let parsedItems: any[] = [];
-    try {
-      parsedItems = JSON.parse(order.itemsSummary);
-    } catch {}
-
-    const newCartItems: typeof cart = [];
-    for (const item of parsedItems) {
-      const prod = products.find((p) => p.id === item.productId || p.sku === item.sku);
-      if (prod) {
-        newCartItems.push({
-          id: `cart-${Date.now()}-${Math.random()}`,
-          kind: 'bonded_product',
-          product: prod,
-          unitMode: item.unitMode || 'Bottle',
-          quantityUnits: item.quantity || 1,
-          unitPrice: item.unitPrice || prod.baseRetailPrice,
-          name: prod.name,
-          category: prod.category || 'Liquor',
-        });
-      }
-    }
-
-    if (newCartItems.length > 0) {
-      setCart(newCartItems);
-      setCustomerName(order.customerName);
-      setAffiliateCode(order.affiliateCode || '');
-      setIsQueuedOrdersModalOpen(false);
-      playPosBeep('case');
-    }
-  };
-
   const localCartRef = useRef(cart);
   localCartRef.current = cart;
 
-  // Real-time listener: receive instant scans from phone under currentUser's account or main cashier channel
+  // Real-time listener: receive instant scans from phone under currentUser's account
   useEffect(() => {
-    const staffKey = currentUser.id || currentUser.email || 'cashier_main';
+    const staffKey = currentUser.id || currentUser.email;
+    if (!staffKey) return;
 
     const unsub = subscribeToActivePosCart(staffKey, (remote) => {
       // Enrich remote items with catalog product details for accurate pricing, taxes, and images
       const enrichedCart = remote.cart.map((item) => {
-        if (item.kind === 'bonded_product') {
-          const fullProd = products.find(
-            (p) =>
-              p.id === item.product?.id ||
-              p.sku === item.product?.sku ||
-              (item.product?.barcode && p.barcode === item.product.barcode) ||
-              p.name === item.name
-          ) || item.product;
+        if (item.kind === 'bonded_product' && item.product?.id) {
+          const fullProd = products.find((p) => p.id === item.product!.id) || item.product;
           return { ...item, product: fullProd };
         }
         return item;
@@ -797,28 +670,15 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
   const computedLineItems: LineItem[] = useMemo(() => {
     return cart.map((entry) => {
-      if (entry.kind === 'bonded_product') {
-        const prod =
-          entry.product ||
-          products.find(
-            (p) =>
-              p.id === (entry as any).productId ||
-              p.sku === (entry as any).sku ||
-              p.name === entry.name ||
-              p.id === entry.id
-          );
-        const packSize = prod?.packSize || prod?.bottlesPerCase || 12;
-        const geoPricing = prod
-          ? calculateGeoPrice(
-              prod,
-              activeRegion,
-              mode === 'wholesale' ? 'wholesale' : 'retail'
-            )
-          : { casePrice: (entry.unitPrice || 0) * packSize, unitBottlePrice: entry.unitPrice || 0 };
+      if (entry.kind === 'bonded_product' && entry.product) {
+        const packSize = entry.product.packSize || entry.product.bottlesPerCase || 12;
+        const geoPricing = calculateGeoPrice(
+          entry.product,
+          activeRegion,
+          mode === 'wholesale' ? 'wholesale' : 'retail'
+        );
         const unitPrice =
-          entry.unitMode === 'Case'
-            ? geoPricing.casePrice
-            : entry.unitPrice || geoPricing.unitBottlePrice;
+          entry.unitMode === 'Case' ? geoPricing.casePrice : geoPricing.unitBottlePrice;
         const totalBottles =
           entry.unitMode === 'Case'
             ? entry.quantityUnits * packSize
@@ -826,9 +686,9 @@ export const PosViews: React.FC<PosViewsProps> = ({
         const lineTotal = Math.round(unitPrice * entry.quantityUnits);
 
         return {
-          productId: prod?.id || entry.id,
-          sku: prod?.sku || (entry as any).sku || 'SKU',
-          name: prod?.name || entry.name,
+          productId: entry.product.id,
+          sku: entry.product.sku,
+          name: entry.product.name,
           unitMode: entry.unitMode,
           bottlesPerCase: packSize,
           quantityUnits: entry.quantityUnits,
@@ -1095,21 +955,6 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
           {/* Scanner Controls & Modalities */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Queued Affiliate Orders Processing Button */}
-            <button
-              type="button"
-              onClick={() => setIsQueuedOrdersModalOpen(true)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-sm transition hover:scale-[1.02] border-2 ${
-                queuedAffiliateOrders.length > 0
-                  ? 'bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-[#0A006E] animate-pulse'
-                  : 'bg-[#F0F2F0] hover:bg-slate-200 text-slate-700 border-slate-300'
-              }`}
-              title="View and process orders queued by field sales affiliates"
-            >
-              <Clock className="w-4 h-4" />
-              <span>Queued Orders ({queuedAffiliateOrders.length})</span>
-            </button>
-
             {/* Scan with My Phone QR / Pair Button */}
             <button
               type="button"
@@ -1448,17 +1293,14 @@ export const PosViews: React.FC<PosViewsProps> = ({
                   className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4 flex flex-col justify-between hover:border-[#0A006E] transition-all"
                 >
                   <div className="flex items-start gap-3.5">
-                    <div className="w-18 h-18 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden bg-slate-900 shadow-2xs">
-                      <ProductImage
-                        product={{
-                          ...product,
-                          category: product.category === 'LPS' ? 'LPS' : 'IPS',
-                        }}
-                        size="full"
-                        className="w-full h-full object-cover"
-                        showVolumeBadge={true}
-                      />
-                    </div>
+                    <ProductImage
+                      product={{
+                        ...product,
+                        category: product.category === 'LPS' ? 'LPS' : 'IPS',
+                      }}
+                      size="md"
+                      showVolumeBadge={true}
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono-tabular">
                         <span className="font-bold text-[#0A006E] truncate">{product.sku}</span>
@@ -1545,27 +1387,6 @@ export const PosViews: React.FC<PosViewsProps> = ({
                 {computedLineItems.length} Line Item{computedLineItems.length === 1 ? '' : 's'}
               </span>
             </div>
-          </div>
-
-          {/* Live Phone Barcode Scanner Status Strip */}
-          <div className={`px-4 py-2 border-b flex items-center justify-between text-xs font-montserrat font-bold transition-colors shrink-0 ${
-            isPhoneSyncActive
-              ? 'bg-emerald-50 text-emerald-950 border-emerald-200'
-              : 'bg-amber-50/70 text-slate-700 border-amber-200'
-          }`}>
-            <div className="flex items-center gap-2">
-              <Smartphone className={`w-4 h-4 ${isPhoneSyncActive ? 'text-[#1E9E60]' : 'text-amber-600'}`} />
-              <span className="text-[11px]">
-                {isPhoneSyncActive ? '🟢 Phone Scanner Linked · Live Beam Active' : '📱 Phone Scanner: Ready to Beam to Cart'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsPhonePairModalOpen(true)}
-              className="text-[10px] px-2 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-300 text-[#0A006E] font-black cursor-pointer shadow-2xs"
-            >
-              {isPhoneSyncActive ? 'QR Link' : 'Pair Phone'}
-            </button>
           </div>
 
           {/* Scrollable Register Content: Customer Details, Simplified M-Pesa, and Line Items */}
@@ -1771,36 +1592,8 @@ export const PosViews: React.FC<PosViewsProps> = ({
               </div>
 
               {computedLineItems.length === 0 ? (
-                <div className="bg-white border-2 border-dashed border-[#0A006E]/20 rounded-2xl p-5 text-center space-y-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#1E9E60] border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
-                    <Smartphone className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <h4 className="text-xs font-montserrat font-black text-[#0A006E]">
-                      Scan with Phone for Retail Checkout
-                    </h4>
-                    <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-tight">
-                      Point phone camera at any bottle barcode — it appears in this checkout cart instantly!
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setIsPhonePairModalOpen(true)}
-                      className="px-3 py-1.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-2xs transition"
-                    >
-                      <QrCode className="w-3.5 h-3.5" />
-                      Pair Phone
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsPhoneCompanionModalOpen(true)}
-                      className="px-3 py-1.5 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-2xs transition"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      Test Scanner
-                    </button>
-                  </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-5 text-center text-xs text-slate-500">
+                  Select IPS/LPS liquor products on the left or scan with your phone to populate this register.
                 </div>
               ) : (
                 computedLineItems.map((item, idx) => (
@@ -2054,194 +1847,6 @@ export const PosViews: React.FC<PosViewsProps> = ({
           regions={regions}
           onClose={() => setIsPhoneCompanionModalOpen(false)}
         />
-      )}
-
-      {/* ----------------------------------------------------------------- */}
-      {/* CASHIER MODAL: QUEUED AFFILIATE ORDERS DISPATCH & SETTLEMENT       */}
-      {/* ----------------------------------------------------------------- */}
-      {isQueuedOrdersModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
-          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-2xl w-full overflow-hidden p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div>
-                <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider block">
-                  Counter Cashier Processing Station
-                </span>
-                <h3 className="text-lg font-montserrat font-black text-[#0A006E] flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-amber-500" />
-                  <span>Queued Affiliate Orders ({queuedAffiliateOrders.length})</span>
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsQueuedOrdersModalOpen(false);
-                  setSettlingOrder(null);
-                }}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* List of Queued Orders */}
-            {queuedAffiliateOrders.length === 0 ? (
-              <div className="py-12 text-center text-slate-500 space-y-2">
-                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-                <h4 className="font-montserrat font-bold text-slate-800">All Queued Orders Cleared</h4>
-                <p className="text-xs text-slate-500">There are currently no orders queued by field affiliates waiting for payment at this depot.</p>
-              </div>
-            ) : (
-              <div className="max-h-96 overflow-y-auto space-y-3 pr-1">
-                {queuedAffiliateOrders.map((order) => {
-                  let parsedItems: any[] = [];
-                  try {
-                    parsedItems = JSON.parse(order.itemsSummary);
-                  } catch {}
-
-                  const token = order.relatedInvoiceNo || order.docNumber;
-
-                  return (
-                    <div
-                      key={order.id}
-                      className="bg-[#F0F2F0] border-2 border-slate-200 hover:border-[#0A006E] rounded-2xl p-4 transition space-y-2.5"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded-lg text-xs font-mono font-black bg-[#0A006E] text-[#FFDE00]">
-                              {token}
-                            </span>
-                            <span className="text-xs font-montserrat font-black text-slate-900">
-                              {order.customerName}
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-medium mt-0.5">
-                            Queued by: <strong>{order.createdBy}</strong> ({order.createdByRole}) · {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <div className="text-sm font-montserrat font-black text-[#0A006E] font-mono-tabular">
-                            {formatKes(order.totalAmount)}
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            {parsedItems.length} items
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Items Preview */}
-                      <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
-                        {parsedItems.map((it: any, i: number) => (
-                          <div key={i} className="flex justify-between">
-                            <span className="truncate max-w-[280px]">
-                              {it.quantity}x {it.productName || it.name} ({it.unitMode || 'Bottle'})
-                            </span>
-                            <span className="font-mono font-bold">{formatKes(it.lineTotal || (it.unitPrice * it.quantity))}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Cashier Actions */}
-                      <div className="flex items-center justify-end gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleLoadQueuedOrderToCart(order)}
-                          className="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#0A006E] border border-slate-300 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
-                        >
-                          Load to Register Cart
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setSettlingOrder(order)}
-                          className="px-4 py-1.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition"
-                        >
-                          Accept Payment &amp; Settle
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Sub-Modal: Quick Cashier Settlement Dialog */}
-            {settlingOrder && (
-              <div className="bg-[#0A006E] text-white rounded-2xl p-4 sm:p-5 space-y-3 mt-4 animate-scale-in">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[10px] font-montserrat font-bold text-[#FFDE00] uppercase tracking-wider block">
-                      Confirm Counter Payment
-                    </span>
-                    <h4 className="text-base font-montserrat font-black text-white">
-                      Settling Order {settlingOrder.relatedInvoiceNo || settlingOrder.docNumber}
-                    </h4>
-                    <p className="text-xs text-white/80">
-                      Customer: {settlingOrder.customerName} · Affiliate: {settlingOrder.createdBy}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] text-white/70">AMOUNT TO COLLECT:</div>
-                    <div className="text-xl font-montserrat font-black text-[#FFDE00] font-mono-tabular">
-                      {formatKes(settlingOrder.totalAmount)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Payment Tender Method */}
-                <div className="space-y-1.5 pt-1">
-                  <label className="text-[11px] font-semibold text-white/80">
-                    Payment Tendered:
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSettlingMethod('Cash')}
-                      className={`py-2 px-3 rounded-xl text-xs font-montserrat font-black cursor-pointer text-center transition ${
-                        settlingMethod === 'Cash'
-                          ? 'bg-[#FFDE00] text-[#0A006E]'
-                          : 'bg-white/10 text-white hover:bg-white/20'
-                      }`}
-                    >
-                      💵 Cash Tendered
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSettlingMethod('M-Pesa')}
-                      className={`py-2 px-3 rounded-xl text-xs font-montserrat font-black cursor-pointer text-center transition ${
-                        settlingMethod === 'M-Pesa'
-                          ? 'bg-[#34D186] text-[#0A006E]'
-                          : 'bg-white/10 text-white hover:bg-white/20'
-                      }`}
-                    >
-                      📱 M-Pesa Till / Paybill
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setSettlingOrder(null)}
-                    className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSettlingProcessing}
-                    onClick={handleSettleQueuedOrder}
-                    className="flex-2 py-2.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition disabled:opacity-50"
-                  >
-                    {isSettlingProcessing ? 'Completing...' : 'Confirm Payment & Print Receipt'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
       )}
     </div>
   );

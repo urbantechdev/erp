@@ -13,14 +13,14 @@ import { hashPin, isPinHashed } from './utils/security';
 export const NAIROBI_GEO_REGIONS: GeoRegion[] = [
   {
     id: 'reg-nrb-cbd',
-    code: 'NRB-CBD-001',
-    name: 'Nairobi Central Business District (CBD & High-Street)',
+    code: 'NRB-WST-001',
+    name: 'Nairobi West & Parklands (Premium Distribution Hub)',
     tierType: 'Metro Core',
     wholesaleMultiplier: 1.0,
     retailMultiplier: 1.0,
     freightLevyPerCase: 0,
     regionalTaxRate: 0.16,
-    notes: 'City Square, River Road, Tom Mboya, Upper Hill commercial core',
+    notes: 'Parklands, Westlands, Spring Valley, High-end hospitality hub',
     createdAt: '2026-01-01T00:00:00.000Z',
   },
   {

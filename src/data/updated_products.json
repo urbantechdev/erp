@@ -1,0 +1,308 @@
+[
+  {
+    "sku": "IPS-WHISKY-002",
+    "name": "Johnnie Walker Black Label 12 Years (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 4500.0,
+    "wholesalePriceKes": 3850.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "IPS-WHISKY-002-1L",
+    "name": "Johnnie Walker Black Label 12 Years (1 Litre)",
+    "category": "Whisky",
+    "baseRetailPrice": 4999.0,
+    "wholesalePriceKes": 4250.0,
+    "volumeMl": 1000,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-003",
+    "name": "Johnnie Walker Red Label (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 2499.0,
+    "wholesalePriceKes": 2080.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-004",
+    "name": "Johnnie Walker Double Black (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 5999.0,
+    "wholesalePriceKes": 5100.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-005",
+    "name": "Johnnie Walker Gold Label Reserve (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 7999.0,
+    "wholesalePriceKes": 6800.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-006",
+    "name": "Jameson Triple Distilled Irish Whiskey (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 3500.0,
+    "wholesalePriceKes": 2950.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-007",
+    "name": "Jameson Black Barrel Irish Whiskey (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 5499.0,
+    "wholesalePriceKes": 4680.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-008",
+    "name": "Jack Daniel's Old No. 7 Tennessee Whiskey (700ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 4500.0,
+    "wholesalePriceKes": 3820.0,
+    "volumeMl": 700,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-009",
+    "name": "Jack Daniel's Tennessee Honey (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 3999.0,
+    "wholesalePriceKes": 3400.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-010",
+    "name": "The Singleton of Dufftown 12 Years (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 5999.0,
+    "wholesalePriceKes": 5100.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-011",
+    "name": "The Singleton of Dufftown 15 Years (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 7499.0,
+    "wholesalePriceKes": 6400.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-012",
+    "name": "Glenfiddich 12 Year Old Single Malt (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 6499.0,
+    "wholesalePriceKes": 5550.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-013",
+    "name": "Glenfiddich 15 Year Old Solera Reserve (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 9800.0,
+    "wholesalePriceKes": 8400.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-014",
+    "name": "Glenfiddich 18 Year Old Single Malt (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 14400.0,
+    "wholesalePriceKes": 12400.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-015",
+    "name": "Chivas Regal 12 Year Old Blended Scotch (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 4499.0,
+    "wholesalePriceKes": 3800.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-WHS-016",
+    "name": "Black & White Blended Scotch Whisky (750ml)",
+    "category": "Whisky",
+    "baseRetailPrice": 1499.0,
+    "wholesalePriceKes": 1240.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-COG-017",
+    "name": "Hennessy VS Cognac (700ml)",
+    "category": "Cognac & Brandy",
+    "baseRetailPrice": 5999.0,
+    "wholesalePriceKes": 5150.0,
+    "volumeMl": 700,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-COG-018",
+    "name": "Hennessy VSOP Privilège Cognac (700ml)",
+    "category": "Cognac & Brandy",
+    "baseRetailPrice": 10999.0,
+    "wholesalePriceKes": 9400.0,
+    "volumeMl": 700,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-COG-019",
+    "name": "Martell VS Single Distillery Cognac (1 Litre)",
+    "category": "Cognac & Brandy",
+    "baseRetailPrice": 9500.0,
+    "wholesalePriceKes": 8100.0,
+    "volumeMl": 1000,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-COG-020",
+    "name": "Martell Blue Swift VSOP (750ml)",
+    "category": "Cognac & Brandy",
+    "baseRetailPrice": 9999.0,
+    "wholesalePriceKes": 8550.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-BRN-021",
+    "name": "Richot Blended Brandy (750ml)",
+    "category": "Cognac & Brandy",
+    "baseRetailPrice": 1599.0,
+    "wholesalePriceKes": 1320.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-022",
+    "name": "Tanqueray London Dry Gin (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 2999.0,
+    "wholesalePriceKes": 2520.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-023",
+    "name": "Tanqueray Flor de Sevilla Distilled Gin (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 3499.0,
+    "wholesalePriceKes": 2950.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-024",
+    "name": "Tanqueray No. TEN Small Batch Gin (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 4500.0,
+    "wholesalePriceKes": 3850.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-025",
+    "name": "Gordon's Special London Dry Gin (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 2299.0,
+    "wholesalePriceKes": 1920.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-026",
+    "name": "Gordon's Premium Pink Distilled Gin (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 2499.0,
+    "wholesalePriceKes": 2100.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-027",
+    "name": "Hendrick's Scottish Small Batch Gin (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 5499.0,
+    "wholesalePriceKes": 4680.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-028",
+    "name": "Bombay Sapphire London Dry Gin (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 3199.0,
+    "wholesalePriceKes": 2700.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-029",
+    "name": "Gilbey's Special Dry Gin (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 1499.0,
+    "wholesalePriceKes": 1240.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-GIN-030",
+    "name": "Chrome Gin Smooth & Crisp (750ml)",
+    "category": "Gin",
+    "baseRetailPrice": 750.0,
+    "wholesalePriceKes": 620.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-VDK-031",
+    "name": "Absolut Blue Original Swedish Vodka (750ml)",
+    "category": "Vodka",
+    "baseRetailPrice": 2599.0,
+    "wholesalePriceKes": 2180.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-VDK-032",
+    "name": "Cîroc Snap Frost Ultra-Premium Vodka (750ml)",
+    "category": "Vodka",
+    "baseRetailPrice": 4999.0,
+    "wholesalePriceKes": 4250.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-VDK-033",
+    "name": "Smirnoff Red Label No. 21 Vodka (750ml)",
+    "category": "Vodka",
+    "baseRetailPrice": 1599.0,
+    "wholesalePriceKes": 1330.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  },
+  {
+    "sku": "ND-VDK-034",
+    "name": "Chrome Lemon & Triple Distilled Vodka (750ml)",
+    "category": "Vodka",
+    "baseRetailPrice": 750.0,
+    "wholesalePriceKes": 620.0,
+    "volumeMl": 750,
+    "createdAt": "2026-10-15T00:00:00Z"
+  }
+]

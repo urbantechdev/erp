@@ -269,8 +269,6 @@ export interface Product {
 
   // Real Barcode Governance & Registration by Inventory Manager
   hasRealBarcode?: boolean;
-  isUploaded?: boolean;
-  awaitingBarcodeScan?: boolean;
   barcodeRegisteredAt?: string;
   barcodeRegisteredBy?: string;
   barcodeRegisteredByRole?: string;
@@ -282,14 +280,6 @@ export interface Product {
   onboardedAt?: string;
   onboardedBy?: string;
   onboardedBranchId?: string;
-
-  // POS Channel Routing & Differentiation (Cashier POS vs Sales POS)
-  posChannel?: 'retail' | 'sales' | 'both';
-
-  // Sales POS Stock Activation by Inventory Controller
-  barcodeScannedByController?: boolean;
-  controllerScannedAt?: string;
-  controllerScannedBy?: string;
 }
 
 export interface DamageSpoilageIncident {

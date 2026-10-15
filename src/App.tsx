@@ -68,8 +68,6 @@ import {
   DamageSpoilageIncident,
   BusinessUnit,
   RestaurantInventoryItem,
-  SaleOrder,
-  LineItem,
 } from './types';
 import {
   getDeviceFingerprint,
@@ -86,10 +84,7 @@ import {
 } from './seedData';
 import { AuthGateway } from './components/AuthGateway';
 import { PosViews } from './components/PosViews';
-import { AffiliateSalesPosDashboard } from './components/AffiliateSalesPosDashboard';
 import { CustomerPortalView } from './components/CustomerPortalView';
-import { CustomerStorefrontWebsite } from './components/storefront/CustomerStorefrontWebsite';
-import { ErpProvider } from './context/ErpContext';
 import {
   OverviewModule,
   InventoryModule,
@@ -180,7 +175,6 @@ export default function App() {
       search.get('mode') === 'website'
     );
   });
-  const [customerPortalMode, setCustomerPortalMode] = useState<'website' | 'b2b'>('website');
   const [phoneScannerSession, setPhoneScannerSession] = useState<{
     isOpen: boolean;
     staffId: string;
@@ -202,7 +196,17 @@ export default function App() {
     }
     return { isOpen: false, staffId: '', staffName: '', staffEmail: '', staffRole: '' };
   });
-  const [activeModule, setActiveModule] = useState<ERPModuleId>('overview');
+  const [activeModule, setActiveModule] = useState<ERPModuleId>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('erp_active_module') as ERPModuleId) || 'overview';
+    }
+    return 'overview';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('erp_active_module', activeModule);
+  }, [activeModule]);
+
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<TransactionDoc | null>(null);
@@ -438,7 +442,8 @@ export default function App() {
         }
       },
       (err) => {
-        // Fall back gracefully to local storage when remote collection permissions are restricted or quota exceeded
+        // Fall back gracefully to local storage when remote collection permissions are restricted
+        console.warn('[Firestore] business_units access restricted; using local data:', err?.message || err);
       }
     );
 
@@ -454,7 +459,8 @@ export default function App() {
         }
       },
       (err) => {
-        // Fall back gracefully to local storage when remote collection permissions are restricted or quota exceeded
+        // Fall back gracefully to local storage when remote collection permissions are restricted
+        console.warn('[Firestore] restaurant_inventory access restricted; using local data:', err?.message || err);
       }
     );
 
@@ -621,7 +627,7 @@ export default function App() {
         const adminId = 'staff-admin-feminiholdings';
         const defaultBranch = branches[0] || {
           id: 'br-hq-metro',
-          name: 'Main Branch (Head Office — Nairobi CBD)',
+          name: 'Main Branch (Head Office — Nairobi West)',
         };
         const newAdmin: StaffMember = {
           id: adminId,
@@ -1002,84 +1008,11 @@ export default function App() {
     }
   };
 
-  const handleUpdateTransaction = async (
-    txId: string,
-    updates: Partial<TransactionDoc>,
-    updatedProducts?: { productId: string; newTotal: number; newBranchStockJson: string }[]
-  ): Promise<boolean> => {
-    try {
-      await updateDoc(doc(db, 'transactions', txId), cleanFirestoreData(updates));
-      if (updatedProducts && updatedProducts.length > 0) {
-        for (const up of updatedProducts) {
-          await persistProductState(up.productId, {
-            totalBottles: up.newTotal,
-            branchStockSummary: up.newBranchStockJson,
-          });
-        }
-      }
-      triggerToast('success', 'Transaction Updated', `Order ${updates.docNumber || txId} updated.`);
-      return true;
-    } catch (error) {
-      triggerToast('error', 'Update Failed', 'Could not update transaction.');
-      handleFirestoreError(error, OperationType.UPDATE, `transactions/${txId}`);
-      return false;
-    }
-  };
-
-  const handleCommitFromStorefront = async (saleOrder: SaleOrder) => {
-    const lineItems: LineItem[] = (saleOrder.items || []).map((it) => ({
-      productId: it.productId,
-      sku: it.sku,
-      name: it.productName,
-      unitMode: 'Bottle',
-      bottlesPerCase: 12,
-      quantityUnits: it.quantity,
-      totalBottles: it.quantity,
-      unitPrice: it.unitPrice || 0,
-      lineTotal: it.totalAmount || ((it.unitPrice || 0) * it.quantity),
-    }));
-    const fulfillingBranch =
-      branches.find((b) => b.id === saleOrder.branchId) || branches[0];
-    const targetRegion =
-      regions.find((r) => r.id === fulfillingBranch?.regionId) || regions[0];
-
-    await handleCommitTransaction(
-      {
-        docNumber: saleOrder.orderNumber,
-        docType: 'Online Order',
-        channel: 'Customer Online Portal',
-        branchId: fulfillingBranch?.id || 'br-hq-01',
-        branchName: fulfillingBranch?.name || 'HQ - Main Branch',
-        regionId: targetRegion?.id || 'reg-nrb-cbd',
-        regionName: targetRegion?.name || 'Nairobi Central Business District',
-        customerName: `${saleOrder.customerName} (${saleOrder.deliveryAddress || 'Express Delivery'})`,
-        customerLicenseNo: 'ONLINE-21-VERIFIED',
-        itemsSummary: JSON.stringify(lineItems),
-        subtotal: saleOrder.subtotalKes || Math.round(saleOrder.totalKes / 1.16),
-        exciseAndTax:
-          saleOrder.vatAmountKes ||
-          Math.round(saleOrder.totalKes - saleOrder.totalKes / 1.16),
-        totalAmount: saleOrder.totalKes,
-        paymentMethod: 'M-Pesa Express',
-        status: 'Approved',
-        createdBy: saleOrder.customerName || 'Online Customer',
-        createdByRole: 'Online Customer',
-      },
-      []
-    );
-  };
-
   const handleCreateProduct = async (prodDraft: Omit<Product, 'id' | 'createdAt'>) => {
     const id = `prod-${Date.now()}`;
-    const hasRealBarcode = Boolean(prodDraft.hasRealBarcode && prodDraft.barcode);
     const fullProd: Product = cleanFirestoreData({
       ...prodDraft,
       id,
-      isUploaded: true,
-      hasRealBarcode,
-      awaitingBarcodeScan: !hasRealBarcode,
-      status: hasRealBarcode ? 'Active' : 'Pending Onboarding',
-      barcodeVerificationStatus: hasRealBarcode ? 'APPROVED_MASTER' : 'UNVERIFIED_SOURCE',
       createdAt: new Date().toISOString(),
     });
     try {
@@ -1163,10 +1096,6 @@ export default function App() {
         branchStockSummary: JSON.stringify(branchMap),
         isOnboarded: true,
         status: 'Active',
-        hasRealBarcode: true,
-        isUploaded: false,
-        awaitingBarcodeScan: false,
-        barcodeVerificationStatus: 'APPROVED_MASTER',
         onboardedAt: new Date().toISOString(),
         onboardedBy: currentUser?.name || 'Branch Manager',
         onboardedBranchId: branchId,
@@ -1338,52 +1267,14 @@ export default function App() {
     newProducts: Omit<Product, 'id' | 'createdAt'>[]
   ): Promise<number> => {
     let successCount = 0;
-    let mergedDuplicateCount = 0;
     try {
       const now = Date.now();
       for (let i = 0; i < newProducts.length; i++) {
         const prod = newProducts[i];
-
-        // Auto-check for duplicate in existing catalog
-        const existingProd = products.find((p) => {
-          if (prod.barcode && p.barcode && p.barcode.trim() === prod.barcode.trim()) {
-            return true;
-          }
-          if (
-            p.name.trim().toLowerCase() === prod.name.trim().toLowerCase() &&
-            Number(p.volumeMl || 750) === Number(prod.volumeMl || 750)
-          ) {
-            return true;
-          }
-          return false;
-        });
-
-        if (existingProd) {
-          // Merge incoming bottles into existing product stock
-          const incomingBottles = Number(prod.pendingActivationBottles || prod.totalBottles || 12);
-          const updatedPending = (existingProd.pendingActivationBottles || 0) + incomingBottles;
-          await updateDoc(doc(db, 'products', existingProd.id), {
-            pendingActivationBottles: updatedPending,
-            baseLandedCost: prod.baseLandedCost || existingProd.baseLandedCost,
-            baseWholesalePrice: prod.baseWholesalePrice || existingProd.baseWholesalePrice,
-            baseRetailPrice: prod.baseRetailPrice || existingProd.baseRetailPrice,
-            updatedAt: new Date().toISOString(),
-          });
-          mergedDuplicateCount++;
-          successCount++;
-          continue;
-        }
-
         const id = `prod-${now}-${i}`;
-        const hasRealBarcode = Boolean(prod.hasRealBarcode && prod.barcode);
         const fullProd: Product = cleanFirestoreData({
           ...prod,
           id,
-          isUploaded: true,
-          hasRealBarcode,
-          awaitingBarcodeScan: !hasRealBarcode,
-          status: hasRealBarcode ? 'Active' : 'Pending Onboarding',
-          barcodeVerificationStatus: hasRealBarcode ? 'APPROVED_MASTER' : 'UNVERIFIED_SOURCE',
           createdAt: new Date().toISOString(),
         });
         await setDoc(doc(db, 'products', id), fullProd);
@@ -1392,9 +1283,7 @@ export default function App() {
       triggerToast(
         'success',
         'CSV Batch Import Completed',
-        mergedDuplicateCount > 0
-          ? `Processed ${successCount} products (${mergedDuplicateCount} existing duplicates auto-merged into stock).`
-          : `Successfully imported ${successCount} products into bonded inventory.`
+        `Successfully imported ${successCount} products into bonded inventory.`
       );
       if (currentUser) {
         await recordAuditLog(
@@ -1981,28 +1870,20 @@ export default function App() {
 
   if (!currentUser && standaloneCustomerPortal) {
     return (
-      <ErpProvider
-        initialProducts={products}
-        initialBranches={branches}
-        initialCurrentUser={currentUser}
-        onCommitOrder={handleCommitFromStorefront}
-      >
+      <>
+        <MobileSplashScreen />
         <StatusFeedbackToast status={toastStatus} onDismiss={() => setToastStatus(null)} />
-        {customerPortalMode === 'website' ? (
-          <CustomerStorefrontWebsite onSwitchToErp={() => setStandaloneCustomerPortal(false)} />
-        ) : (
-          <CustomerPortalView
-            products={products}
-            branches={branches}
-            regions={regions}
-            onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
-            onPreviewDoc={(d) => setPreviewDoc(d)}
-            onBackToErpLogin={() => setStandaloneCustomerPortal(false)}
-            isStandalonePortal={true}
-          />
-        )}
+        <CustomerPortalView
+          products={products}
+          branches={branches}
+          regions={regions}
+          onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
+          onPreviewDoc={(d) => setPreviewDoc(d)}
+          onBackToErpLogin={() => setStandaloneCustomerPortal(false)}
+          isStandalonePortal={true}
+        />
         <DocumentPrintModal docData={previewDoc} onClose={() => setPreviewDoc(null)} />
-      </ErpProvider>
+      </>
     );
   }
 
@@ -2044,10 +1925,7 @@ export default function App() {
           branches={branches}
           onGoogleLogin={handleGoogleLogin}
           onPinLogin={handlePinLogin}
-          onOpenCustomerPortal={() => {
-            setCustomerPortalMode('website');
-            setStandaloneCustomerPortal(true);
-          }}
+          onOpenCustomerPortal={() => setStandaloneCustomerPortal(true)}
           onOpenPhoneScanner={() =>
             setPhoneScannerSession({
               isOpen: true,
@@ -2712,8 +2590,6 @@ export default function App() {
               onPreviewDoc={(d) => setPreviewDoc(d)}
               onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
               onNavigateModule={handleSelectModule}
-              onCommitTransaction={handleCommitTransaction}
-              onUpdateTransaction={handleUpdateTransaction}
             />
           )}
 
@@ -2727,44 +2603,26 @@ export default function App() {
               partners={partners}
               businessUnits={businessUnits}
               restaurantInventory={restaurantInventory}
-              transactions={transactions}
               onCommitTransaction={handleCommitTransaction}
-              onUpdateTransaction={handleUpdateTransaction}
               onPreviewDoc={(d) => setPreviewDoc(d)}
               onUpdateRestaurantItem={handleUpdateRestaurantItem}
             />
           )}
 
           {activeModule === 'sales_pos' && (
-            currentUser.role === 'Affiliate Sales Representative' ? (
-              <AffiliateSalesPosDashboard
-                currentUser={currentUser}
-                products={products}
-                branches={branches}
-                regions={regions}
-                transactions={transactions}
-                onCommitTransaction={handleCommitTransaction}
-                onUpdateTransaction={handleUpdateTransaction}
-                onPreviewDoc={(d) => setPreviewDoc(d)}
-                onNavigateModule={handleSelectModule}
-              />
-            ) : (
-              <PosViews
-                mode="wholesale"
-                currentUser={currentUser}
-                products={products}
-                branches={branches}
-                regions={regions}
-                partners={partners}
-                businessUnits={businessUnits}
-                restaurantInventory={restaurantInventory}
-                transactions={transactions}
-                onCommitTransaction={handleCommitTransaction}
-                onUpdateTransaction={handleUpdateTransaction}
-                onPreviewDoc={(d) => setPreviewDoc(d)}
-                onUpdateRestaurantItem={handleUpdateRestaurantItem}
-              />
-            )
+            <PosViews
+              mode="wholesale"
+              currentUser={currentUser}
+              products={products}
+              branches={branches}
+              regions={regions}
+              partners={partners}
+              businessUnits={businessUnits}
+              restaurantInventory={restaurantInventory}
+              onCommitTransaction={handleCommitTransaction}
+              onPreviewDoc={(d) => setPreviewDoc(d)}
+              onUpdateRestaurantItem={handleUpdateRestaurantItem}
+            />
           )}
 
           {activeModule === 'inventory' && (
@@ -2872,62 +2730,13 @@ export default function App() {
           )}
 
           {activeModule === 'customer_portal' && (
-            <ErpProvider
-              initialProducts={products}
-              initialBranches={branches}
-              initialCurrentUser={currentUser}
-              onCommitOrder={handleCommitFromStorefront}
-            >
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-                  <div>
-                    <h2 className="text-base sm:text-lg font-montserrat font-black text-[#0A006E] flex items-center gap-2">
-                      <ShoppingBag className="w-5 h-5 text-[#0A006E]" />
-                      Customer Online Storefront & E-Commerce Website
-                    </h2>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Merged from LIQUOR repository with automated GPS branch routing, real-time M-Pesa express checkout, customer Google accounts, and downloadable eTIMS/order documents.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setCustomerPortalMode('website')}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-montserrat font-black transition-all cursor-pointer ${
-                        customerPortalMode === 'website'
-                          ? 'bg-[#0A006E] text-[#FFDE00] shadow-sm ring-2 ring-[#0A006E]/20'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      🌐 Customer Website
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCustomerPortalMode('b2b')}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-montserrat font-black transition-all cursor-pointer ${
-                        customerPortalMode === 'b2b'
-                          ? 'bg-[#0A006E] text-[#FFDE00] shadow-sm ring-2 ring-[#0A006E]/20'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      📋 B2B Order Desk
-                    </button>
-                  </div>
-                </div>
-
-                {customerPortalMode === 'website' ? (
-                  <CustomerStorefrontWebsite onSwitchToErp={() => setActiveModule('overview')} />
-                ) : (
-                  <CustomerPortalView
-                    products={products}
-                    branches={branches}
-                    regions={regions}
-                    onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
-                    onPreviewDoc={(d) => setPreviewDoc(d)}
-                  />
-                )}
-              </div>
-            </ErpProvider>
+            <CustomerPortalView
+              products={products}
+              branches={branches}
+              regions={regions}
+              onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
+              onPreviewDoc={(d) => setPreviewDoc(d)}
+            />
           )}
 
           {activeModule === 'outlets_restaurants' && (
@@ -2955,7 +2764,36 @@ export default function App() {
         onSelectModule={handleSelectModule}
         allowedModules={allowedModules}
         currentUser={currentUser}
+        activeBranch={branches.find((b) => b.id === currentUser.branchId) || branches[0]}
+        products={products}
+        transactions={transactions}
         onOpenCustomerPortal={() => handleSelectModule('customer_portal')}
+        onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
+        onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
+        onOpenPhoneScanner={() => {
+          setPhoneScannerSession({
+            isOpen: true,
+            staffId: currentUser.id,
+            staffName: currentUser.name,
+            staffEmail: currentUser.email || '',
+            staffRole: currentUser.role,
+          });
+        }}
+        onQuickPrintLastDoc={() => {
+          if (transactions.length > 0) {
+            setPreviewDoc(transactions[0]);
+          } else {
+            triggerToast('error', 'No Transactions', 'No recent commercial document found to reprint.');
+          }
+        }}
+        onOpenPayslip={() => {
+          if (currentUserLatestPayrollRecord) {
+            setViewingPayslipRecord(currentUserLatestPayrollRecord);
+          } else {
+            triggerToast('error', 'No Finalized Payslip', 'No recent payroll run record found for your account.');
+          }
+        }}
+        onTriggerToast={(type, title, message) => triggerToast(type, title, message)}
       />
 
       {/* Commercial Print & PDF Modal */}
