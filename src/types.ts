@@ -269,6 +269,8 @@ export interface Product {
 
   // Real Barcode Governance & Registration by Inventory Manager
   hasRealBarcode?: boolean;
+  isUploaded?: boolean;
+  awaitingBarcodeScan?: boolean;
   barcodeRegisteredAt?: string;
   barcodeRegisteredBy?: string;
   barcodeRegisteredByRole?: string;
