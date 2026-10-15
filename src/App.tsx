@@ -442,10 +442,10 @@ export default function App() {
   // Attach real-time Firestore listeners with local cache persistence
   useEffect(() => {
     const unsubStaff = onSnapshot(
-      query(collection(db, 'staff'), where('createdAt', '>=', '')),
+      collection(db, 'staff'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as StaffMember), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as StaffMember), id: d.id }));
+        if (list.length > 0) {
           setStaffList(list);
           try {
             localStorage.setItem('erp_staff_backup', JSON.stringify(list));
@@ -456,10 +456,10 @@ export default function App() {
     );
 
     const unsubBranches = onSnapshot(
-      query(collection(db, 'branches'), where('createdAt', '>=', '')),
+      collection(db, 'branches'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as Branch), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as Branch), id: d.id }));
+        if (list.length > 0) {
           setBranches(list);
           try {
             localStorage.setItem('erp_branches_backup', JSON.stringify(list));
@@ -470,10 +470,10 @@ export default function App() {
     );
 
     const unsubRegions = onSnapshot(
-      query(collection(db, 'geo_regions'), where('createdAt', '>=', '')),
+      collection(db, 'geo_regions'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as GeoRegion), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as GeoRegion), id: d.id }));
+        if (list.length > 0) {
           setRegions(list);
           try {
             localStorage.setItem('erp_regions_backup', JSON.stringify(list));
@@ -484,10 +484,10 @@ export default function App() {
     );
 
     const unsubProducts = onSnapshot(
-      query(collection(db, 'products'), where('createdAt', '>=', '')),
+      collection(db, 'products'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as Product), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as Product), id: d.id }));
+        if (list.length > 0) {
           setFirestoreProducts(list);
           try {
             localStorage.setItem('erp_products_local_override', JSON.stringify(list));
@@ -498,10 +498,10 @@ export default function App() {
     );
 
     const unsubPartners = onSnapshot(
-      query(collection(db, 'partners'), where('createdAt', '>=', '')),
+      collection(db, 'partners'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as Partner), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as Partner), id: d.id }));
+        if (list.length > 0) {
           setPartners(list);
           try {
             localStorage.setItem('erp_partners_backup', JSON.stringify(list));
@@ -512,10 +512,10 @@ export default function App() {
     );
 
     const unsubTransfers = onSnapshot(
-      query(collection(db, 'stock_transfers'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
+      collection(db, 'stock_transfers'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as StockTransfer), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as StockTransfer), id: d.id }));
+        if (list.length > 0) {
           setTransfers(list);
           try {
             localStorage.setItem('erp_transfers_backup', JSON.stringify(list));
@@ -526,10 +526,10 @@ export default function App() {
     );
 
     const unsubTransactions = onSnapshot(
-      query(collection(db, 'transactions'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
+      collection(db, 'transactions'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as TransactionDoc), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as TransactionDoc), id: d.id }));
+        if (list.length > 0) {
           setTransactions(list);
           try {
             localStorage.setItem('erp_transactions_backup', JSON.stringify(list));
@@ -540,10 +540,10 @@ export default function App() {
     );
 
     const unsubCompliance = onSnapshot(
-      query(collection(db, 'compliance_records'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
+      collection(db, 'compliance_records'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as ComplianceRecord), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as ComplianceRecord), id: d.id }));
+        if (list.length > 0) {
           setComplianceRecords(list);
           try {
             localStorage.setItem('erp_compliance_backup', JSON.stringify(list));
@@ -554,10 +554,10 @@ export default function App() {
     );
 
     const unsubAudit = onSnapshot(
-      query(collection(db, 'audit_logs'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
+      collection(db, 'audit_logs'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as AuditLog), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as AuditLog), id: d.id }));
+        if (list.length > 0) {
           setAuditLogs(list);
           try {
             localStorage.setItem('erp_audit_logs_backup', JSON.stringify(list));
@@ -568,10 +568,10 @@ export default function App() {
     );
 
     const unsubPayrollRuns = onSnapshot(
-      query(collection(db, 'payroll_runs'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
+      collection(db, 'payroll_runs'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as PayrollRun), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as PayrollRun), id: d.id }));
+        if (list.length > 0) {
           setPayrollRuns(list);
           try {
             localStorage.setItem('erp_payroll_runs_backup', JSON.stringify(list));
@@ -582,10 +582,10 @@ export default function App() {
     );
 
     const unsubBusinessUnits = onSnapshot(
-      query(collection(db, 'business_units'), where('createdAt', '>=', '')),
+      collection(db, 'business_units'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as BusinessUnit), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as BusinessUnit), id: d.id }));
+        if (list.length > 0) {
           setBusinessUnits(list);
           try {
             localStorage.setItem('erp_business_units', JSON.stringify(list));
@@ -593,16 +593,15 @@ export default function App() {
         }
       },
       (err) => {
-        // Fall back gracefully to local storage when remote collection permissions are restricted
         console.warn('[Firestore] business_units access restricted; using local data:', err?.message || err);
       }
     );
 
     const unsubRestaurantInventory = onSnapshot(
-      query(collection(db, 'restaurant_inventory'), where('createdAt', '>=', '')),
+      collection(db, 'restaurant_inventory'),
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ ...(d.data() as RestaurantInventoryItem), id: d.id }));
+        const list = snap.docs.map((d) => ({ ...(d.data() as RestaurantInventoryItem), id: d.id }));
+        if (list.length > 0) {
           setRestaurantInventory(list);
           try {
             localStorage.setItem('erp_restaurant_inventory', JSON.stringify(list));
@@ -610,7 +609,6 @@ export default function App() {
         }
       },
       (err) => {
-        // Fall back gracefully to local storage when remote collection permissions are restricted
         console.warn('[Firestore] restaurant_inventory access restricted; using local data:', err?.message || err);
       }
     );
