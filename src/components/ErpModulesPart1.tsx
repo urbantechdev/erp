@@ -39,10 +39,14 @@ import {
   Tag,
   Activity,
   FileText,
+  Warehouse,
+  Store,
+  ShoppingBag,
 } from 'lucide-react';
 import {
   StaffMember,
   Branch,
+  FacilityType,
   GeoRegion,
   Product,
   Partner,
@@ -2970,6 +2974,8 @@ export const BranchesAndTransfersModule: React.FC<{
   onSetMainBranch,
   onCreateStockTransfer,
 }) => {
+  const [facilityType, setFacilityType] = useState<FacilityType>('warehouse');
+  const [facilityFilter, setFacilityFilter] = useState<'all' | FacilityType>('all');
   const [branchName, setBranchName] = useState('');
   const [branchRegionId, setBranchRegionId] = useState(regions[0]?.id || '');
   const [branchAddress, setBranchAddress] = useState('');
@@ -3006,19 +3012,31 @@ export const BranchesAndTransfersModule: React.FC<{
     e.preventDefault();
     if (!branchName.trim() || !canManageBranches) return;
     const reg = regions.find((r) => r.id === branchRegionId) || regions[0];
-    const code = `BR-${branchName.slice(0, 3).toUpperCase()}-00${branches.length + 1}`;
+    const prefix =
+      facilityType === 'warehouse'
+        ? 'WHS'
+        : facilityType === 'store'
+        ? 'STR'
+        : facilityType === 'shop'
+        ? 'SHP'
+        : 'BR';
+    const cleanName = branchName.trim();
+    const tag = cleanName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'HUB';
+    const code = `${prefix}-${tag}-00${branches.length + 1}`;
     await onCreateBranch({
       code,
-      name: branchName.trim(),
+      name: cleanName,
+      facilityType,
       regionId: reg?.id || 'reg-metro-core',
       regionName: reg?.name || 'Metropolitan Zone',
-      address: branchAddress.trim() || 'Regional Distribution Yard',
+      address: branchAddress.trim() || `${facilityType.toUpperCase()} Commercial Premises`,
       managerName: currentUser.name,
-      exciseBondLicense: exciseBondLicense.trim(),
+      exciseBondLicense: exciseBondLicense.trim() || (facilityType === 'warehouse' ? 'KRA-BOND-2026-REG' : 'EXEMPT-RETAIL-LIC'),
       status: 'Operational',
     });
     setBranchName('');
     setBranchAddress('');
+    setExciseBondLicense('');
   };
 
   const handleExecuteTransfer = async (e: React.FormEvent) => {
@@ -3075,78 +3093,176 @@ export const BranchesAndTransfersModule: React.FC<{
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Create New Branch Card / Boundary Card */}
+        {/* Create New Facility Card / Boundary Card */}
         {canManageBranches ? (
           <form
             onSubmit={handleAddBranch}
             className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4"
           >
-            <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-              <Building2 className="w-4 h-4 text-[#0A006E]" />
-              <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
-                Establish New Regional Distribution Branch / Depot
-              </h3>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-[#0A006E]" />
+                <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+                  Commission Facility · Store, Shop, or Warehouse
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-[#0A006E] uppercase">
+                {facilityType.replace('_', ' ')}
+              </span>
             </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            {/* Facility Type Selector Pills */}
             <div>
-              <label className="font-montserrat font-bold text-slate-700">Branch / Depot Name *</label>
-              <input
-                required
-                type="text"
-                value={branchName}
-                onChange={(e) => setBranchName(e.target.value)}
-                placeholder="e.g. Karen Suburban Bonded Hub"
-                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-              />
+              <label className="font-montserrat font-bold text-slate-700 block mb-1.5 text-xs">
+                Select Facility Class &amp; Purpose *
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFacilityType('warehouse')}
+                  className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                    facilityType === 'warehouse'
+                      ? 'border-[#0A006E] bg-blue-50 text-[#0A006E] font-bold shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Warehouse className={`w-5 h-5 ${facilityType === 'warehouse' ? 'text-blue-700' : 'text-slate-500'}`} />
+                  <span className="font-montserrat font-bold text-xs">Warehouse</span>
+                  <span className="text-[9px] text-slate-500">Storage &amp; Bonded Depot</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFacilityType('store')}
+                  className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                    facilityType === 'store'
+                      ? 'border-[#0A006E] bg-emerald-50 text-[#0A006E] font-bold shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Store className={`w-5 h-5 ${facilityType === 'store' ? 'text-emerald-700' : 'text-slate-500'}`} />
+                  <span className="font-montserrat font-bold text-xs">Store</span>
+                  <span className="text-[9px] text-slate-500">Retail Spirits Store</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFacilityType('shop')}
+                  className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                    facilityType === 'shop'
+                      ? 'border-[#0A006E] bg-purple-50 text-[#0A006E] font-bold shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <ShoppingBag className={`w-5 h-5 ${facilityType === 'shop' ? 'text-purple-700' : 'text-slate-500'}`} />
+                  <span className="font-montserrat font-bold text-xs">Shop</span>
+                  <span className="text-[9px] text-slate-500">Counter Trade Shop</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFacilityType('branch_depot')}
+                  className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                    facilityType === 'branch_depot'
+                      ? 'border-[#0A006E] bg-amber-50 text-[#0A006E] font-bold shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Building2 className={`w-5 h-5 ${facilityType === 'branch_depot' ? 'text-amber-700' : 'text-slate-500'}`} />
+                  <span className="font-montserrat font-bold text-xs">Branch Depot</span>
+                  <span className="text-[9px] text-slate-500">Regional Joint Hub</span>
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="font-montserrat font-bold text-slate-700">Assigned Geo-Location Zone</label>
-              <select
-                value={branchRegionId}
-                onChange={(e) => setBranchRegionId(e.target.value)}
-                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold"
-              >
-                {regions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.tierType})
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="font-montserrat font-bold text-slate-700">
+                  {facilityType === 'warehouse' ? 'Warehouse Name *' : facilityType === 'store' ? 'Store Name *' : facilityType === 'shop' ? 'Shop Name *' : 'Branch / Depot Name *'}
+                </label>
+                <input
+                  required
+                  type="text"
+                  value={branchName}
+                  onChange={(e) => setBranchName(e.target.value)}
+                  placeholder={
+                    facilityType === 'warehouse'
+                      ? 'e.g. Central Bonded Spirits Warehouse'
+                      : facilityType === 'store'
+                      ? 'e.g. Kilimani Retail Bottle Store'
+                      : facilityType === 'shop'
+                      ? 'e.g. Westlands Commercial Liquor Shop'
+                      : 'e.g. Karen Suburban Bonded Hub'
+                  }
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="font-montserrat font-bold text-slate-700">Assigned Geo-Location Zone</label>
+                <select
+                  value={branchRegionId}
+                  onChange={(e) => setBranchRegionId(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold"
+                >
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.tierType})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-montserrat font-bold text-slate-700">
+                  Physical Premises / Yard Address *
+                </label>
+                <input
+                  required
+                  type="text"
+                  value={branchAddress}
+                  onChange={(e) => setBranchAddress(e.target.value)}
+                  placeholder={
+                    facilityType === 'warehouse'
+                      ? 'e.g. Industrial Area Logistics Depot, Gate 3'
+                      : facilityType === 'store'
+                      ? 'e.g. Argwings Kodhek Rd, Suite #12'
+                      : facilityType === 'shop'
+                      ? 'e.g. Woodvale Grove Wholesale Counter #4'
+                      : 'e.g. Industrial Park Block C'
+                  }
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="font-montserrat font-bold text-slate-700">
+                  {facilityType === 'warehouse' ? 'Customs Bond License *' : 'Trading / Excise Permit'}
+                </label>
+                <input
+                  type="text"
+                  value={exciseBondLicense}
+                  onChange={(e) => setExciseBondLicense(e.target.value)}
+                  placeholder={
+                    facilityType === 'warehouse'
+                      ? 'e.g. KRA-BOND-2026-9901A'
+                      : facilityType === 'store'
+                      ? 'e.g. RETAIL-LIQUOR-LIC-2026'
+                      : 'e.g. MERCHANT-PERMIT-2026'
+                  }
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="font-montserrat font-bold text-slate-700">Physical Yard Address *</label>
-              <input
-                required
-                type="text"
-                value={branchAddress}
-                onChange={(e) => setBranchAddress(e.target.value)}
-                placeholder="e.g. Industrial Park Block C"
-                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
-              />
-            </div>
-
-            <div>
-              <label className="font-montserrat font-bold text-slate-700">Customs / Excise Bond License</label>
-              <input
-                type="text"
-                value={exciseBondLicense}
-                onChange={(e) => setExciseBondLicense(e.target.value)}
-                className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className="px-4 py-2.5 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] font-montserrat font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-[#FFDE00]" />
-            Commission New Branch
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="px-4 py-2.5 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] font-montserrat font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm transition"
+            >
+              <Plus className="w-4 h-4 text-[#FFDE00]" />
+              Commission New {facilityType === 'warehouse' ? 'Warehouse' : facilityType === 'store' ? 'Store' : facilityType === 'shop' ? 'Shop' : 'Branch'}
+            </button>
+          </form>
       ) : (
         <div className="bg-[#F0F2F0] border-2 border-slate-200 rounded-2xl p-5 space-y-3 flex flex-col justify-between">
           <div>
@@ -3278,49 +3394,139 @@ export const BranchesAndTransfersModule: React.FC<{
       )}
       </div>
 
-      {/* Genuine Branches Directory */}
+      {/* Facilities & Branches Directory with Store / Shop / Warehouse Filters */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-[#0A006E]" />
               <h3 className="text-sm sm:text-base font-montserrat font-black text-[#0A006E]">
-                Operational Genuine Depots & Bonded Branches ({branches.length} Active)
+                Operational Facilities: Stores, Shops &amp; Warehouses ({branches.length} Registered)
               </h3>
             </div>
             <p className="text-xs text-slate-600 mt-0.5">
-              Genuine commissioned branches. The HQ Flagship depot serves as the primary system branch.
+              Physical establishments registered in the ERP. The primary central warehouse serves as the master bonded repository.
             </p>
           </div>
           <span className="px-3 py-1 bg-white border border-slate-300 rounded-xl text-xs font-montserrat font-bold text-[#0A006E]">
-            Main Branch: {branches.find((b) => b.isMain || b.code === 'BR-HQ-001')?.name || 'HQ - Main Branch'}
+            Main Hub: {branches.find((b) => b.isMain || b.code === 'BR-HQ-001')?.name || 'HQ - Main Branch'}
           </span>
+        </div>
+
+        {/* Filter Chips for Store, Shop, Warehouse */}
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <button
+            type="button"
+            onClick={() => setFacilityFilter('all')}
+            className={`px-3 py-1.5 rounded-xl font-montserrat font-bold cursor-pointer transition ${
+              facilityFilter === 'all'
+                ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            All Facilities ({branches.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFacilityFilter('warehouse')}
+            className={`px-3 py-1.5 rounded-xl font-montserrat font-bold cursor-pointer transition flex items-center gap-1.5 ${
+              facilityFilter === 'warehouse'
+                ? 'bg-blue-700 text-white shadow-xs'
+                : 'bg-white text-blue-800 hover:bg-blue-50 border border-blue-200'
+            }`}
+          >
+            <Warehouse className="w-3.5 h-3.5" />
+            Warehouses ({branches.filter((b) => b.facilityType === 'warehouse').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFacilityFilter('store')}
+            className={`px-3 py-1.5 rounded-xl font-montserrat font-bold cursor-pointer transition flex items-center gap-1.5 ${
+              facilityFilter === 'store'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
+            }`}
+          >
+            <Store className="w-3.5 h-3.5" />
+            Stores ({branches.filter((b) => b.facilityType === 'store').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFacilityFilter('shop')}
+            className={`px-3 py-1.5 rounded-xl font-montserrat font-bold cursor-pointer transition flex items-center gap-1.5 ${
+              facilityFilter === 'shop'
+                ? 'bg-purple-700 text-white shadow-xs'
+                : 'bg-white text-purple-800 hover:bg-purple-50 border border-purple-200'
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            Shops ({branches.filter((b) => b.facilityType === 'shop').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFacilityFilter('branch_depot')}
+            className={`px-3 py-1.5 rounded-xl font-montserrat font-bold cursor-pointer transition flex items-center gap-1.5 ${
+              facilityFilter === 'branch_depot'
+                ? 'bg-amber-700 text-white shadow-xs'
+                : 'bg-white text-amber-800 hover:bg-amber-50 border border-amber-200'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            Branch Depots ({branches.filter((b) => !b.facilityType || b.facilityType === 'branch_depot').length})
+          </button>
         </div>
 
         <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
-                <th className="py-2.5 px-3 font-black">Branch Code</th>
-                <th className="py-2.5 px-3 font-black">Branch / Depot Name</th>
-                <th className="py-2.5 px-3 font-black">Geo-Zone & Address</th>
-                <th className="py-2.5 px-3 font-black">Customs Bond License</th>
+                <th className="py-2.5 px-3 font-black">Code</th>
+                <th className="py-2.5 px-3 font-black">Type</th>
+                <th className="py-2.5 px-3 font-black">Facility Name</th>
+                <th className="py-2.5 px-3 font-black">Geo-Zone &amp; Address</th>
+                <th className="py-2.5 px-3 font-black">Customs / Permit</th>
                 <th className="py-2.5 px-3 font-black">Status</th>
                 <th className="py-2.5 px-3 font-black text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {branches.map((b) => {
+              {branches
+                .filter((b) => facilityFilter === 'all' || (facilityFilter === 'branch_depot' ? (!b.facilityType || b.facilityType === 'branch_depot') : b.facilityType === facilityFilter))
+                .map((b) => {
                 const isMainBranch = Boolean(
                   b.isMain ||
                   b.code === 'BR-HQ-001' ||
                   b.name.toLowerCase().includes('hq') ||
                   b.name.toLowerCase().includes('flagship')
                 );
+                const type = b.facilityType || 'warehouse';
                 return (
                   <tr key={b.id} className="hover:bg-slate-50">
                     <td className="py-3 px-3 font-mono-tabular font-bold text-[#0A006E]">
                       {b.code}
+                    </td>
+                    <td className="py-3 px-3">
+                      {type === 'warehouse' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                          <Warehouse className="w-3 h-3 text-blue-700" />
+                          Warehouse
+                        </span>
+                      ) : type === 'store' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          <Store className="w-3 h-3 text-emerald-700" />
+                          Store
+                        </span>
+                      ) : type === 'shop' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
+                          <ShoppingBag className="w-3 h-3 text-purple-700" />
+                          Shop
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          <Building2 className="w-3 h-3 text-amber-700" />
+                          Depot
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-3 font-bold text-slate-900">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -3328,7 +3534,7 @@ export const BranchesAndTransfersModule: React.FC<{
                         {isMainBranch && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-[#FFDE00] text-[#0A006E] border border-amber-300 shadow-2xs">
                             <Star className="w-2.5 h-2.5 fill-current" />
-                            HQ · MAIN BRANCH
+                            HQ · MAIN
                           </span>
                         )}
                       </div>

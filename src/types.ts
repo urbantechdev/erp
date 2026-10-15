@@ -110,6 +110,8 @@ export interface PayrollRun {
   createdAt: string;
 }
 
+export type FacilityType = 'warehouse' | 'store' | 'shop' | 'branch_depot';
+
 export interface Branch {
   id: string;
   code: string;
@@ -120,6 +122,7 @@ export interface Branch {
   managerName: string;
   exciseBondLicense: string;
   status: 'Operational' | 'Audit Hold' | 'Closed';
+  facilityType?: FacilityType;
   isMain?: boolean;
   createdAt: string;
   location?: string;
@@ -135,7 +138,14 @@ export interface Branch {
   preferredProductPrices?: Record<string, BranchProductPriceOverride>;
 }
 
-export type BusinessUnitType = 'restaurant_club' | 'merchant_shop' | 'bar_lounge';
+export type BusinessUnitType =
+  | 'restaurant_club'
+  | 'merchant_shop'
+  | 'bar_lounge'
+  | 'retail_store'
+  | 'store'
+  | 'shop'
+  | 'warehouse';
 
 export interface BusinessUnit {
   id: string;

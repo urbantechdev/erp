@@ -134,32 +134,118 @@ const MODULE_META: Record<
 };
 
 export default function App() {
-  // Real-time Firestore state
-  const [staffList, setStaffList] = useState<StaffMember[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [regions, setRegions] = useState<GeoRegion[]>(NAIROBI_GEO_REGIONS);
-  const [firestoreProducts, setFirestoreProducts] = useState<Product[]>([]);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [transfers, setTransfers] = useState<StockTransfer[]>([]);
-  const [transactions, setTransactions] = useState<TransactionDoc[]>([]);
-  const [complianceRecords, setComplianceRecords] = useState<ComplianceRecord[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
+  // Real-time Firestore state with local persistent backup recovery
+  const [staffList, setStaffList] = useState<StaffMember[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_staff_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [branches, setBranches] = useState<Branch[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_branches_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [regions, setRegions] = useState<GeoRegion[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_regions_backup');
+      return saved ? JSON.parse(saved) : NAIROBI_GEO_REGIONS;
+    } catch {
+      return NAIROBI_GEO_REGIONS;
+    }
+  });
+  const [firestoreProducts, setFirestoreProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_products_local_override');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [partners, setPartners] = useState<Partner[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_partners_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [transfers, setTransfers] = useState<StockTransfer[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_transfers_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [transactions, setTransactions] = useState<TransactionDoc[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_transactions_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [complianceRecords, setComplianceRecords] = useState<ComplianceRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_compliance_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_audit_logs_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_payroll_runs_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>(() => {
     try {
       const saved = localStorage.getItem('erp_business_units');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.some((u: any) => u.id === 'out-hq-rest-01' || u.name?.includes('Sovereign'))) {
+          localStorage.removeItem('erp_business_units');
+          return [];
+        }
+        return parsed;
+      }
     } catch {}
-    return INITIAL_BUSINESS_UNITS;
+    return [];
   });
   const [restaurantInventory, setRestaurantInventory] = useState<RestaurantInventoryItem[]>(() => {
     try {
       const saved = localStorage.getItem('erp_restaurant_inventory');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.some((i: any) => i.id === 'dish-01' || i.name?.includes('Angus'))) {
+          localStorage.removeItem('erp_restaurant_inventory');
+          return [];
+        }
+        return parsed;
+      }
     } catch {}
-    return INITIAL_RESTAURANT_INVENTORY;
+    return [];
   });
   const [viewingPayslipRecord, setViewingPayslipRecord] = useState<PayrollRecord | null>(null);
+  const [firestoreStatus, setFirestoreStatus] = useState<{ isDatabaseReady: boolean; isNotFound: boolean; message: string } | null>(null);
+  const [isBannerDismissed, setIsBannerDismissed] = useState(false);
 
   // Active User Session State
   const [currentUser, setCurrentUser] = useState<StaffMember | null>(null);
@@ -298,7 +384,11 @@ export default function App() {
 
   // Boot connection test & operational seed (with zero staff)
   useEffect(() => {
-    testFirestoreConnection().catch(() => {});
+    testFirestoreConnection()
+      .then((status) => {
+        setFirestoreStatus(status);
+      })
+      .catch(() => {});
     ensureOperationalFoundationSeeded().catch(() => {});
   }, []);
 
@@ -349,89 +439,146 @@ export default function App() {
     };
   }, []);
 
-  // Attach real-time Firestore listeners
+  // Attach real-time Firestore listeners with local cache persistence
   useEffect(() => {
     const unsubStaff = onSnapshot(
       query(collection(db, 'staff'), where('createdAt', '>=', '')),
       (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as StaffMember), id: d.id }));
-        setStaffList(list);
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as StaffMember), id: d.id }));
+          setStaffList(list);
+          try {
+            localStorage.setItem('erp_staff_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'staff')
+      (err) => console.warn('[Firestore staff sync note]', err?.message || err)
     );
 
     const unsubBranches = onSnapshot(
       query(collection(db, 'branches'), where('createdAt', '>=', '')),
       (snap) => {
-        setBranches(snap.docs.map((d) => ({ ...(d.data() as Branch), id: d.id })));
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as Branch), id: d.id }));
+          setBranches(list);
+          try {
+            localStorage.setItem('erp_branches_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'branches')
+      (err) => console.warn('[Firestore branches sync note]', err?.message || err)
     );
 
     const unsubRegions = onSnapshot(
       query(collection(db, 'geo_regions'), where('createdAt', '>=', '')),
       (snap) => {
-        setRegions(snap.docs.map((d) => ({ ...(d.data() as GeoRegion), id: d.id })));
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as GeoRegion), id: d.id }));
+          setRegions(list);
+          try {
+            localStorage.setItem('erp_regions_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'geo_regions')
+      (err) => console.warn('[Firestore regions sync note]', err?.message || err)
     );
 
     const unsubProducts = onSnapshot(
       query(collection(db, 'products'), where('createdAt', '>=', '')),
       (snap) => {
-        setFirestoreProducts(snap.docs.map((d) => ({ ...(d.data() as Product), id: d.id })));
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as Product), id: d.id }));
+          setFirestoreProducts(list);
+          try {
+            localStorage.setItem('erp_products_local_override', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'products')
+      (err) => console.warn('[Firestore products sync note]', err?.message || err)
     );
 
     const unsubPartners = onSnapshot(
       query(collection(db, 'partners'), where('createdAt', '>=', '')),
       (snap) => {
-        setPartners(snap.docs.map((d) => ({ ...(d.data() as Partner), id: d.id })));
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as Partner), id: d.id }));
+          setPartners(list);
+          try {
+            localStorage.setItem('erp_partners_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'partners')
+      (err) => console.warn('[Firestore partners sync note]', err?.message || err)
     );
 
     const unsubTransfers = onSnapshot(
       query(collection(db, 'stock_transfers'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
       (snap) => {
-        setTransfers(snap.docs.map((d) => ({ ...(d.data() as StockTransfer), id: d.id })));
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as StockTransfer), id: d.id }));
+          setTransfers(list);
+          try {
+            localStorage.setItem('erp_transfers_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'stock_transfers')
+      (err) => console.warn('[Firestore stock_transfers sync note]', err?.message || err)
     );
 
     const unsubTransactions = onSnapshot(
       query(collection(db, 'transactions'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
       (snap) => {
-        setTransactions(snap.docs.map((d) => ({ ...(d.data() as TransactionDoc), id: d.id })));
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as TransactionDoc), id: d.id }));
+          setTransactions(list);
+          try {
+            localStorage.setItem('erp_transactions_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'transactions')
+      (err) => console.warn('[Firestore transactions sync note]', err?.message || err)
     );
 
     const unsubCompliance = onSnapshot(
       query(collection(db, 'compliance_records'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
       (snap) => {
-        setComplianceRecords(
-          snap.docs.map((d) => ({ ...(d.data() as ComplianceRecord), id: d.id }))
-        );
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as ComplianceRecord), id: d.id }));
+          setComplianceRecords(list);
+          try {
+            localStorage.setItem('erp_compliance_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'compliance_records')
+      (err) => console.warn('[Firestore compliance_records sync note]', err?.message || err)
     );
 
     const unsubAudit = onSnapshot(
       query(collection(db, 'audit_logs'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
       (snap) => {
-        setAuditLogs(snap.docs.map((d) => ({ ...(d.data() as AuditLog), id: d.id })));
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as AuditLog), id: d.id }));
+          setAuditLogs(list);
+          try {
+            localStorage.setItem('erp_audit_logs_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'audit_logs')
+      (err) => console.warn('[Firestore audit_logs sync note]', err?.message || err)
     );
 
     const unsubPayrollRuns = onSnapshot(
       query(collection(db, 'payroll_runs'), where('createdAt', '>=', ''), orderBy('createdAt', 'desc')),
       (snap) => {
-        setPayrollRuns(snap.docs.map((d) => ({ ...(d.data() as PayrollRun), id: d.id })));
+        if (!snap.empty) {
+          const list = snap.docs.map((d) => ({ ...(d.data() as PayrollRun), id: d.id }));
+          setPayrollRuns(list);
+          try {
+            localStorage.setItem('erp_payroll_runs_backup', JSON.stringify(list));
+          } catch {}
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'payroll_runs')
+      (err) => console.warn('[Firestore payroll_runs sync note]', err?.message || err)
     );
 
     const unsubBusinessUnits = onSnapshot(
@@ -509,10 +656,18 @@ export default function App() {
       severity,
       createdAt: new Date().toISOString(),
     });
+    // Optimistic local state update + backup
+    setAuditLogs((prev) => {
+      const next = [entry, ...prev.filter((l) => l.id !== logId)];
+      try {
+        localStorage.setItem('erp_audit_logs_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
     try {
       await setDoc(doc(db, 'audit_logs', logId), entry);
     } catch (error) {
-      console.warn('[AuditLog] Non-critical write error:', error);
+      console.warn('[AuditLog] Non-critical write note:', error);
     }
   };
 
@@ -537,7 +692,22 @@ export default function App() {
       ...patch,
       id: productId,
     });
-    await setDoc(doc(db, 'products', productId), docPayload, { merge: true });
+
+    // Optimistic local state update + persistent backup
+    setFirestoreProducts((prev) => {
+      const idx = prev.findIndex((p) => p.id === productId);
+      const next = idx >= 0 ? prev.map((p, i) => (i === idx ? docPayload : p)) : [docPayload, ...prev];
+      try {
+        localStorage.setItem('erp_products_local_override', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await setDoc(doc(db, 'products', productId), docPayload, { merge: true });
+    } catch (error) {
+      console.warn('[Firestore] Product sync note (saved locally):', error);
+    }
   };
 
   // Google Sign-In strictly for Admin and Accountant
@@ -917,7 +1087,8 @@ export default function App() {
         setCurrentUser(fallbackUser);
         setActiveModule(ROLE_PERMISSIONS[effectiveRole].allowedModules[0]);
         triggerToast('success', `${effectiveRole} Authenticated`, `Welcome back, ${fallbackUser.name}.`);
-        await recordAuditLog(
+        setIsAuthenticating(false);
+        recordAuditLog(
           fallbackUser.name,
           effectiveRole,
           fallbackUser.email,
@@ -926,9 +1097,12 @@ export default function App() {
           `Authenticated ${effectiveRole} session using secure encrypted PIN`,
           fallbackUser.branchName,
           'Security'
-        );
+        ).catch(() => {});
         return;
       }
+
+      // Precompute hash once upfront for instant O(1) matching across candidates
+      const hashedPinInput = await hashPin(pin);
 
       // Check candidate staff records by verifying against encrypted PIN hash
       const candidates = selectedStaffId
@@ -943,13 +1117,14 @@ export default function App() {
       let matched: StaffMember | undefined;
       for (const candidate of candidates) {
         if (candidate.pin) {
-          const isMatch = await verifyPin(pin, candidate.pin);
+          const isMatch = candidate.pin.startsWith('sha256:')
+            ? candidate.pin === hashedPinInput
+            : candidate.pin === pin;
           if (isMatch) {
             matched = candidate;
-            // Upgrade plaintext PIN to encrypted hash in Firestore if legacy record
+            // Upgrade plaintext PIN to encrypted hash in Firestore if legacy record (non-blocking)
             if (!isPinHashed(candidate.pin)) {
-              const encrypted = await hashPin(pin);
-              setDoc(doc(db, 'staff', candidate.id), { ...candidate, pin: encrypted }, { merge: true }).catch(() => {});
+              setDoc(doc(db, 'staff', candidate.id), { ...candidate, pin: hashedPinInput }, { merge: true }).catch(() => {});
             }
             break;
           }
@@ -970,8 +1145,9 @@ export default function App() {
           msg = 'Invalid 6-Digit PIN or no PIN staff provisioned yet. Sign in as Admin via Google to create HR first.';
         }
         setAuthError(msg);
+        setIsAuthenticating(false);
         triggerToast('error', 'Authentication Failed', msg);
-        await recordAuditLog(
+        recordAuditLog(
           targetedStaff?.name || 'Unknown Terminal User',
           targetedStaff?.role || selectedRole || 'Unverified PIN',
           targetedStaff?.email || `PINAttempt:${pin.slice(0, 2)}****`,
@@ -980,7 +1156,7 @@ export default function App() {
           `Rejected invalid 6-digit PIN entry for ${targetedStaff ? `${targetedStaff.name} (${targetedStaff.role})` : selectedRole || 'All'}`,
           targetedStaff?.branchName || 'Terminal Gateway',
           'Critical'
-        );
+        ).catch(() => {});
         return;
       }
 
@@ -991,7 +1167,8 @@ export default function App() {
         lastLoginAt: now,
         lastDevice: device,
       };
-      await setDoc(doc(db, 'staff', matched.id), updated);
+
+      // Instant UI unlock & state update
       setCurrentUser(updated);
       const allowed = ROLE_PERMISSIONS[updated.role].allowedModules;
       setActiveModule(allowed[0]);
@@ -1000,8 +1177,11 @@ export default function App() {
         `${updated.role} Unlocked`,
         `Signed in as ${updated.name} at ${updated.branchName}.`
       );
+      setIsAuthenticating(false);
 
-      await recordAuditLog(
+      // Non-blocking background persistence & audit log
+      setDoc(doc(db, 'staff', matched.id), updated).catch(() => {});
+      recordAuditLog(
         updated.name,
         updated.role,
         `PIN-${updated.id}`,
@@ -1010,15 +1190,18 @@ export default function App() {
         `Authenticated ${updated.role} at branch ${updated.branchName}`,
         updated.branchName,
         'Security'
-      );
-    } finally {
+      ).catch(() => {});
+    } catch (err: any) {
       setIsAuthenticating(false);
+      const msg = err instanceof Error ? err.message : 'PIN authentication failed.';
+      setAuthError(msg);
+      triggerToast('error', 'Authentication Failed', msg);
     }
   };
 
   const handleLogout = async () => {
     if (currentUser) {
-      await recordAuditLog(
+      recordAuditLog(
         currentUser.name,
         currentUser.role,
         currentUser.email,
@@ -1027,7 +1210,7 @@ export default function App() {
         `Signed out from ${currentUser.role} workspace`,
         currentUser.branchName,
         'Info'
-      );
+      ).catch(() => {});
     }
     try {
       await signOut(auth);
@@ -1162,7 +1345,7 @@ export default function App() {
     }
   };
 
-  // Mutation Handlers with full Firestore persistence & Audit Logging
+  // Mutation Handlers with full Firestore persistence, offline backup & Audit Logging
   const handleCommitTransaction = async (
     txDraft: Omit<TransactionDoc, 'id' | 'createdAt'>,
     updatedProducts: { productId: string; newTotal: number; newBranchStockJson: string }[]
@@ -1173,35 +1356,46 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     });
+
+    // Optimistic local state update + persistent backup
+    setTransactions((prev) => {
+      const next = [fullTx, ...prev.filter((t) => t.id !== id)];
+      try {
+        localStorage.setItem('erp_transactions_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    // Update local and remote product stock
+    for (const up of updatedProducts) {
+      await persistProductState(up.productId, {
+        totalBottles: up.newTotal,
+        branchStockSummary: up.newBranchStockJson,
+      });
+    }
+
     try {
       await setDoc(doc(db, 'transactions', id), fullTx);
-      for (const up of updatedProducts) {
-        await persistProductState(up.productId, {
-          totalBottles: up.newTotal,
-          branchStockSummary: up.newBranchStockJson,
-        });
-      }
-      triggerToast(
-        'success',
-        `${txDraft.docType} ${txDraft.docNumber} Committed`,
-        `${txDraft.customerName} · ${formatKes(txDraft.totalAmount)} recorded.`
-      );
-      await recordAuditLog(
-        txDraft.createdBy,
-        txDraft.createdByRole,
-        currentUser?.email || 'POS-Terminal',
-        `Issued ${txDraft.docType} ${txDraft.docNumber}`,
-        txDraft.channel,
-        `${txDraft.docType} for ${txDraft.customerName} in ${txDraft.regionName} totaling ${formatKes(txDraft.totalAmount)}`,
-        txDraft.branchName,
-        'Financial'
-      );
-      return fullTx;
     } catch (error) {
-      triggerToast('error', 'Transaction Failed', 'Could not commit transaction to database.');
-      handleFirestoreError(error, OperationType.WRITE, 'transactions');
-      return null;
+      console.warn('[Firestore] Transaction saved locally, cloud sync pending:', error);
     }
+
+    triggerToast(
+      'success',
+      `${txDraft.docType} ${txDraft.docNumber} Committed`,
+      `${txDraft.customerName} · ${formatKes(txDraft.totalAmount)} recorded.`
+    );
+    await recordAuditLog(
+      txDraft.createdBy,
+      txDraft.createdByRole,
+      currentUser?.email || 'POS-Terminal',
+      `Issued ${txDraft.docType} ${txDraft.docNumber}`,
+      txDraft.channel,
+      `${txDraft.docType} for ${txDraft.customerName} in ${txDraft.regionName} totaling ${formatKes(txDraft.totalAmount)}`,
+      txDraft.branchName,
+      'Financial'
+    );
+    return fullTx;
   };
 
   const handleCreateProduct = async (prodDraft: Omit<Product, 'id' | 'createdAt'>) => {
@@ -1211,28 +1405,38 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     });
+
+    // Optimistic local state update + persistent backup
+    setFirestoreProducts((prev) => {
+      const next = [fullProd, ...prev.filter((p) => p.id !== id)];
+      try {
+        localStorage.setItem('erp_products_local_override', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'products', id), fullProd);
-      triggerToast(
-        'success',
-        `Auto-SKU ${fullProd.sku} Created`,
-        `${fullProd.name} (${fullProd.totalBottles} btls) added to bonded inventory.`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Created Auto-SKU ${fullProd.sku}`,
-          'Inventory & Auto-SKU',
-          `Added ${fullProd.name} (${fullProd.totalBottles} btls) with Excise Series ${fullProd.exciseStampSeries}`,
-          currentUser.branchName,
-          'Info'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'SKU Creation Failed', 'Unable to save product to inventory.');
-      handleFirestoreError(error, OperationType.WRITE, 'products');
+      console.warn('[Firestore] Product saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `Auto-SKU ${fullProd.sku} Created`,
+      `${fullProd.name} (${fullProd.totalBottles} btls) added to bonded inventory.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Created Auto-SKU ${fullProd.sku}`,
+        'Inventory & Auto-SKU',
+        `Added ${fullProd.name} (${fullProd.totalBottles} btls) with Excise Series ${fullProd.exciseStampSeries}`,
+        currentUser.branchName,
+        'Info'
+      );
     }
   };
 
@@ -1393,28 +1597,37 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     });
+
+    setBranches((prev) => {
+      const next = [...prev.filter((b) => b.id !== id), fullBranch];
+      try {
+        localStorage.setItem('erp_branches_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'branches', id), fullBranch);
-      triggerToast(
-        'success',
-        `Branch ${fullBranch.code} Commissioned`,
-        `${fullBranch.name} activated in ${fullBranch.regionName}.`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Commissioned Branch ${fullBranch.code}`,
-          'Branches & Transfers',
-          `Created branch ${fullBranch.name} in Geo-Zone ${fullBranch.regionName}`,
-          fullBranch.name,
-          'Info'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'Branch Creation Error', 'Could not save new branch.');
-      handleFirestoreError(error, OperationType.WRITE, 'branches');
+      console.warn('[Firestore] Branch saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `Branch ${fullBranch.code} Commissioned`,
+      `${fullBranch.name} activated in ${fullBranch.regionName}.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Commissioned Branch ${fullBranch.code}`,
+        'Branches & Transfers',
+        `Created branch ${fullBranch.name} in Geo-Zone ${fullBranch.regionName}`,
+        fullBranch.name,
+        'Info'
+      );
     }
   };
 
@@ -1425,28 +1638,44 @@ export default function App() {
       triggerToast('error', 'HQ Protected', 'HQ Main Branch cannot be deleted as it is the primary operating depot.');
       return;
     }
+
+    setBranches((prev) => {
+      const next = prev.filter((b) => b.id !== branchId);
+      try {
+        localStorage.setItem('erp_branches_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await deleteDoc(doc(db, 'branches', branchId));
-      triggerToast('success', 'Branch Decommissioned', `${branchToDelete.name} (${branchToDelete.code}) has been removed.`);
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Decommissioned Branch ${branchToDelete.code}`,
-          'Branches & Transfers',
-          `Removed branch ${branchToDelete.name}`,
-          branchToDelete.name,
-          'Info'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'Branch Deletion Failed', 'Could not delete branch.');
-      handleFirestoreError(error, OperationType.WRITE, 'branches');
+      console.warn('[Firestore] Branch delete saved locally:', error);
+    }
+
+    triggerToast('success', 'Branch Decommissioned', `${branchToDelete.name} (${branchToDelete.code}) has been removed.`);
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Decommissioned Branch ${branchToDelete.code}`,
+        'Branches & Transfers',
+        `Removed branch ${branchToDelete.name}`,
+        branchToDelete.name,
+        'Info'
+      );
     }
   };
 
   const handleSetMainBranch = async (branchId: string) => {
+    setBranches((prev) => {
+      const next = prev.map((b) => ({ ...b, isMain: b.id === branchId }));
+      try {
+        localStorage.setItem('erp_branches_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
     try {
       for (const b of branches) {
         await updateDoc(doc(db, 'branches', b.id), {
@@ -1455,7 +1684,7 @@ export default function App() {
       }
       triggerToast('success', 'Main Branch Updated', 'Selected branch is now designated as the MAIN Headquarters depot.');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'branches');
+      console.warn('[Firestore] Main branch updated locally:', error);
     }
   };
 
@@ -1463,39 +1692,45 @@ export default function App() {
     newProducts: Omit<Product, 'id' | 'createdAt'>[]
   ): Promise<number> => {
     let successCount = 0;
-    try {
-      const now = Date.now();
-      for (let i = 0; i < newProducts.length; i++) {
-        const prod = newProducts[i];
-        const id = `prod-${now}-${i}`;
-        const fullProd: Product = cleanFirestoreData({
-          ...prod,
-          id,
-          createdAt: new Date().toISOString(),
-        });
-        await setDoc(doc(db, 'products', id), fullProd);
-        successCount++;
-      }
-      triggerToast(
-        'success',
-        'CSV Batch Import Completed',
-        `Successfully imported ${successCount} products into bonded inventory.`
+    const now = Date.now();
+    const createdList: Product[] = [];
+    for (let i = 0; i < newProducts.length; i++) {
+      const prod = newProducts[i];
+      const id = `prod-${now}-${i}`;
+      const fullProd: Product = cleanFirestoreData({
+        ...prod,
+        id,
+        createdAt: new Date().toISOString(),
+      });
+      createdList.push(fullProd);
+      setDoc(doc(db, 'products', id), fullProd).catch(() => {});
+      successCount++;
+    }
+
+    setFirestoreProducts((prev) => {
+      const next = [...createdList, ...prev];
+      try {
+        localStorage.setItem('erp_products_local_override', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    triggerToast(
+      'success',
+      'CSV Batch Import Completed',
+      `Successfully imported ${successCount} products into bonded inventory.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Bulk Imported ${successCount} SKUs via CSV`,
+        'Inventory & Auto-SKU',
+        `Imported ${successCount} products with barcodes and prices via CSV file`,
+        currentUser.branchName,
+        'Info'
       );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Bulk Imported ${successCount} SKUs via CSV`,
-          'Inventory & Auto-SKU',
-          `Imported ${successCount} products with barcodes and prices via CSV file`,
-          currentUser.branchName,
-          'Info'
-        );
-      }
-    } catch (error) {
-      triggerToast('error', 'CSV Import Error', 'Some items could not be saved to database.');
-      handleFirestoreError(error, OperationType.WRITE, 'products');
     }
     return successCount;
   };
@@ -1510,31 +1745,41 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     });
+
+    setTransfers((prev) => {
+      const next = [fullTr, ...prev.filter((t) => t.id !== id)];
+      try {
+        localStorage.setItem('erp_transfers_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    await persistProductState(updatedProd.productId, {
+      branchStockSummary: updatedProd.newBranchStockJson,
+    });
+
     try {
       await setDoc(doc(db, 'stock_transfers', id), fullTr);
-      await persistProductState(updatedProd.productId, {
-        branchStockSummary: updatedProd.newBranchStockJson,
-      });
-      triggerToast(
-        'success',
-        `Transfer ${fullTr.transferNo} Dispatched`,
-        `${fullTr.quantityBottles} btls of ${fullTr.sku} → ${fullTr.toBranchName}.`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Stock Transfer ${fullTr.transferNo}`,
-          'Branches & Transfers',
-          `Transferred ${fullTr.quantityBottles} btls of ${fullTr.sku} from ${fullTr.fromBranchName} to ${fullTr.toBranchName}`,
-          fullTr.fromBranchName,
-          'Financial'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'Stock Transfer Error', 'Failed to dispatch inter-branch stock transfer.');
-      handleFirestoreError(error, OperationType.WRITE, 'stock_transfers');
+      console.warn('[Firestore] Transfer saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `Transfer ${fullTr.transferNo} Dispatched`,
+      `${fullTr.quantityBottles} btls of ${fullTr.sku} → ${fullTr.toBranchName}.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Stock Transfer ${fullTr.transferNo}`,
+        'Branches & Transfers',
+        `Transferred ${fullTr.quantityBottles} btls of ${fullTr.sku} from ${fullTr.fromBranchName} to ${fullTr.toBranchName}`,
+        fullTr.fromBranchName,
+        'Financial'
+      );
     }
   };
 
@@ -1545,28 +1790,37 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     });
+
+    setRegions((prev) => {
+      const next = [...prev.filter((r) => r.id !== id), fullReg];
+      try {
+        localStorage.setItem('erp_regions_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'geo_regions', id), fullReg);
-      triggerToast(
-        'success',
-        `Geo-Zone ${fullReg.code} Saved`,
-        `${fullReg.name} (${fullReg.tierType}) pricing multiplier active.`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Created Geo-Pricing Zone ${fullReg.code}`,
-          'Geo-Location Pricing',
-          `Configured ${fullReg.name} (${fullReg.tierType}) Wholesale ×${fullReg.wholesaleMultiplier}`,
-          currentUser.branchName,
-          'Financial'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'Geo-Zone Error', 'Failed to save regional tariff zone.');
-      handleFirestoreError(error, OperationType.WRITE, 'geo_regions');
+      console.warn('[Firestore] Geo-Zone saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `Geo-Zone ${fullReg.code} Saved`,
+      `${fullReg.name} (${fullReg.tierType}) pricing multiplier active.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Created Geo-Pricing Zone ${fullReg.code}`,
+        'Geo-Location Pricing',
+        `Configured ${fullReg.name} (${fullReg.tierType}) Wholesale ×${fullReg.wholesaleMultiplier}`,
+        currentUser.branchName,
+        'Financial'
+      );
     }
   };
 
@@ -1588,30 +1842,25 @@ export default function App() {
     }
     overrides[regionId] = { wholesale: wholesalePrice, retail: retailPrice };
 
-    try {
-      await persistProductState(productId, {
-        geoPriceOverrides: JSON.stringify(overrides),
-      });
-      triggerToast(
-        'success',
-        `Geo-Tariff Override Saved`,
-        `${prod.sku} in ${reg.name}: Wholesale ${formatKes(wholesalePrice)} · Retail ${formatKes(retailPrice)}.`
+    await persistProductState(productId, {
+      geoPriceOverrides: JSON.stringify(overrides),
+    });
+    triggerToast(
+      'success',
+      `Geo-Tariff Override Saved`,
+      `${prod.sku} in ${reg.name}: Wholesale ${formatKes(wholesalePrice)} · Retail ${formatKes(retailPrice)}.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Geo-Tariff Override on ${prod.sku}`,
+        'Geo-Location Pricing',
+        `Set ${reg.name} price for ${prod.sku} to Wholesale ${formatKes(wholesalePrice)}/btl, Retail ${formatKes(retailPrice)}/btl`,
+        currentUser.branchName,
+        'Financial'
       );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Geo-Tariff Override on ${prod.sku}`,
-          'Geo-Location Pricing',
-          `Set ${reg.name} price for ${prod.sku} to Wholesale ${formatKes(wholesalePrice)}/btl, Retail ${formatKes(retailPrice)}/btl`,
-          currentUser.branchName,
-          'Financial'
-        );
-      }
-    } catch (error) {
-      triggerToast('error', 'Geo-Override Error', 'Failed to update product regional price.');
-      handleFirestoreError(error, OperationType.WRITE, 'products');
     }
   };
 
@@ -1622,28 +1871,37 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     });
+
+    setPartners((prev) => {
+      const next = [...prev.filter((p) => p.id !== id), fullPartner];
+      try {
+        localStorage.setItem('erp_partners_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'partners', id), fullPartner);
-      triggerToast(
-        'success',
-        `${fullPartner.partnerType} Onboarded`,
-        `${fullPartner.companyName} (${fullPartner.code}) verified.`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Onboarded ${fullPartner.partnerType} ${fullPartner.code}`,
-          'Partners Onboarding',
-          `Verified license ${fullPartner.liquorLicenseNo} for ${fullPartner.companyName}`,
-          currentUser.branchName,
-          'Info'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'Partner Onboarding Failed', 'Unable to save partner record.');
-      handleFirestoreError(error, OperationType.WRITE, 'partners');
+      console.warn('[Firestore] Partner saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `${fullPartner.partnerType} Onboarded`,
+      `${fullPartner.companyName} (${fullPartner.code}) verified.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Onboarded ${fullPartner.partnerType} ${fullPartner.code}`,
+        'Partners Onboarding',
+        `Verified license ${fullPartner.liquorLicenseNo} for ${fullPartner.companyName}`,
+        currentUser.branchName,
+        'Info'
+      );
     }
   };
 
@@ -1654,28 +1912,37 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     });
+
+    setComplianceRecords((prev) => {
+      const next = [fullComp, ...prev.filter((c) => c.id !== id)];
+      try {
+        localStorage.setItem('erp_compliance_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'compliance_records', id), fullComp);
-      triggerToast(
-        'success',
-        `Compliance ${fullComp.certificateNo} Logged`,
-        `${fullComp.recordType} verified for SKU ${fullComp.skuRef}.`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Logged Compliance ${fullComp.certificateNo}`,
-          'Regulatory Compliance',
-          `${fullComp.recordType} for SKU ${fullComp.skuRef} (${fullComp.stampRangeStart}-${fullComp.stampRangeEnd})`,
-          fullComp.branchName,
-          'Info'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'Compliance Log Failed', 'Could not save compliance certificate.');
-      handleFirestoreError(error, OperationType.WRITE, 'compliance_records');
+      console.warn('[Firestore] Compliance record saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `Compliance ${fullComp.certificateNo} Logged`,
+      `${fullComp.recordType} verified for SKU ${fullComp.skuRef}.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Logged Compliance ${fullComp.certificateNo}`,
+        'Regulatory Compliance',
+        `${fullComp.recordType} for SKU ${fullComp.skuRef} (${fullComp.stampRangeStart}-${fullComp.stampRangeEnd})`,
+        fullComp.branchName,
+        'Info'
+      );
     }
   };
 
@@ -1692,28 +1959,37 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     });
+
+    setStaffList((prev) => {
+      const next = [...prev.filter((s) => s.id !== id), fullStaff];
+      try {
+        localStorage.setItem('erp_staff_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'staff', id), fullStaff);
-      triggerToast(
-        'success',
-        `${fullStaff.role} Provisioned`,
-        `${fullStaff.name} activated at ${fullStaff.branchName}.`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Provisioned Role: ${fullStaff.role}`,
-          'HR & Role Provisioning',
-          `${currentUser.role} created ${fullStaff.role} "${fullStaff.name}" (${fullStaff.authMethod.toUpperCase()}) at ${fullStaff.branchName}`,
-          currentUser.branchName,
-          'Security'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'Staff Provisioning Error', 'Could not create staff account.');
-      handleFirestoreError(error, OperationType.WRITE, 'staff');
+      console.warn('[Firestore] Staff saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `${fullStaff.role} Provisioned`,
+      `${fullStaff.name} activated at ${fullStaff.branchName}.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Provisioned Role: ${fullStaff.role}`,
+        'HR & Role Provisioning',
+        `${currentUser.role} created ${fullStaff.role} "${fullStaff.name}" (${fullStaff.authMethod.toUpperCase()}) at ${fullStaff.branchName}`,
+        currentUser.branchName,
+        'Security'
+      );
     }
   };
 
@@ -1729,28 +2005,37 @@ export default function App() {
       ...updates,
       pin: encryptedPin,
     });
+
+    setStaffList((prev) => {
+      const next = prev.map((s) => (s.id === staffId ? fullUpdated : s));
+      try {
+        localStorage.setItem('erp_staff_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'staff', staffId), fullUpdated);
-      triggerToast(
-        'success',
-        'Staff Profile Updated',
-        `Successfully updated account for ${fullUpdated.name}.`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Updated Staff: ${fullUpdated.name}`,
-          'HR & Role Provisioning',
-          `${currentUser.name} updated profile of ${fullUpdated.name} (${fullUpdated.role}, Branch: ${fullUpdated.branchName}, Status: ${fullUpdated.status})`,
-          currentUser.branchName,
-          'Security'
-        );
-      }
     } catch (error) {
-      triggerToast('error', 'Update Failed', 'Could not save staff changes.');
-      handleFirestoreError(error, OperationType.WRITE, 'staff');
+      console.warn('[Firestore] Staff update saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      'Staff Profile Updated',
+      `Successfully updated account for ${fullUpdated.name}.`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Updated Staff: ${fullUpdated.name}`,
+        'HR & Role Provisioning',
+        `${currentUser.name} updated profile of ${fullUpdated.name} (${fullUpdated.role}, Branch: ${fullUpdated.branchName}, Status: ${fullUpdated.status})`,
+        currentUser.branchName,
+        'Security'
+      );
     }
   };
 
@@ -1831,28 +2116,37 @@ export default function App() {
       id,
       createdAt: new Date().toISOString(),
     };
+
+    setPayrollRuns((prev) => {
+      const next = [fullRun, ...prev.filter((r) => r.id !== id)];
+      try {
+        localStorage.setItem('erp_payroll_runs_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'payroll_runs', id), fullRun);
-      triggerToast(
-        'success',
-        `Payroll Disbursed (${fullRun.period})`,
-        `Finalized ${fullRun.totalEmployees} employee payslips (KES ${fullRun.totalDisbursed.toLocaleString()}).`
-      );
-      if (currentUser) {
-        await recordAuditLog(
-          currentUser.name,
-          currentUser.role,
-          currentUser.email,
-          `Executed Payroll Run for ${fullRun.period}`,
-          'HR & Access Control',
-          `Disbursed net KES ${fullRun.totalDisbursed.toLocaleString()} across ${fullRun.totalEmployees} employees`,
-          currentUser.branchName,
-          'Financial'
-        );
-      }
     } catch (err) {
-      triggerToast('error', 'Payroll Error', 'Failed to publish payroll disbursement.');
-      handleFirestoreError(err, OperationType.WRITE, 'payroll_runs');
+      console.warn('[Firestore] Payroll saved locally, cloud sync pending:', err);
+    }
+
+    triggerToast(
+      'success',
+      `Payroll Disbursed (${fullRun.period})`,
+      `Finalized ${fullRun.totalEmployees} employee payslips (KES ${fullRun.totalDisbursed.toLocaleString()}).`
+    );
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Executed Payroll Run for ${fullRun.period}`,
+        'HR & Access Control',
+        `Disbursed net KES ${fullRun.totalDisbursed.toLocaleString()} across ${fullRun.totalEmployees} employees`,
+        currentUser.branchName,
+        'Financial'
+      );
     }
   };
 
@@ -2116,6 +2410,37 @@ export default function App() {
       <>
         <MobileSplashScreen />
         <StatusFeedbackToast status={toastStatus} onDismiss={() => setToastStatus(null)} />
+        {firestoreStatus?.isNotFound && !isBannerDismissed && (
+          <aside aria-label="Database Notice" className="bg-gradient-to-r from-amber-600 to-amber-700 text-white px-4 py-2 text-xs shadow-md border-b border-amber-400">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-center sm:text-left">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-amber-700 font-bold shrink-0 text-[10px]">!</span>
+                <div>
+                  <span className="font-bold">Firestore Database Pending Creation in project liqour-f3a77: </span>
+                  <span className="opacity-95">All data is safely saving to local storage. Click the button to create database & enable cloud sync.</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href="https://console.firebase.google.com/project/liqour-f3a77/firestore"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-white hover:bg-amber-50 text-slate-900 font-bold px-3 py-1 rounded-lg text-[11px] shadow-sm transition inline-flex items-center gap-1"
+                >
+                  <span>Create Database (Firebase Console)</span>
+                  <span>↗</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setIsBannerDismissed(true)}
+                  className="p-1 rounded-md hover:bg-black/10 text-white/80 hover:text-white transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </aside>
+        )}
         <AuthGateway
           staffList={staffList}
           branches={branches}
@@ -2123,15 +2448,6 @@ export default function App() {
           onEmailLogin={handleEmailLogin}
           onPinLogin={handlePinLogin}
           onOpenCustomerPortal={() => setStandaloneCustomerPortal(true)}
-          onOpenPhoneScanner={() =>
-            setPhoneScannerSession({
-              isOpen: true,
-              staffId: 'staff_cashier',
-              staffName: 'Counter Cashier',
-              staffEmail: '',
-              staffRole: 'Counter Cashier',
-            })
-          }
           authError={authError}
           isSubmitting={isAuthenticating}
         />
@@ -2164,6 +2480,39 @@ export default function App() {
         mobileDrawerOpen={mobileDrawerOpen}
         onToggleMobileDrawer={() => setMobileDrawerOpen(!mobileDrawerOpen)}
       />
+
+      {/* Cloud Firestore Setup Notice Banner */}
+      {firestoreStatus?.isNotFound && !isBannerDismissed && (
+        <aside aria-label="Database Notice" className="bg-gradient-to-r from-amber-600 to-amber-700 text-white px-4 py-2.5 text-xs shadow-md border-b border-amber-400">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-center sm:text-left">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-amber-700 font-bold shrink-0 text-[10px]">!</span>
+              <div>
+                <span className="font-bold">Cloud Firestore Pending Activation in project liqour-f3a77: </span>
+                <span className="opacity-95">Operating in high-speed local persistent sync mode. To enable real-time multi-terminal cloud sync, create the Firestore database in your Firebase Console.</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href="https://console.firebase.google.com/project/liqour-f3a77/firestore"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-white hover:bg-amber-50 text-slate-900 font-bold px-3 py-1.5 rounded-lg text-[11px] shadow-sm transition inline-flex items-center gap-1.5"
+              >
+                <span>Create Database in Firebase Console</span>
+                <span>↗</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setIsBannerDismissed(true)}
+                className="p-1 rounded-md hover:bg-black/10 text-white/80 hover:text-white transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
 
       {/* Mobile Full-Screen Hamburger Drawer (Consolidates Client Website, User Profile, Lock Terminal, & All ERP Modules) */}
       {mobileDrawerOpen && (

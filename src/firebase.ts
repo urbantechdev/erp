@@ -83,13 +83,35 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
-export async function testFirestoreConnection(): Promise<void> {
+export interface FirestoreStatus {
+  isDatabaseReady: boolean;
+  isNotFound: boolean;
+  message: string;
+}
+
+export async function testFirestoreConnection(): Promise<FirestoreStatus> {
   try {
     await getDoc(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('[Firestore] Operating with offline persistence enabled.');
+    return { isDatabaseReady: true, isNotFound: false, message: 'Cloud Firestore connected.' };
+  } catch (error: any) {
+    const msg = String(error?.message || error || '');
+    const isNotFound =
+      msg.includes('NOT_FOUND') ||
+      msg.includes('not-found') ||
+      msg.includes('does not exist') ||
+      error?.code === 'not-found';
+    if (isNotFound) {
+      console.warn('[Firestore] Notice: Database (default) does not exist yet for project liqour-f3a77 in Firebase Console.');
+    } else {
+      console.warn('[Firestore] Operating with offline persistence:', msg);
     }
+    return {
+      isDatabaseReady: !isNotFound,
+      isNotFound,
+      message: isNotFound
+        ? 'Database (default) has not been created yet in Firebase Console for liqour-f3a77'
+        : 'Firestore client operating in offline mode',
+    };
   }
 }
 

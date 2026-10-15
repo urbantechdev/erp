@@ -41,7 +41,6 @@ interface AuthGatewayProps {
   onEmailLogin: (email: string, password: string, targetRole: 'Admin' | 'Accountant') => Promise<void>;
   onPinLogin: (pin: string, selectedRole?: StaffRole, selectedStaffId?: string) => Promise<void>;
   onOpenCustomerPortal: () => void;
-  onOpenPhoneScanner?: () => void;
   authError: string | null;
   isSubmitting: boolean;
 }
@@ -125,7 +124,6 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
   onEmailLogin,
   onPinLogin,
   onOpenCustomerPortal,
-  onOpenPhoneScanner,
   authError,
   isSubmitting,
 }) => {
@@ -445,7 +443,6 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
         variant="gateway"
         onHomeClick={() => setScreenView('boxes')}
         onOpenCustomerPortal={onOpenCustomerPortal}
-        onOpenPhoneScanner={onOpenPhoneScanner}
         branches={branches}
         totalStaffCount={staffList.length}
       />
@@ -476,7 +473,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                       : 'bg-[#0A006E] text-white border-[#0A006E] hover:border-[#FFDE00]'
                   } ${isSubmitting && selectedBox === 'Admin' ? 'opacity-80 pointer-events-none' : ''}`}
                 >
-                  <div className="silent-scanner-beam" />
+                  {/* Scanner beam removed from login */}
                   <div className="flex items-center gap-3 sm:flex-col sm:gap-6 min-w-0">
                     <div className="w-12 h-12 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-md sm:shadow-xl border-2 sm:border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110 group-hover:rotate-3 relative z-10">
                       {isSubmitting && selectedBox === 'Admin' ? (
@@ -515,7 +512,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                       : 'bg-[#FFDE00] text-[#0A006E] border-amber-400 hover:border-[#0A006E]'
                   } ${isSubmitting && selectedBox === 'Accountant' ? 'opacity-80 pointer-events-none' : ''}`}
                 >
-                  <div className="silent-scanner-beam-dark" />
+                  {/* Scanner beam removed from login */}
                   <div className="flex items-center gap-3 sm:flex-col sm:gap-6 min-w-0">
                     <div className="w-12 h-12 sm:w-28 sm:h-28 rounded-xl sm:rounded-3xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-md sm:shadow-xl border-2 sm:border-3 border-white shrink-0 transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110 group-hover:-rotate-3 relative z-10">
                       {isSubmitting && selectedBox === 'Accountant' ? (
@@ -1039,7 +1036,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                     <span className="font-mono text-slate-500">{pinDigits.length} / 6 Digits</span>
                   </div>
 
-                  {/* 6 Clean Indicators: Uniform, Monochromatic Navy/Slate, No Mixed Rainbow Colors */}
+                  {/* 6 Clean Indicators showing big normal digits */}
                   <div className="flex items-center justify-center gap-2.5 sm:gap-3 py-1.5">
                     {[0, 1, 2, 3, 4, 5].map((idx) => {
                       const filled = idx < pinDigits.length;
@@ -1047,20 +1044,20 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                       return (
                         <div
                           key={idx}
-                          className={`w-10 h-12 sm:w-11 sm:h-13 rounded-xl flex items-center justify-center font-mono font-bold text-lg border transition-all select-none ${
+                          className={`w-10 h-12 sm:w-11 sm:h-13 rounded-xl flex items-center justify-center font-mono font-bold text-xl sm:text-2xl border transition-all select-none ${
                             filled
-                              ? 'border-[#0A006E] bg-[#0A006E] text-white shadow-xs scale-102'
+                              ? 'border-[#0A006E] bg-[#0A006E] text-white shadow-xs'
                               : isCurrent
                               ? 'border-[#0A006E] bg-white ring-2 ring-[#0A006E]/20 text-[#0A006E]'
                               : 'border-slate-200 bg-white text-slate-300'
                           }`}
                         >
                           {filled ? (
-                            <span className="w-3.5 h-3.5 rounded-full bg-white shadow-2xs" />
+                            <span>{pinDigits[idx]}</span>
                           ) : isCurrent ? (
                             <span className="w-1.5 h-5 bg-[#0A006E] animate-pulse rounded-full" />
                           ) : (
-                            <span className="w-2 h-2 rounded-full bg-slate-200" />
+                            <span className="text-slate-300 text-base font-normal">—</span>
                           )}
                         </div>
                       );
@@ -1103,7 +1100,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                       key={digit}
                       type="button"
                       onClick={() => handleDigitPress(digit)}
-                      className="py-3 sm:py-3.5 rounded-xl font-montserrat font-bold text-xl sm:text-2xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 border border-slate-200 transition active:scale-95 shadow-2xs flex items-center justify-center select-none cursor-pointer"
+                      className="py-3 sm:py-3.5 rounded-xl font-mono font-bold text-xl sm:text-2xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 border border-slate-200 transition active:scale-95 shadow-2xs flex items-center justify-center select-none cursor-pointer"
                     >
                       {digit}
                     </button>
@@ -1118,7 +1115,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDigitPress('0')}
-                    className="py-3 sm:py-3.5 rounded-xl font-montserrat font-bold text-xl sm:text-2xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 border border-slate-200 transition active:scale-95 shadow-2xs flex items-center justify-center select-none cursor-pointer"
+                    className="py-3 sm:py-3.5 rounded-xl font-mono font-bold text-xl sm:text-2xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 border border-slate-200 transition active:scale-95 shadow-2xs flex items-center justify-center select-none cursor-pointer"
                   >
                     0
                   </button>

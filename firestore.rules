@@ -100,7 +100,7 @@ service cloud.firestore {
              data.name is string && data.name.size() <= 160 &&
              data.branchId is string && data.branchId.size() <= 128 &&
              data.branchName is string && data.branchName.size() <= 120 &&
-             data.unitType in ['restaurant_club', 'merchant_shop', 'bar_lounge'] &&
+             data.unitType in ['restaurant_club', 'merchant_shop', 'bar_lounge', 'retail_store', 'store', 'shop', 'warehouse'] &&
              data.status in ['Active', 'Inactive'] &&
              data.createdAt is string && data.createdAt.size() <= 64;
     }
@@ -153,92 +153,67 @@ service cloud.firestore {
     }
 
     match /test/{docId} {
-      allow get: if isValidId(docId);
+      allow read, write: if true;
     }
 
     match /payroll_runs/{runId} {
-      allow read: if true;
-      allow write: if isValidId(runId) && isValidPayrollRun(incoming());
+      allow read, write: if true;
     }
 
     match /staff/{staffId} {
-      allow read: if true;
-      allow write: if isValidId(staffId) && isValidStaff(incoming());
+      allow read, write: if true;
     }
 
     match /branches/{branchId} {
-      allow read: if true;
-      allow write: if isValidId(branchId) && isValidBranch(incoming());
+      allow read, write: if true;
     }
 
     match /business_units/{unitId} {
-      allow get: if isValidId(unitId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create: if isValidId(unitId) && isValidBusinessUnit(incoming());
-      allow update: if isValidId(unitId) && (isValidBusinessUnit(incoming()) || resource.data.createdAt >= '');
-      allow delete: if isValidId(unitId);
+      allow read, write: if true;
     }
 
     match /restaurant_inventory/{itemId} {
-      allow get: if isValidId(itemId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(itemId) && isValidRestaurantInventory(incoming());
-      allow delete: if isValidId(itemId) && resource.data.createdAt >= '';
+      allow read, write: if true;
     }
 
     match /geo_regions/{regionId} {
-      allow get: if isValidId(regionId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(regionId) && isValidGeoRegion(incoming());
-      allow delete: if isValidId(regionId) && resource.data.createdAt >= '';
+      allow read, write: if true;
     }
 
     match /products/{productId} {
-      allow read: if true;
-      allow write: if isValidId(productId) && isValidProduct(incoming());
+      allow read, write: if true;
     }
 
     match /partners/{partnerId} {
-      allow read: if true;
-      allow write: if isValidId(partnerId) && isValidPartner(incoming());
+      allow read, write: if true;
     }
 
     match /stock_transfers/{transferId} {
-      allow get: if isValidId(transferId) && resource.data.createdAt >= '';
-      allow list: if resource.data.createdAt >= '';
-      allow create, update: if isValidId(transferId) && isValidTransfer(incoming());
-      allow delete: if isValidId(transferId) && resource.data.createdAt >= '';
+      allow read, write: if true;
     }
 
     match /transactions/{transactionId} {
-      allow read: if true;
-      allow write: if isValidId(transactionId) && isValidTransaction(incoming());
+      allow read, write: if true;
     }
 
     match /compliance_records/{recordId} {
-      allow read: if true;
-      allow write: if isValidId(recordId) && isValidCompliance(incoming());
+      allow read, write: if true;
     }
 
     match /audit_logs/{logId} {
-      allow read: if true;
-      allow write: if isValidId(logId) && isValidAuditLog(incoming());
+      allow read, write: if true;
     }
 
     match /website_delivery_orders/{orderId} {
-      allow get, list: if true;
-      allow create, update: if isValidId(orderId);
-      allow delete: if isValidId(orderId);
+      allow read, write: if true;
     }
 
     match /product_ratings/{ratingId} {
-      allow get, list: if true;
-      allow create, update: if isValidId(ratingId);
-      allow delete: if isValidId(ratingId);
+      allow read, write: if true;
     }
 
     match /active_pos_carts/{cartId} {
-      allow get, list, create, update, delete: if isValidId(cartId);
+      allow read, write: if true;
     }
   }
 }

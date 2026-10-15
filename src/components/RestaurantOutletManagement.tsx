@@ -27,6 +27,8 @@ import {
   ExternalLink,
   Sliders,
   Cigarette,
+  Warehouse,
+  ShoppingBag,
 } from 'lucide-react';
 import {
   BusinessUnit,
@@ -120,15 +122,29 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
   const [confirmDeleteUnit, setConfirmDeleteUnit] = useState<BusinessUnit | null>(null);
   const [isDeletingOutletId, setIsDeletingOutletId] = useState<string | null>(null);
 
-  // Open modal to create a new outlet
-  const handleOpenCreateOutletModal = () => {
+  // Open modal to create a new outlet (optionally with preset type: store, shop, warehouse, etc.)
+  const handleOpenCreateOutletModal = (presetType?: BusinessUnitType | React.MouseEvent) => {
     setEditingOutlet(null);
     setNewOutletBranchId(branches[0]?.id || '');
     setNewOutletName('');
-    setNewOutletType('restaurant_club');
-    setNewOutletDesc('');
+    const t: BusinessUnitType =
+      typeof presetType === 'string'
+        ? presetType
+        : 'store';
+    setNewOutletType(t);
+    setNewOutletDesc(
+      t === 'store'
+        ? 'Retail bottle store and customer walk-in sales counter.'
+        : t === 'shop'
+        ? 'High-turnover liquor merchant shop with trade counter tills.'
+        : t === 'warehouse'
+        ? 'Regional storage yard and bonded dispatch warehouse.'
+        : t === 'restaurant_club'
+        ? 'Luxury club lounge, premium grilled steaks, artisan cocktails, and bottle service.'
+        : ''
+    );
     setNewOutletManager('');
-    setNewOutletTableCount(24);
+    setNewOutletTableCount(t === 'restaurant_club' ? 24 : 0);
     setNewOutletAllowTopup(true);
     setNewOutletStatus('Active');
     setIsCreateOutletModalOpen(true);
@@ -193,13 +209,20 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
   const [quickPriceItemId, setQuickPriceItemId] = useState<string | null>(null);
   const [quickPriceValue, setQuickPriceValue] = useState<number>(0);
 
+  // Filter by Sub-Business Category (Store, Shop, Warehouse, Hospitality)
+  const [outletTypeFilter, setOutletTypeFilter] = useState<'ALL' | 'store' | 'shop' | 'warehouse' | 'hospitality'>('ALL');
+
   // Filtered Business Units
   const filteredUnits = useMemo(() => {
     return businessUnits.filter((u) => {
       if (selectedBranchFilter !== 'ALL' && u.branchId !== selectedBranchFilter) return false;
+      if (outletTypeFilter === 'store') return u.unitType === 'store' || u.unitType === 'retail_store';
+      if (outletTypeFilter === 'shop') return u.unitType === 'shop' || u.unitType === 'merchant_shop';
+      if (outletTypeFilter === 'warehouse') return u.unitType === 'warehouse';
+      if (outletTypeFilter === 'hospitality') return u.unitType === 'restaurant_club' || u.unitType === 'bar_lounge';
       return true;
     });
-  }, [businessUnits, selectedBranchFilter]);
+  }, [businessUnits, selectedBranchFilter, outletTypeFilter]);
 
   // Inventory scoped to active business unit
   const activeUnitInventory = useMemo(() => {
@@ -269,28 +292,62 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
         tableCount: newOutletType === 'restaurant_club' ? newOutletTableCount : 0,
       });
     } else {
-      const code = `OUT-${newOutletName.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
+      const prefix =
+        newOutletType === 'store' || newOutletType === 'retail_store'
+          ? 'STR'
+          : newOutletType === 'shop' || newOutletType === 'merchant_shop'
+          ? 'SHP'
+          : newOutletType === 'warehouse'
+          ? 'WHS'
+          : newOutletType === 'bar_lounge'
+          ? 'BAR'
+          : 'RST';
+      const cleanNameTag = newOutletName.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X');
+      const code = `${prefix}-${cleanNameTag}-${Date.now().toString().slice(-4)}`;
+
+      const defaultDesc =
+        newOutletDesc.trim() ||
+        (newOutletType === 'warehouse'
+          ? 'Bonded storage warehouse and bulk distribution depot'
+          : newOutletType === 'store' || newOutletType === 'retail_store'
+          ? 'Commercial supermarket and wholesale distribution store'
+          : newOutletType === 'shop' || newOutletType === 'merchant_shop'
+          ? 'Retail bottle shop and counter merchandise store'
+          : newOutletType === 'bar_lounge'
+          ? 'Lounge bar, VIP counter and cocktail service'
+          : 'Club dining, restaurant kitchen, and lounge service');
+
+      const defaultFood =
+        newOutletType === 'restaurant_club'
+          ? [...DEFAULT_RESTAURANT_FOOD_CATEGORIES]
+          : newOutletType === 'store' || newOutletType === 'retail_store'
+          ? ['Packaged Groceries', 'Wholesale Bundles', 'Bar Snacks & Mixers']
+          : newOutletType === 'shop' || newOutletType === 'merchant_shop'
+          ? ['Snack Bites', 'Bar Nuts & Biltong', 'Confectionery']
+          : newOutletType === 'warehouse'
+          ? ['Bulk Provisions', 'General Supplies', 'Packaging Materials']
+          : ['Tapas & Bar Bites', 'Platters & Grills'];
+
+      const defaultBev =
+        newOutletType === 'restaurant_club'
+          ? [...DEFAULT_RESTAURANT_BEVERAGE_CATEGORIES]
+          : newOutletType === 'warehouse'
+          ? ['Bonded Spirits Pallets', 'Imported Wines Pallets', 'Beer Kegs & Crates', 'Duty-Free Stocks']
+          : newOutletType === 'store' || newOutletType === 'retail_store'
+          ? ['Commercial Spirits Aisle', 'Fine Wines Vault', 'Chilled Beers & Ciders', 'Energy & Mixers']
+          : ['Single Malts & Blends', 'Champagne & Sparkling', 'Craft Beers', 'Mixers & Syrups'];
+
       await onCreateBusinessUnit({
         code,
         name: newOutletName.trim(),
         branchId: branch?.id || 'br-main',
         branchName: branch?.name || 'Main Branch',
         unitType: newOutletType,
-        description:
-          newOutletDesc.trim() ||
-          (newOutletType === 'restaurant_club'
-            ? 'Club dining and lounge service'
-            : 'Liquor supermarket merchant outlet'),
+        description: defaultDesc,
         managerName: newOutletManager.trim() || currentUser.name,
         status: newOutletStatus,
-        foodCategories:
-          newOutletType === 'restaurant_club'
-            ? [...DEFAULT_RESTAURANT_FOOD_CATEGORIES]
-            : ['Supermarket Aisles', 'Promotional Displays'],
-        beverageCategories:
-          newOutletType === 'restaurant_club'
-            ? [...DEFAULT_RESTAURANT_BEVERAGE_CATEGORIES]
-            : ['Spirits Aisle', 'Wines Aisle', 'Cold Beers Vault'],
+        foodCategories: defaultFood,
+        beverageCategories: defaultBev,
         allowLiquorTopup: newOutletAllowTopup,
         tableCount: newOutletType === 'restaurant_club' ? newOutletTableCount : 0,
         currency: 'KES',
@@ -508,29 +565,35 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
         </div>
 
         {/* Global Outlets Metric Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 mt-5 border-t border-white/15 text-white relative z-10">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-5 mt-5 border-t border-white/15 text-white relative z-10">
           <div>
-            <div className="text-[11px] text-white/70 font-montserrat font-bold">Total Branch Outlets</div>
+            <div className="text-[11px] text-white/70 font-montserrat font-bold">Total Facilities &amp; Outlets</div>
             <div className="text-xl sm:text-2xl font-black font-montserrat text-[#FFDE00] mt-0.5">
               {businessUnits.length}
             </div>
           </div>
           <div>
-            <div className="text-[11px] text-white/70 font-montserrat font-bold">Restaurants &amp; Clubs</div>
-            <div className="text-xl sm:text-2xl font-black font-montserrat text-white mt-0.5">
-              {businessUnits.filter((u) => u.unitType === 'restaurant_club').length}
+            <div className="text-[11px] text-white/70 font-montserrat font-bold">Stores &amp; Supermarkets</div>
+            <div className="text-xl sm:text-2xl font-black font-montserrat text-emerald-300 mt-0.5">
+              {businessUnits.filter((u) => u.unitType === 'store' || u.unitType === 'retail_store').length}
             </div>
           </div>
           <div>
-            <div className="text-[11px] text-white/70 font-montserrat font-bold">Merchant Liquor Supermarkets</div>
-            <div className="text-xl sm:text-2xl font-black font-montserrat text-white mt-0.5">
-              {businessUnits.filter((u) => u.unitType === 'merchant_shop').length}
+            <div className="text-[11px] text-white/70 font-montserrat font-bold">Retail Shops</div>
+            <div className="text-xl sm:text-2xl font-black font-montserrat text-purple-300 mt-0.5">
+              {businessUnits.filter((u) => u.unitType === 'shop' || u.unitType === 'merchant_shop').length}
             </div>
           </div>
           <div>
-            <div className="text-[11px] text-white/70 font-montserrat font-bold">Kitchen Food &amp; Drink SKUs</div>
-            <div className="text-xl sm:text-2xl font-black font-montserrat text-[#34D186] mt-0.5">
-              {restaurantInventory.length} items
+            <div className="text-[11px] text-white/70 font-montserrat font-bold">Bonded Warehouses</div>
+            <div className="text-xl sm:text-2xl font-black font-montserrat text-blue-300 mt-0.5">
+              {businessUnits.filter((u) => u.unitType === 'warehouse').length}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-white/70 font-montserrat font-bold">Hospitality &amp; Clubs</div>
+            <div className="text-xl sm:text-2xl font-black font-montserrat text-amber-300 mt-0.5">
+              {businessUnits.filter((u) => u.unitType === 'restaurant_club' || u.unitType === 'bar_lounge').length}
             </div>
           </div>
         </div>
@@ -648,22 +711,32 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                     {/* Header Pill & Status */}
                     <div className="flex items-center justify-between gap-2">
                       <span
-                        className={`px-2.5 py-1 rounded-xl text-[10px] font-black font-montserrat uppercase tracking-wider flex items-center gap-1 ${
-                          isRestaurant
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : isMerchantShop
+                        className={`px-2.5 py-1 rounded-xl text-[10px] font-black font-montserrat uppercase tracking-wider flex items-center gap-1.5 ${
+                          unit.unitType === 'warehouse'
+                            ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                            : unit.unitType === 'store' || unit.unitType === 'retail_store'
                             ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                            : unit.unitType === 'shop' || unit.unitType === 'merchant_shop'
+                            ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                            : unit.unitType === 'restaurant_club'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-rose-100 text-rose-900 border border-rose-300'
                         }`}
                       >
-                        {isRestaurant && <UtensilsCrossed className="w-3.5 h-3.5 text-amber-700" />}
-                        {isMerchantShop && <Store className="w-3.5 h-3.5 text-emerald-700" />}
-                        {!isRestaurant && !isMerchantShop && <Wine className="w-3.5 h-3.5 text-indigo-700" />}
+                        {unit.unitType === 'warehouse' && <Warehouse className="w-3.5 h-3.5 text-blue-700" />}
+                        {(unit.unitType === 'store' || unit.unitType === 'retail_store') && <Store className="w-3.5 h-3.5 text-emerald-700" />}
+                        {(unit.unitType === 'shop' || unit.unitType === 'merchant_shop') && <ShoppingBag className="w-3.5 h-3.5 text-purple-700" />}
+                        {unit.unitType === 'restaurant_club' && <UtensilsCrossed className="w-3.5 h-3.5 text-amber-700" />}
+                        {unit.unitType === 'bar_lounge' && <Wine className="w-3.5 h-3.5 text-rose-700" />}
                         <span>
-                          {unit.unitType === 'restaurant_club'
+                          {unit.unitType === 'warehouse'
+                            ? 'Bonded Warehouse'
+                            : unit.unitType === 'store' || unit.unitType === 'retail_store'
+                            ? 'Commercial Store'
+                            : unit.unitType === 'shop' || unit.unitType === 'merchant_shop'
+                            ? 'Retail Shop'
+                            : unit.unitType === 'restaurant_club'
                             ? 'Restaurant & Club'
-                            : unit.unitType === 'merchant_shop'
-                            ? 'Liquor Supermarket'
                             : 'Bar & Lounge'}
                         </span>
                       </span>
@@ -1662,49 +1735,97 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
 
               <div>
                 <label className="block font-montserrat font-bold text-slate-700 mb-1">
-                  Sub-Business Type *
+                  Sub-Business / Facility Type *
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setNewOutletType('restaurant_club')}
-                    className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1.5 text-center cursor-pointer transition ${
-                      newOutletType === 'restaurant_club'
-                        ? 'border-[#0A006E] bg-amber-50 text-[#0A006E] font-bold'
-                        : 'border-slate-200 bg-white text-slate-600'
+                    onClick={() => setNewOutletType('store')}
+                    className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                      newOutletType === 'store' || newOutletType === 'retail_store'
+                        ? 'border-[#0A006E] bg-emerald-50 text-[#0A006E] font-bold shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <UtensilsCrossed className="w-5 h-5 text-amber-700" />
-                    <span className="font-montserrat font-bold">Restaurant &amp; Club</span>
-                    <span className="text-[10px] text-slate-500">Food, drink &amp; lounge</span>
+                    <Store className="w-5 h-5 text-emerald-700" />
+                    <span className="font-montserrat font-bold text-xs">Store</span>
+                    <span className="text-[9px] text-slate-500">Commercial Store</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setNewOutletType('merchant_shop')}
-                    className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1.5 text-center cursor-pointer transition ${
-                      newOutletType === 'merchant_shop'
-                        ? 'border-[#0A006E] bg-emerald-50 text-[#0A006E] font-bold'
-                        : 'border-slate-200 bg-white text-slate-600'
+                    onClick={() => setNewOutletType('shop')}
+                    className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                      newOutletType === 'shop' || newOutletType === 'merchant_shop'
+                        ? 'border-[#0A006E] bg-purple-50 text-[#0A006E] font-bold shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <Store className="w-5 h-5 text-emerald-700" />
-                    <span className="font-montserrat font-bold">Liquor Supermarket</span>
-                    <span className="text-[10px] text-slate-500">Retail merchant shop</span>
+                    <ShoppingBag className="w-5 h-5 text-purple-700" />
+                    <span className="font-montserrat font-bold text-xs">Shop</span>
+                    <span className="text-[9px] text-slate-500">Retail Bottle Shop</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewOutletType('warehouse')}
+                    className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                      newOutletType === 'warehouse'
+                        ? 'border-[#0A006E] bg-blue-50 text-[#0A006E] font-bold shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Warehouse className="w-5 h-5 text-blue-700" />
+                    <span className="font-montserrat font-bold text-xs">Warehouse</span>
+                    <span className="text-[9px] text-slate-500">Storage &amp; Depot</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewOutletType('restaurant_club')}
+                    className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                      newOutletType === 'restaurant_club'
+                        ? 'border-[#0A006E] bg-amber-50 text-[#0A006E] font-bold shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <UtensilsCrossed className="w-5 h-5 text-amber-700" />
+                    <span className="font-montserrat font-bold text-xs">Restaurant &amp; Club</span>
+                    <span className="text-[9px] text-slate-500">Dining &amp; Kitchen</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewOutletType('bar_lounge')}
+                    className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1 text-center cursor-pointer transition ${
+                      newOutletType === 'bar_lounge'
+                        ? 'border-[#0A006E] bg-rose-50 text-[#0A006E] font-bold shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Wine className="w-5 h-5 text-rose-700" />
+                    <span className="font-montserrat font-bold text-xs">Bar &amp; Lounge</span>
+                    <span className="text-[9px] text-slate-500">Cocktails &amp; VIP</span>
                   </button>
                 </div>
               </div>
 
               <div>
                 <label className="block font-montserrat font-bold text-slate-700 mb-1">
-                  Outlet Commercial Name *
+                  Facility / Commercial Name *
                 </label>
                 <input
                   type="text"
                   placeholder={
-                    newOutletType === 'restaurant_club'
-                      ? 'e.g. The Sovereign Club & Bistro'
-                      : 'e.g. Westlands Cellar Liquor Supermarket'
+                    newOutletType === 'store' || newOutletType === 'retail_store'
+                      ? 'e.g. Westlands Supermarket & Liquor Store'
+                      : newOutletType === 'shop' || newOutletType === 'merchant_shop'
+                      ? 'e.g. Kilimani Cellars Retail Shop'
+                      : newOutletType === 'warehouse'
+                      ? 'e.g. Port Road Bonded Warehouse Unit 2'
+                      : newOutletType === 'bar_lounge'
+                      ? 'e.g. Skyline Sky Lounge & Bar'
+                      : 'e.g. The Sovereign Club & Bistro'
                   }
                   value={newOutletName}
                   onChange={(e) => setNewOutletName(e.target.value)}

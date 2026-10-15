@@ -230,7 +230,7 @@
         "name": { "type": "string", "maxLength": 160 },
         "branchId": { "type": "string", "maxLength": 128 },
         "branchName": { "type": "string", "maxLength": 120 },
-        "unitType": { "type": "string", "enum": ["restaurant_club", "merchant_shop", "bar_lounge"] },
+        "unitType": { "type": "string", "enum": ["restaurant_club", "merchant_shop", "bar_lounge", "retail_store", "store", "shop", "warehouse"] },
         "description": { "type": "string", "maxLength": 300 },
         "managerName": { "type": "string", "maxLength": 120 },
         "assignedStaffIds": { "type": "array", "items": { "type": "string" } },

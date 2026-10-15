@@ -3,6 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Intercept and swallow third-party Chrome extension communication errors early
+      window.addEventListener('error', function(e) {
+        var msg = (e && e.message) ? String(e.message) : '';
+        var src = (e && e.filename) ? String(e.filename) : '';
+        if (
+          src.indexOf('chrome-extension://') !== -1 ||
+          src.indexOf('moz-extension://') !== -1 ||
+          msg.indexOf('Could not establish connection') !== -1 ||
+          msg.indexOf('Receiving end does not exist') !== -1 ||
+          msg.indexOf('ResizeObserver loop') !== -1
+        ) {
+          e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          return true;
+        }
+      }, true);
+
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = e ? e.reason : null;
+        var rMsg = reason && (reason.message || String(reason)) ? String(reason.message || reason) : '';
+        var rStack = (reason && reason.stack) ? String(reason.stack) : '';
+        if (
+          rMsg.indexOf('Could not establish connection') !== -1 ||
+          rMsg.indexOf('Receiving end does not exist') !== -1 ||
+          rStack.indexOf('chrome-extension://') !== -1 ||
+          rStack.indexOf('moz-extension://') !== -1
+        ) {
+          e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          return true;
+        }
+      }, true);
+    </script>
     <title>Aegis Spirits & Beverage ERP</title>
     <meta name="description" content="Multi-operational liquor distribution and importer ERP with real-time inventory, geo-regional pricing, regulatory compliance, dual POS, and role-based access control." />
     <meta property="og:title" content="Aegis Spirits & Beverage ERP" />
