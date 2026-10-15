@@ -10,14 +10,16 @@ if (typeof window !== 'undefined') {
     (event) => {
       const msg = event.message || '';
       const filename = event.filename || '';
-      if (
+      const isExtensionError =
         filename.includes('chrome-extension://') ||
         filename.includes('moz-extension://') ||
         msg.includes('Could not establish connection') ||
         msg.includes('Receiving end does not exist') ||
         msg.includes('message channel closed') ||
-        msg.includes('ResizeObserver loop')
-      ) {
+        msg.includes('Extension context invalidated') ||
+        msg.includes('ResizeObserver loop');
+
+      if (isExtensionError) {
         event.preventDefault();
         event.stopImmediatePropagation?.();
         return true;
@@ -31,13 +33,17 @@ if (typeof window !== 'undefined') {
     (event) => {
       const reasonMsg = String(event.reason?.message || event.reason || '');
       const reasonStack = String(event.reason?.stack || '');
-      if (
+      
+      // Extension connection errors often appear in both message and stack
+      const isExtensionError =
         reasonMsg.includes('Could not establish connection') ||
         reasonMsg.includes('Receiving end does not exist') ||
         reasonMsg.includes('message channel closed') ||
+        reasonMsg.includes('Extension context invalidated') ||
         reasonStack.includes('chrome-extension://') ||
-        reasonStack.includes('moz-extension://')
-      ) {
+        reasonStack.includes('moz-extension://');
+
+      if (isExtensionError) {
         event.preventDefault();
         event.stopImmediatePropagation?.();
         return true;

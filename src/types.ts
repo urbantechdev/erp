@@ -97,6 +97,14 @@ export interface PayrollRecord {
   payrollRunId: string;
 }
 
+export interface BranchProductActivation {
+  id: string; // branchId_productId
+  branchId: string;
+  productId: string;
+  activatedAt: string;
+  activatedBy: string;
+}
+
 export interface PayrollRun {
   id: string;
   period: string;

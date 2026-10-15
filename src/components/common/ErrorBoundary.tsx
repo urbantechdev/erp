@@ -23,8 +23,17 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('[ERP Platform ErrorBoundary Caught]', error, errorInfo);
-    this.setState({ errorInfo });
+    const errorMsg = error.message || '';
+    const isExtensionError =
+      errorMsg.includes('Could not establish connection') ||
+      errorMsg.includes('Receiving end does not exist') ||
+      errorMsg.includes('message channel closed') ||
+      errorMsg.includes('Extension context invalidated');
+
+    if (!isExtensionError) {
+      console.error('[ERP Platform ErrorBoundary Caught]', error, errorInfo);
+      this.setState({ errorInfo });
+    }
   }
 
   private handleReload = () => {

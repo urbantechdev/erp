@@ -257,5 +257,11 @@ service cloud.firestore {
       allow get, list: if true;
       allow create, update, delete: if true;
     }
+
+    match /branch_product_activations/{activationId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(activationId);
+      allow delete: if request.auth != null;
+    }
   }
 }

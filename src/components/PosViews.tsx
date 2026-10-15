@@ -62,6 +62,8 @@ import {
   clearActivePosCart,
 } from '../utils/posCartSync';
 import { PhoneScannerCompanion } from './PhoneScannerCompanion';
+import { db } from '../firebase';
+import { collection, query, where, onSnapshot, doc, setDoc } from 'firebase/firestore';
 
 interface PosViewsProps {
   mode: 'retail' | 'wholesale';
@@ -202,6 +204,21 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const [barcodeInput, setBarcodeInput] = useState('');
   const [activatedProductIds, setActivatedProductIds] = useState<string[]>([]);
   const [isPhoneScannerOpen, setIsPhoneScannerOpen] = useState(false);
+
+  // Real-time listener for product activations
+  useEffect(() => {
+    if (!activeBranch) return;
+    const q = query(
+      collection(db, 'branch_product_activations'),
+      where('branchId', '==', activeBranch.id)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const ids = snap.docs.map((d) => d.data().productId);
+      setActivatedProductIds(ids);
+    });
+    return unsub;
+  }, [activeBranch]);
+
   const [scanNotification, setScanNotification] = useState<{
     type: 'success' | 'error' | 'case';
     text: string;
@@ -242,7 +259,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
   // Real-time listener: receive instant scans from phone under currentUser's account
   useEffect(() => {
-    const staffKey = currentUser.id || currentUser.email;
+    const staffKey = currentUser.email;
     if (!staffKey) return;
 
     const unsub = subscribeToActivePosCart(staffKey, (remote) => {
@@ -290,7 +307,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
       isApplyingRemoteSyncRef.current = false;
       return;
     }
-    const staffKey = currentUser.id || currentUser.email;
+    const staffKey = currentUser.email;
     if (!staffKey) return;
 
     let sub = 0;
@@ -376,7 +393,16 @@ export const PosViews: React.FC<PosViewsProps> = ({
       setLastScannedBarcode(code);
 
       // Activate product into POS checkout session shelf
-      setActivatedProductIds((prev) => (prev.includes(matched!.id) ? prev : [matched!.id, ...prev]));
+      if (!activatedProductIds.includes(matched!.id)) {
+        const activationId = `${activeBranch.id}_${matched!.id}`;
+        setDoc(doc(db, 'branch_product_activations', activationId), {
+          id: activationId,
+          branchId: activeBranch.id,
+          productId: matched!.id,
+          activatedAt: new Date().toISOString(),
+          activatedBy: currentUser.id,
+        }).catch((err) => console.error('Activation write failed:', err));
+      }
 
       let updatedQty = 1;
       setCart((prev) => {
@@ -515,6 +541,11 @@ export const PosViews: React.FC<PosViewsProps> = ({
     const q = searchQuery.toLowerCase().trim();
     // In POS Barcode-Activated mode: only filter and display among activated products!
     return activatedProducts.filter((p) => {
+      // Sales Rep restriction: only show IPS products
+      if (currentUser.role === 'Affiliate Sales Representative' && p.category !== 'IPS') {
+        return false;
+      }
+
       const matchesStockCat =
         stockCategoryFilter === 'ALL' || p.category === stockCategoryFilter;
       const matchesSub =
@@ -528,7 +559,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
         (p.barcode || '').includes(q);
       return matchesStockCat && matchesSub && matchesSearch;
     });
-  }, [activatedProducts, stockCategoryFilter, selectedSubCategory, searchQuery]);
+  }, [activatedProducts, stockCategoryFilter, selectedSubCategory, searchQuery, currentUser.role]);
 
   const displayedProducts = useMemo(
     () => filteredProducts.slice(0, visibleLimit),
@@ -873,13 +904,19 @@ export const PosViews: React.FC<PosViewsProps> = ({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-xs sm:text-sm font-montserrat font-black italic text-[#0A006E] tracking-tight">
-                {mode === 'retail' ? 'Retail Cashier Checkout' : 'Wholesale Distribution POS'}
+              <h2 className="text-sm font-extrabold font-montserrat text-[#0A006E] tracking-tight">
+                {mode === 'retail' ? 'Retail Checkout' : 'Wholesale POS'}
               </h2>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-montserrat font-bold bg-[#0A006E]/10 text-[#0A006E] border border-[#0A006E]/15">
                 <MapPin className="w-2.5 h-2.5 text-[#0A006E]" />
                 {activeRegion?.name || 'Default Zone'}
               </span>
+              {currentUser.role === 'Affiliate Sales Representative' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-montserrat font-bold bg-violet-100 text-violet-800 border border-violet-200">
+                  <Sparkles className="w-2.5 h-2.5" />
+                  Sales Rep Mode
+                </span>
+              )}
             </div>
             <p className="text-[10px] sm:text-[11px] font-semibold text-[#0A006E]/80 truncate">
               {branches.find((b) => b.id === activeBranch?.id)?.name || 'Central Outlet'} · Suburb vs. Lower-Region Geo-Pricing Active

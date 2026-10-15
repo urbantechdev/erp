@@ -40,6 +40,7 @@ export interface ActivePosCartPayload {
 }
 
 export function getPosCartDocId(staffIdOrEmail: string): string {
+  // Use email as the primary anchor for synchronization
   const sanitized = (staffIdOrEmail || 'default_cashier')
     .toLowerCase()
     .replace(/[^a-zA-Z0-9_-]/g, '_')
