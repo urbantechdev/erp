@@ -2955,6 +2955,11 @@ export const AuditAndSecurityModule: React.FC<{
   onOpenUserFeatureModal?: (staff: StaffMember) => void;
 }> = ({ currentUser, auditLogs, staffList, onOpenAccessMatrix, onOpenUserFeatureModal }) => {
   const [severityFilter, setSeverityFilter] = useState<string>('All');
+  const [feedbackToast, setFeedbackToast] = useState<{
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+  } | null>(null);
 
   // Role-scoped audit telemetry matching Target Access Model:
   // Admin: Full

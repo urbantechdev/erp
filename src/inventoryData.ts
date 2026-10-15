@@ -1,4 +1,3 @@
-import { Omit } from 'react';
 import { Product } from './types';
 
 export const INVENTORY_DATA: Omit<Product, 'id' | 'createdAt'>[] = [

@@ -197,11 +197,19 @@ export const ErpProvider: React.FC<{
 
   // Approval Requests
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
+  const [productRatings, setProductRatings] = useState<ProductRatingRecord[]>([]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'approval_requests'), (snapshot) => {
       setApprovalRequests(snapshot.docs.map(doc => doc.data() as ApprovalRequest));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'approval_requests'));
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'product_ratings'), (snapshot) => {
+      setProductRatings(snapshot.docs.map(doc => doc.data() as ProductRatingRecord));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'product_ratings'));
     return () => unsub();
   }, []);
 
@@ -462,8 +470,8 @@ export const ErpProvider: React.FC<{
         createdAt: now,
         updatedAt: now
       };
-      setProductRatings(prev => {
-        const filtered = prev.filter(r => r.id !== id);
+      setProductRatings((prev: ProductRatingRecord[]) => {
+        const filtered = prev.filter((r: ProductRatingRecord) => r.id !== id);
         return [rec, ...filtered];
       });
     },

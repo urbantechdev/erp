@@ -27,7 +27,7 @@ export async function signInWithGooglePopup(): Promise<UserCredential> {
   if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
     document.exitFullscreen().catch(() => {});
   }
-  return signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
+  return safeSignInWithPopup(auth, googleProvider);
 }
 
 
