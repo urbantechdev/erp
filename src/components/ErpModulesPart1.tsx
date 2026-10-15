@@ -975,6 +975,71 @@ export const OverviewModule: React.FC<{
         </div>
       </div>
 
+      {/* Inter-Department & Operations Workflow Hub */}
+      <div className="bg-gradient-to-r from-[#0A006E] to-[#1200a4] text-white border-2 border-[#FFDE00] rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFDE00] text-[#0A006E] text-[11px] font-montserrat font-black uppercase tracking-wider mb-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Fully Wired &amp; Synchronized ERP Database (erp-db-1)
+            </div>
+            <h2 className="text-xl sm:text-2xl font-montserrat font-black italic text-white">
+              Inter-Department &amp; Operations Workflow Hub
+            </h2>
+            <p className="text-xs text-slate-200 mt-1 max-w-3xl">
+              All 13 departments are unified in real-time. Sales transactions instantly deduct inventory, log financial ledger entries, update customer CRM records, credit staff sales performance, and synchronize kitchen/bar outlets.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => onNavigateModule?.('retail_pos')}
+              className="px-4 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition"
+            >
+              Open POS
+            </button>
+            <button
+              onClick={() => onNavigateModule?.('inventory')}
+              className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+            >
+              Inventory Hub
+            </button>
+            <button
+              onClick={() => onNavigateModule?.('outlets_restaurants')}
+              className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+            >
+              Restaurant &amp; Bar
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
+          {[
+            { label: 'Retail & Wholesale POS', mod: 'retail_pos', desc: 'Auto stock & ledger' },
+            { label: 'Inventory & CSV', mod: 'inventory', desc: 'Bonded stock & SKU' },
+            { label: 'Finance & P&L', mod: 'overview', desc: 'Real-time ledger' },
+            { label: 'Kitchen & Bar', mod: 'outlets_restaurants', desc: 'Table & outlet sync' },
+            { label: 'HR & 6-Digit PIN', mod: 'hr_rbac', desc: 'Staff & payroll' },
+            { label: 'CRM & Partners', mod: 'partners', desc: 'Customer accounts' },
+          ].map((item, idx) => (
+            <div
+              key={idx}
+              onClick={() => onNavigateModule?.(item.mod)}
+              className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl p-3 cursor-pointer transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="text-[11px] font-montserrat font-black text-[#FFDE00] truncate">
+                  {item.label}
+                </div>
+                <div className="text-[10px] text-slate-300 mt-0.5">{item.desc}</div>
+              </div>
+              <div className="text-[10px] text-emerald-400 font-bold mt-2 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Synced
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* 4. SALES FOR TODAY, THIS WEEK, THIS MONTH, THIS YEAR & CSV/PDF EXPORT */}
       <div id="sales-period-section">
         <SalesPeriodTracker
