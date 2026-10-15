@@ -441,177 +441,183 @@ export default function App() {
   }, []);
 
   // Attach real-time Firestore listeners with local cache persistence
+  // Attach real-time Firestore listeners with local cache persistence
   useEffect(() => {
-    const unsubStaff = onSnapshot(
-      collection(db, 'staff'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as StaffMember), id: d.id }));
-        if (list.length > 0) {
-          setStaffList(list);
-          try {
-            localStorage.setItem('erp_staff_backup', JSON.stringify(list));
-          } catch {}
+    const subscribeWithFallback = <T extends { id: string }>(
+      collectionName: string,
+      onSuccess: (docs: T[]) => void,
+      onErrorTag: string
+    ) => {
+      let isUnmounted = false;
+      let activeUnsub: (() => void) | null = null;
+
+      const tryQuery = (useFilter: boolean) => {
+        try {
+          const q = useFilter
+            ? query(collection(db, collectionName), where('createdAt', '>=', ''))
+            : collection(db, collectionName);
+
+          activeUnsub = onSnapshot(
+            q,
+            (snap) => {
+              if (isUnmounted) return;
+              const list = snap.docs.map((d) => ({ ...(d.data() as T), id: d.id }));
+              if (list.length > 0) {
+                onSuccess(list);
+              }
+            },
+            (err) => {
+              if (useFilter && !isUnmounted) {
+                // If filtered query fails or rules change, try unfiltered query
+                tryQuery(false);
+              } else {
+                console.warn(`[Firestore ${onErrorTag}] sync notice:`, err?.message || err);
+              }
+            }
+          );
+        } catch (e: any) {
+          console.warn(`[Firestore ${onErrorTag}] query exception:`, e?.message || e);
         }
+      };
+
+      tryQuery(true);
+
+      return () => {
+        isUnmounted = true;
+        if (activeUnsub) activeUnsub();
+      };
+    };
+
+    const unsubStaff = subscribeWithFallback<StaffMember>(
+      'staff',
+      (list) => {
+        setStaffList(list);
+        try {
+          localStorage.setItem('erp_staff_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore staff sync note]', err?.message || err)
+      'staff'
     );
 
-    const unsubBranches = onSnapshot(
-      collection(db, 'branches'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as Branch), id: d.id }));
-        if (list.length > 0) {
-          setBranches(list);
-          try {
-            localStorage.setItem('erp_branches_backup', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubBranches = subscribeWithFallback<Branch>(
+      'branches',
+      (list) => {
+        setBranches(list);
+        try {
+          localStorage.setItem('erp_branches_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore branches sync note]', err?.message || err)
+      'branches'
     );
 
-    const unsubRegions = onSnapshot(
-      collection(db, 'geo_regions'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as GeoRegion), id: d.id }));
-        if (list.length > 0) {
-          setRegions(list);
-          try {
-            localStorage.setItem('erp_regions_backup', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubRegions = subscribeWithFallback<GeoRegion>(
+      'geo_regions',
+      (list) => {
+        setRegions(list);
+        try {
+          localStorage.setItem('erp_regions_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore regions sync note]', err?.message || err)
+      'geo_regions'
     );
 
-    const unsubProducts = onSnapshot(
-      collection(db, 'products'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as Product), id: d.id }));
-        if (list.length > 0) {
-          setFirestoreProducts(list);
-          try {
-            localStorage.setItem('erp_products_local_override', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubProducts = subscribeWithFallback<Product>(
+      'products',
+      (list) => {
+        setFirestoreProducts(list);
+        try {
+          localStorage.setItem('erp_products_local_override', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore products sync note]', err?.message || err)
+      'products'
     );
 
-    const unsubPartners = onSnapshot(
-      collection(db, 'partners'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as Partner), id: d.id }));
-        if (list.length > 0) {
-          setPartners(list);
-          try {
-            localStorage.setItem('erp_partners_backup', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubPartners = subscribeWithFallback<Partner>(
+      'partners',
+      (list) => {
+        setPartners(list);
+        try {
+          localStorage.setItem('erp_partners_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore partners sync note]', err?.message || err)
+      'partners'
     );
 
-    const unsubTransfers = onSnapshot(
-      collection(db, 'stock_transfers'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as StockTransfer), id: d.id }));
-        if (list.length > 0) {
-          setTransfers(list);
-          try {
-            localStorage.setItem('erp_transfers_backup', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubTransfers = subscribeWithFallback<StockTransfer>(
+      'stock_transfers',
+      (list) => {
+        setTransfers(list);
+        try {
+          localStorage.setItem('erp_transfers_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore stock_transfers sync note]', err?.message || err)
+      'stock_transfers'
     );
 
-    const unsubTransactions = onSnapshot(
-      collection(db, 'transactions'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as TransactionDoc), id: d.id }));
-        if (list.length > 0) {
-          setTransactions(list);
-          try {
-            localStorage.setItem('erp_transactions_backup', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubTransactions = subscribeWithFallback<TransactionDoc>(
+      'transactions',
+      (list) => {
+        setTransactions(list);
+        try {
+          localStorage.setItem('erp_transactions_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore transactions sync note]', err?.message || err)
+      'transactions'
     );
 
-    const unsubCompliance = onSnapshot(
-      collection(db, 'compliance_records'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as ComplianceRecord), id: d.id }));
-        if (list.length > 0) {
-          setComplianceRecords(list);
-          try {
-            localStorage.setItem('erp_compliance_backup', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubCompliance = subscribeWithFallback<ComplianceRecord>(
+      'compliance_records',
+      (list) => {
+        setComplianceRecords(list);
+        try {
+          localStorage.setItem('erp_compliance_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore compliance_records sync note]', err?.message || err)
+      'compliance_records'
     );
 
-    const unsubAudit = onSnapshot(
-      collection(db, 'audit_logs'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as AuditLog), id: d.id }));
-        if (list.length > 0) {
-          setAuditLogs(list);
-          try {
-            localStorage.setItem('erp_audit_logs_backup', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubAudit = subscribeWithFallback<AuditLog>(
+      'audit_logs',
+      (list) => {
+        setAuditLogs(list);
+        try {
+          localStorage.setItem('erp_audit_logs_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore audit_logs sync note]', err?.message || err)
+      'audit_logs'
     );
 
-    const unsubPayrollRuns = onSnapshot(
-      collection(db, 'payroll_runs'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as PayrollRun), id: d.id }));
-        if (list.length > 0) {
-          setPayrollRuns(list);
-          try {
-            localStorage.setItem('erp_payroll_runs_backup', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubPayrollRuns = subscribeWithFallback<PayrollRun>(
+      'payroll_runs',
+      (list) => {
+        setPayrollRuns(list);
+        try {
+          localStorage.setItem('erp_payroll_runs_backup', JSON.stringify(list));
+        } catch {}
       },
-      (err) => console.warn('[Firestore payroll_runs sync note]', err?.message || err)
+      'payroll_runs'
     );
 
-    const unsubBusinessUnits = onSnapshot(
-      collection(db, 'business_units'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as BusinessUnit), id: d.id }));
-        if (list.length > 0) {
-          setBusinessUnits(list);
-          try {
-            localStorage.setItem('erp_business_units', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubBusinessUnits = subscribeWithFallback<BusinessUnit>(
+      'business_units',
+      (list) => {
+        setBusinessUnits(list);
+        try {
+          localStorage.setItem('erp_business_units', JSON.stringify(list));
+        } catch {}
       },
-      (err) => {
-        console.warn('[Firestore] business_units access restricted; using local data:', err?.message || err);
-      }
+      'business_units'
     );
 
-    const unsubRestaurantInventory = onSnapshot(
-      collection(db, 'restaurant_inventory'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ ...(d.data() as RestaurantInventoryItem), id: d.id }));
-        if (list.length > 0) {
-          setRestaurantInventory(list);
-          try {
-            localStorage.setItem('erp_restaurant_inventory', JSON.stringify(list));
-          } catch {}
-        }
+    const unsubRestaurantInventory = subscribeWithFallback<RestaurantInventoryItem>(
+      'restaurant_inventory',
+      (list) => {
+        setRestaurantInventory(list);
+        try {
+          localStorage.setItem('erp_restaurant_inventory', JSON.stringify(list));
+        } catch {}
       },
-      (err) => {
-        console.warn('[Firestore] restaurant_inventory access restricted; using local data:', err?.message || err);
-      }
+      'restaurant_inventory'
     );
 
     return () => {

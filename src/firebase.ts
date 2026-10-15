@@ -101,7 +101,7 @@ export async function testFirestoreConnection(): Promise<FirestoreStatus> {
       msg.includes('does not exist') ||
       error?.code === 'not-found';
     if (isNotFound) {
-      console.warn('[Firestore] Notice: Database (default) does not exist yet for project liqour-f3a77 in Firebase Console.');
+      console.warn(`[Firestore] Notice: Database (${firebaseConfig.firestoreDatabaseId || 'default'}) does not exist yet for project ${firebaseConfig.projectId} in Firebase Console.`);
     } else {
       console.warn('[Firestore] Operating with offline persistence:', msg);
     }
@@ -109,7 +109,7 @@ export async function testFirestoreConnection(): Promise<FirestoreStatus> {
       isDatabaseReady: !isNotFound,
       isNotFound,
       message: isNotFound
-        ? 'Database (default) has not been created yet in Firebase Console for liqour-f3a77'
+        ? `Database (${firebaseConfig.firestoreDatabaseId || 'default'}) has not been created yet in Firebase Console for ${firebaseConfig.projectId}`
         : 'Firestore client operating in offline mode',
     };
   }

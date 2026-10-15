@@ -1,12 +1,12 @@
 {
-  "projectId": "liqour-f3a77",
+  "projectId": "tewaw-9efd5",
   "appId": "1:696062292123:web:b695ca80441a3fb2c8163e",
-  "apiKey": "AIzaSyDMHMs3Rlwk0K4E67Z0JEx2QZ-gSHRWlas",
-  "authDomain": "liqour-f3a77.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "liqour-f3a77.firebasestorage.app",
+  "apiKey": "AIzaSyDNMmwPMlDtWuf_H8IsImy5Y_8um35Jfs4",
+  "authDomain": "tewaw-9efd5.firebaseapp.com",
+  "firestoreDatabaseId": "erp-db-1",
+  "storageBucket": "tewaw-9efd5.firebasestorage.app",
   "messagingSenderId": "696062292123",
   "measurementId": "",
-  "oAuthClientId": "696062292123-jd0k99q87b0vq88ihaugc19c5n1iol23.apps.googleusercontent.com",
+  "oAuthClientId": "696062292123-9omtht8v5tdfhea26tgpmqmctj5hdeg2.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

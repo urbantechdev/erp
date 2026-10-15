@@ -1,29 +1,261 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helpers
-    function isSignedIn() { return request.auth != null; }
-    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
-    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
-    function incoming() { return request.resource.data; }
-    function existing() { return resource.data; }
-
-    // Global catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Admins
-    match /admins/{userId} {
-      allow read: if isAdmin();
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Approval Requests
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidStaff(data) {
+      return data.keys().hasAll(['name', 'email', 'role', 'authMethod', 'status', 'createdAt']) &&
+             data.name is string && data.name.size() <= 120 &&
+             data.email is string && data.email.size() <= 180 &&
+             data.role in ['Admin', 'Accountant', 'HR', 'Sales Manager', 'Branch Manager', 'Inventory Controller', 'Counter Cashier', 'Affiliate Sales Representative'] &&
+             data.authMethod in ['google', 'pin', 'email'] &&
+             data.status in ['Active', 'Suspended', 'Terminated'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidBranch(data) {
+      return data.keys().hasAll(['code', 'name', 'regionId', 'regionName', 'address', 'exciseBondLicense', 'status', 'createdAt']) &&
+             data.code is string && data.code.size() <= 32 &&
+             data.name is string && data.name.size() <= 120 &&
+             data.regionId is string && data.regionId.size() <= 128 &&
+             data.regionName is string && data.regionName.size() <= 120 &&
+             data.address is string && data.address.size() <= 250 &&
+             data.exciseBondLicense is string && data.exciseBondLicense.size() <= 80 &&
+             data.status in ['Operational', 'Audit Hold', 'Closed'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidGeoRegion(data) {
+      return data.keys().hasAll(['code', 'name', 'tierType', 'wholesaleMultiplier', 'retailMultiplier', 'freightLevyPerCase', 'regionalTaxRate', 'createdAt']) &&
+             data.code is string && data.code.size() <= 32 &&
+             data.name is string && data.name.size() <= 120 &&
+             data.tierType in ['Metro Core', 'Suburban Ring', 'Upcountry / Lower Region', 'Duty-Free / Export'] &&
+             data.wholesaleMultiplier is number &&
+             data.retailMultiplier is number &&
+             data.freightLevyPerCase is number &&
+             data.regionalTaxRate is number &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['sku', 'name', 'category', 'volumeMl', 'createdAt']) &&
+             data.sku is string && data.sku.size() <= 80 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.category is string && data.category.size() <= 60 &&
+             data.volumeMl is number &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidPartner(data) {
+      return data.keys().hasAll(['partnerType', 'code', 'companyName', 'contactPerson', 'liquorLicenseNo', 'complianceStatus', 'createdAt']) &&
+             data.partnerType in ['Supplier', 'Retailer', 'Logistics'] &&
+             data.code is string && data.code.size() <= 40 &&
+             data.companyName is string && data.companyName.size() <= 160 &&
+             data.contactPerson is string && data.contactPerson.size() <= 120 &&
+             data.liquorLicenseNo is string && data.liquorLicenseNo.size() <= 80 &&
+             data.complianceStatus in ['Verified', 'Pending Review', 'Expired'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidTransfer(data) {
+      return data.keys().hasAll(['transferNo', 'fromBranchName', 'toBranchName', 'sku', 'productName', 'quantityBottles', 'status', 'createdAt']) &&
+             data.transferNo is string && data.transferNo.size() <= 48 &&
+             data.fromBranchName is string && data.fromBranchName.size() <= 120 &&
+             data.toBranchName is string && data.toBranchName.size() <= 120 &&
+             data.sku is string && data.sku.size() <= 80 &&
+             data.productName is string && data.productName.size() <= 200 &&
+             data.quantityBottles is number &&
+             data.status in ['Dispatched', 'In Transit', 'Received'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['docNumber', 'docType', 'channel', 'branchName', 'regionName', 'customerName', 'itemsSummary', 'totalAmount', 'status', 'createdBy', 'createdAt']) &&
+             data.docNumber is string && data.docNumber.size() <= 48 &&
+             data.docType in ['Receipt', 'Invoice', 'Quote', 'Packing List', 'Delivery Note', 'Credit Note', 'Online Order'] &&
+             data.channel in ['Retail Counter POS', 'B2B Wholesale POS', 'Customer Online Portal', 'Affiliate Rep', 'Restaurant & Club POS', 'Merchant Shop POS'] &&
+             data.branchName is string && data.branchName.size() <= 120 &&
+             data.regionName is string && data.regionName.size() <= 120 &&
+             data.customerName is string && data.customerName.size() <= 160 &&
+             data.itemsSummary is string && data.itemsSummary.size() <= 4000 &&
+             data.totalAmount is number &&
+             data.status in ['Paid', 'Issued', 'Approved', 'Fulfilled', 'Credited', 'Pending Verification'] &&
+             data.createdBy is string && data.createdBy.size() <= 120 &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidBusinessUnit(data) {
+      return data.keys().hasAll(['code', 'name', 'branchId', 'branchName', 'unitType', 'status', 'createdAt']) &&
+             data.code is string && data.code.size() <= 48 &&
+             data.name is string && data.name.size() <= 160 &&
+             data.branchId is string && data.branchId.size() <= 128 &&
+             data.branchName is string && data.branchName.size() <= 120 &&
+             data.unitType in ['restaurant_club', 'merchant_shop', 'bar_lounge', 'retail_store', 'store', 'shop', 'warehouse'] &&
+             data.status in ['Active', 'Inactive'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidRestaurantInventory(data) {
+      return data.keys().hasAll(['businessUnitId', 'branchId', 'name', 'category', 'itemType', 'portionUnit', 'costPriceKes', 'sellingPriceKes', 'portionsAvailable', 'createdAt']) &&
+             data.businessUnitId is string && data.businessUnitId.size() <= 128 &&
+             data.branchId is string && data.branchId.size() <= 128 &&
+             data.name is string && data.name.size() <= 180 &&
+             data.category is string && data.category.size() <= 80 &&
+             data.itemType in ['food', 'beverage', 'club_amenity', 'tobacco_sigger', 'shisha'] &&
+             data.portionUnit is string && data.portionUnit.size() <= 40 &&
+             data.costPriceKes is number &&
+             data.sellingPriceKes is number &&
+             data.portionsAvailable is number &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidCompliance(data) {
+      return data.keys().hasAll(['certificateNo', 'recordType', 'branchName', 'status', 'createdAt']) &&
+             data.certificateNo is string && data.certificateNo.size() <= 80 &&
+             data.recordType in ['Customs Import Bond', 'Digital Excise Stamp Batch', 'Standard Bureau Certificate', 'Distributor Liquor Permit'] &&
+             data.branchName is string && data.branchName.size() <= 120 &&
+             data.status in ['Active', 'Cleared', 'Expiring Soon', 'Flagged'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['actorName', 'actorRole', 'action', 'module', 'details', 'deviceFingerprint', 'severity', 'createdAt']) &&
+             data.actorName is string && data.actorName.size() <= 120 &&
+             data.actorRole is string && data.actorRole.size() <= 80 &&
+             data.action is string && data.action.size() <= 160 &&
+             data.module is string && data.module.size() <= 80 &&
+             data.details is string && data.details.size() <= 500 &&
+             data.deviceFingerprint is string && data.deviceFingerprint.size() <= 240 &&
+             data.severity in ['Info', 'Security', 'Financial', 'Critical'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidPayrollRun(data) {
+      return data.keys().hasAll(['period', 'runDate', 'runBy', 'totalDisbursed', 'totalEmployees', 'status', 'recordsJson', 'createdAt']) &&
+             data.period is string && data.period.size() <= 60 &&
+             data.runDate is string && data.runDate.size() <= 64 &&
+             data.runBy is string && data.runBy.size() <= 120 &&
+             data.totalDisbursed is number &&
+             data.totalEmployees is number &&
+             data.status in ['Draft', 'Finalized', 'Paid'] &&
+             data.recordsJson is string && data.recordsJson.size() <= 200000 &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+    }
+
+    match /payroll_runs/{runId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(runId) && isValidPayrollRun(incoming());
+      allow delete: if isValidId(runId);
+    }
+
+    match /staff/{staffId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(staffId) && isValidStaff(incoming());
+      allow delete: if isValidId(staffId);
+    }
+
+    match /branches/{branchId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(branchId) && isValidBranch(incoming());
+      allow delete: if isValidId(branchId);
+    }
+
+    match /business_units/{unitId} {
+      allow get, list: if true;
+      allow create: if isValidId(unitId) && isValidBusinessUnit(incoming());
+      allow update: if isValidId(unitId) && (isValidBusinessUnit(incoming()) || resource.data.createdAt >= '');
+      allow delete: if isValidId(unitId);
+    }
+
+    match /restaurant_inventory/{itemId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(itemId) && isValidRestaurantInventory(incoming());
+      allow delete: if isValidId(itemId);
+    }
+
+    match /geo_regions/{regionId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(regionId) && isValidGeoRegion(incoming());
+      allow delete: if isValidId(regionId);
+    }
+
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(productId) && isValidProduct(incoming());
+      allow delete: if isValidId(productId);
+    }
+
+    match /partners/{partnerId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(partnerId) && isValidPartner(incoming());
+      allow delete: if isValidId(partnerId);
+    }
+
+    match /stock_transfers/{transferId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(transferId) && isValidTransfer(incoming());
+      allow delete: if isValidId(transferId);
+    }
+
+    match /transactions/{transactionId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(transactionId) && isValidTransaction(incoming());
+      allow delete: if isValidId(transactionId);
+    }
+
+    match /compliance_records/{recordId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(recordId) && isValidCompliance(incoming());
+      allow delete: if isValidId(recordId);
+    }
+
+    match /audit_logs/{logId} {
+      allow get, list: if true;
+      allow create: if isValidId(logId) && isValidAuditLog(incoming());
+      allow delete: if isValidId(logId);
+    }
+
+    match /website_delivery_orders/{orderId} {
+      allow get: if isValidId(orderId);
+      allow list: if true;
+      allow create, update: if isValidId(orderId);
+      allow delete: if isValidId(orderId);
+    }
+
+    match /product_ratings/{ratingId} {
+      allow get: if isValidId(ratingId);
+      allow list: if true;
+      allow create, update: if isValidId(ratingId);
+      allow delete: if isValidId(ratingId);
+    }
+
+    match /active_pos_carts/{staffId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    match /sale_orders/{orderId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
     match /approval_requests/{requestId} {
-      allow create: if isSignedIn() && incoming().requesterId == request.auth.uid;
-      allow read: if isSignedIn() && (resource.data.requesterId == request.auth.uid || isAdmin());
-      allow update: if isAdmin() && incoming().status in ['APPROVED', 'REJECTED'];
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
   }
 }

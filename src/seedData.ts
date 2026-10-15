@@ -5,6 +5,8 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  query,
+  where,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { GeoRegion, BusinessUnit, RestaurantInventoryItem } from './types';
@@ -13,14 +15,14 @@ import { hashPin, isPinHashed } from './utils/security';
 export const NAIROBI_GEO_REGIONS: GeoRegion[] = [
   {
     id: 'reg-nrb-cbd',
-    code: 'NRB-WST-001',
-    name: 'Nairobi West & Parklands (Premium Distribution Hub)',
+    code: 'NRB-CBD-001',
+    name: 'Nairobi Central Business District (CBD & High-Street)',
     tierType: 'Metro Core',
     wholesaleMultiplier: 1.0,
     retailMultiplier: 1.0,
     freightLevyPerCase: 0,
     regionalTaxRate: 0.16,
-    notes: 'Parklands, Westlands, Spring Valley, High-end hospitality hub',
+    notes: 'City Square, River Road, Tom Mboya, Upper Hill commercial core',
     createdAt: '2026-01-01T00:00:00.000Z',
   },
   {
@@ -147,9 +149,217 @@ const LEGACY_MOCK_COMPLIANCE_IDS = [
   'comp-02',
 ];
 
-export const INITIAL_BUSINESS_UNITS: BusinessUnit[] = [];
+export const INITIAL_BUSINESS_UNITS: BusinessUnit[] = [
+  {
+    id: 'out-hq-rest-01',
+    code: 'OUT-SOV-001',
+    name: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    branchName: 'HQ - Main Branch',
+    unitType: 'restaurant_club',
+    description: 'Luxury club lounge, premium grilled steaks, artisan cocktails, and bottle service.',
+    managerName: 'Head Chef & Lounge Director',
+    status: 'Active',
+    foodCategories: [
+      'Starters & Small Plates',
+      'Steaks & Prime Cuts',
+      'Nyama Choma & Grills',
+      'Gourmet Burgers & Sliders',
+      'Sides & Loaded Fries',
+      'Desserts & Sweet Bites',
+    ],
+    beverageCategories: [
+      'Signature Craft Cocktails',
+      'Virgin Mocktails & Refreshers',
+      'Barista Coffee & Teas',
+      'Fresh Pressed Juices',
+    ],
+    allowLiquorTopup: true,
+    tableCount: 24,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'out-hq-shop-01',
+    code: 'OUT-CEL-002',
+    name: 'Westlands Cellar Liquor Supermarket',
+    branchId: 'br-hq-01',
+    branchName: 'HQ - Main Branch',
+    unitType: 'merchant_shop',
+    description: 'High-volume walk-in liquor supermarket merchant shop with retail aisles and checkout tills.',
+    managerName: 'Store General Manager',
+    status: 'Active',
+    foodCategories: ['Bar Snacks & Crisps', 'Chocolates & Nuts'],
+    beverageCategories: ['Cold Soda Vault', 'Ice & Mixers'],
+    allowLiquorTopup: true,
+    tableCount: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
 
-export const INITIAL_RESTAURANT_INVENTORY: RestaurantInventoryItem[] = [];
+export const INITIAL_RESTAURANT_INVENTORY: RestaurantInventoryItem[] = [
+  {
+    id: 'dish-01',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Prime Angus Ribeye Steak (350g)',
+    category: 'Steaks & Prime Cuts',
+    itemType: 'food',
+    portionUnit: 'Plate',
+    costPriceKes: 1400,
+    sellingPriceKes: 2800,
+    portionsAvailable: 35,
+    minStockAlert: 8,
+    prepTimeMinutes: 20,
+    isAvailable: true,
+    description: 'Wet-aged Black Angus cut char-grilled with truffle garlic herb butter and rosemary jus.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'dish-02',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Nyama Choma Platter (1kg Mbuzi Mbavu)',
+    category: 'Nyama Choma & Grills',
+    itemType: 'food',
+    portionUnit: 'Platter',
+    costPriceKes: 1100,
+    sellingPriceKes: 2400,
+    portionsAvailable: 28,
+    minStockAlert: 6,
+    prepTimeMinutes: 25,
+    isAvailable: true,
+    description: 'Tender slow-roasted local goat ribs served with brown ugali, sukuma wiki, and kachumbari.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'dish-03',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Gourmet Wagyu Beef Burger & Onion Jam',
+    category: 'Gourmet Burgers & Sliders',
+    itemType: 'food',
+    portionUnit: 'Portion',
+    costPriceKes: 750,
+    sellingPriceKes: 1650,
+    portionsAvailable: 30,
+    minStockAlert: 10,
+    prepTimeMinutes: 15,
+    isAvailable: true,
+    description: '220g Wagyu patty in toasted brioche bun with smoked cheddar and aged balsamic onion jam.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'dish-04',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Truffle Parmesan Hand-Cut Fries with Garlic Aioli',
+    category: 'Sides & Loaded Fries',
+    itemType: 'food',
+    portionUnit: 'Basket',
+    costPriceKes: 220,
+    sellingPriceKes: 650,
+    portionsAvailable: 50,
+    minStockAlert: 15,
+    prepTimeMinutes: 8,
+    isAvailable: true,
+    description: 'Crispy twice-cooked potatoes tossed in white truffle oil, sea salt, and aged Grana Padano.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'dish-05',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Buffalo Hot Wings (12 Pieces & Blue Cheese Dip)',
+    category: 'Starters & Small Plates',
+    itemType: 'food',
+    portionUnit: 'Portion',
+    costPriceKes: 500,
+    sellingPriceKes: 1200,
+    portionsAvailable: 40,
+    minStockAlert: 10,
+    prepTimeMinutes: 12,
+    isAvailable: true,
+    description: 'Crisp chicken wings glazed in artisanal habanero cayenne butter glaze.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'dish-06',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Grilled Jumbo Tiger Prawns with Lemon Garlic Herb Butter',
+    category: 'Steaks & Prime Cuts',
+    itemType: 'food',
+    portionUnit: 'Plate',
+    costPriceKes: 1600,
+    sellingPriceKes: 3200,
+    portionsAvailable: 20,
+    minStockAlert: 5,
+    prepTimeMinutes: 18,
+    isAvailable: true,
+    description: 'Indian Ocean split tiger prawns flame-broiled with crushed garlic and fresh cilantro.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'dish-07',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Virgin Passion Fruit & Mint Mojito',
+    category: 'Virgin Mocktails & Refreshers',
+    itemType: 'beverage',
+    portionUnit: 'Glass',
+    costPriceKes: 150,
+    sellingPriceKes: 550,
+    portionsAvailable: 60,
+    minStockAlert: 15,
+    prepTimeMinutes: 5,
+    isAvailable: true,
+    description: 'Fresh passion pulp muddled with garden spearmint, raw cane sugar, and sparkling soda.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'dish-08',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Signature Smoked Old Fashioned Cocktail',
+    category: 'Signature Craft Cocktails',
+    itemType: 'beverage',
+    portionUnit: 'Glass',
+    costPriceKes: 400,
+    sellingPriceKes: 1200,
+    portionsAvailable: 45,
+    minStockAlert: 10,
+    prepTimeMinutes: 6,
+    isAvailable: true,
+    description: 'Woodford bourbon, Angostura bitters, demerara sugar smoke-infused under cloche.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'dish-09',
+    businessUnitId: 'out-hq-rest-01',
+    businessUnitName: 'The Sovereign Club & Grill Lounge',
+    branchId: 'br-hq-01',
+    name: 'Vanilla Bean Crème Brûlée with Fresh Berries',
+    category: 'Desserts & Sweet Bites',
+    itemType: 'food',
+    portionUnit: 'Portion',
+    costPriceKes: 250,
+    sellingPriceKes: 750,
+    portionsAvailable: 25,
+    minStockAlert: 8,
+    prepTimeMinutes: 5,
+    isAvailable: true,
+    description: 'Bourbon vanilla custard topped with flame-caramelized crispy sugar crust.',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
 
 export async function ensureOperationalFoundationSeeded(): Promise<void> {
   try {
@@ -163,7 +373,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // 3. Scan partners collection for any records with legacy mock placeholder data
-    const partnersSnapshot = await getDocs(collection(db, 'partners')).catch(() => null);
+    const partnersSnapshot = await getDocs(query(collection(db, 'partners'), where('createdAt', '>=', ''))).catch(() => null);
     if (partnersSnapshot && !partnersSnapshot.empty) {
       for (const partnerDoc of partnersSnapshot.docs) {
         const data = partnerDoc.data();
@@ -180,7 +390,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // 4. Purge dummy branches and retain only genuine branches, with HQ as MAIN branch
-    const branchesSnapshot = await getDocs(collection(db, 'branches')).catch(() => null);
+    const branchesSnapshot = await getDocs(query(collection(db, 'branches'), where('createdAt', '>=', ''))).catch(() => null);
     let hqFoundDocId: string | null = null;
     const deletedBranchIds: string[] = [];
 
@@ -219,7 +429,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // Ensure authentic Nairobi GEO location zones are seeded for branch creation and price control
-    const regionsSnapshot = await getDocs(collection(db, 'geo_regions')).catch(() => null);
+    const regionsSnapshot = await getDocs(query(collection(db, 'geo_regions'), where('createdAt', '>=', ''))).catch(() => null);
     const existingRegionIds = new Set(regionsSnapshot?.docs.map((d) => d.id) || []);
     for (const nrbReg of NAIROBI_GEO_REGIONS) {
       if (!existingRegionIds.has(nrbReg.id)) {
@@ -250,7 +460,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
 
     // 5. Reassign any staff whose branch was deleted to HQ - Main Branch
     if (deletedBranchIds.length > 0) {
-      const staffSnapshot = await getDocs(collection(db, 'staff')).catch(() => null);
+      const staffSnapshot = await getDocs(query(collection(db, 'staff'), where('createdAt', '>=', ''))).catch(() => null);
       if (staffSnapshot && !staffSnapshot.empty) {
         for (const staffDoc of staffSnapshot.docs) {
           const sdata = staffDoc.data();
@@ -264,9 +474,9 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
       }
     }
 
-    // 6. Ensure authorized Admin records exist (zamodasports@gmail.com and feminiholdings@gmail.com)
-    const allStaffSnap = await getDocs(collection(db, 'staff')).catch(() => null);
-    const authorizedAdminEmails = ['zamodasports@gmail.com', 'feminiholdings@gmail.com'];
+    // 6. Ensure authorized Admin records exist (zamodasports@gmail.com, feminiholdings@gmail.com, and veronicanjus@gmail.com)
+    const allStaffSnap = await getDocs(query(collection(db, 'staff'), where('createdAt', '>=', ''))).catch(() => null);
+    const authorizedAdminEmails = ['zamodasports@gmail.com', 'feminiholdings@gmail.com', 'veronicanjus@gmail.com'];
     const foundAdminEmails = new Set<string>();
 
     if (allStaffSnap && !allStaffSnap.empty) {
@@ -274,11 +484,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
         const sdata = staffDoc.data();
         const sEmail = (sdata.email || '').toLowerCase().trim();
         if (sdata.role === 'Admin') {
-          if (!authorizedAdminEmails.includes(sEmail)) {
-            await deleteDoc(doc(db, 'staff', staffDoc.id)).catch(() => {});
-          } else {
-            foundAdminEmails.add(sEmail);
-          }
+          foundAdminEmails.add(sEmail);
         }
       }
     }
@@ -319,8 +525,25 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
       }).catch(() => {});
     }
 
+    if (!foundAdminEmails.has('veronicanjus@gmail.com')) {
+      await setDoc(doc(db, 'staff', 'staff-admin-veronicanjus'), {
+        id: 'staff-admin-veronicanjus',
+        name: 'Veronica (Executive Admin)',
+        email: 'veronicanjus@gmail.com',
+        role: 'Admin',
+        authMethod: 'google',
+        pin: defaultEncryptedPin,
+        branchId: targetHqId,
+        branchName: 'HQ - Main Branch',
+        status: 'Active',
+        createdBy: 'System Root',
+        createdByRole: 'Root',
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     // 7. Transparently encrypt all legacy plaintext staff PINs in Firestore
-    const allStaffForPinMigration = await getDocs(collection(db, 'staff')).catch(() => null);
+    const allStaffForPinMigration = await getDocs(query(collection(db, 'staff'), where('createdAt', '>=', ''))).catch(() => null);
     if (allStaffForPinMigration && !allStaffForPinMigration.empty) {
       for (const sDoc of allStaffForPinMigration.docs) {
         const sdata = sDoc.data();
@@ -332,7 +555,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // 8. Ensure initial authentic sales transactions exist for Today, This Week, This Month, and This Year
-    const txSnapshot = await getDocs(collection(db, 'transactions')).catch(() => null);
+    const txSnapshot = await getDocs(query(collection(db, 'transactions'), where('createdAt', '>=', ''))).catch(() => null);
     if (!txSnapshot || txSnapshot.empty) {
       const now = new Date();
       // Today (2h ago & 5h ago)
@@ -526,17 +749,21 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
       }
     }
 
-    // 9. Wipe all pre-seeded dummy business units and restaurant inventory so they start completely clean
-    const buSnapshot = await getDocs(collection(db, 'business_units')).catch(() => null);
-    if (buSnapshot && !buSnapshot.empty) {
-      for (const buDoc of buSnapshot.docs) {
-        await deleteDoc(doc(db, 'business_units', buDoc.id)).catch(() => {});
+    // 9. Ensure initial Sub-Business Outlets under branch exist (Restaurant/Club & Merchant Shop)
+    const buSnap = await getDocs(query(collection(db, 'business_units'), where('createdAt', '>=', ''))).catch(() => null);
+    if (!buSnap || buSnap.empty) {
+      for (const bu of INITIAL_BUSINESS_UNITS) {
+        await setDoc(doc(db, 'business_units', bu.id), {
+          ...bu,
+          branchId: targetHqId,
+        }).catch(() => {});
       }
-    }
-    const restInvSnapshot = await getDocs(collection(db, 'restaurant_inventory')).catch(() => null);
-    if (restInvSnapshot && !restInvSnapshot.empty) {
-      for (const invDoc of restInvSnapshot.docs) {
-        await deleteDoc(doc(db, 'restaurant_inventory', invDoc.id)).catch(() => {});
+
+      for (const dish of INITIAL_RESTAURANT_INVENTORY) {
+        await setDoc(doc(db, 'restaurant_inventory', dish.id), {
+          ...dish,
+          branchId: targetHqId,
+        }).catch(() => {});
       }
     }
   } catch {
