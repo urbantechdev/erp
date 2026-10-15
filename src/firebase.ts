@@ -1,5 +1,14 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, browserPopupRedirectResolver, type UserCredential } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  browserPopupRedirectResolver,
+  type UserCredential,
+} from 'firebase/auth';
 import { initializeFirestore, doc, getDoc, type Firestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -100,7 +109,7 @@ const safeSignInWithPopup = async (authInstance = auth, provider = googleProvide
   }
 };
 
-export { safeSignInWithPopup as signInWithPopup, signOut };
+export { safeSignInWithPopup as signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword };
 
 /**
  * Recursively strips `undefined` fields from an object or array.

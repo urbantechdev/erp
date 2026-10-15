@@ -11,6 +11,7 @@ import {
   sanitizeAndControlKenyanMobileInput,
   formatKenyanMobileDisplay
 } from '../../utils/kenyanMobileCarrier';
+import { GoogleIcon } from '../icons/GoogleIcon';
 import {
   CenterScreenFeedback,
   CenterScreenFeedbackData,
@@ -838,9 +839,9 @@ export const CustomerCheckoutWizard: React.FC<CustomerCheckoutWizardProps> = ({
                   type="button"
                   data-oauth-popup="true"
                   onClick={() => onRequireSignInForCheckout(true)}
-                  className="flex-1 py-2.5 px-3 rounded-xl bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] font-montserrat font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-montserrat font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
                 >
-                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  <GoogleIcon className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">Sign In with Google to Order</span>
                 </button>
               </div>

@@ -45,6 +45,7 @@ import {
   PayrollRecord,
   BusinessUnit,
 } from '../types';
+import { GoogleIcon } from './icons/GoogleIcon';
 import {
   ROLE_PERMISSIONS,
   exportToCSV,
@@ -2168,7 +2169,10 @@ export const HrAndRbacModule: React.FC<{
                         </td>
                         <td className="py-2.5 px-3 font-mono-tabular">
                           {s.authMethod === 'google' ? (
-                            <span className="text-[#0A006E] font-bold">Google OAuth</span>
+                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0A006E] bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg">
+                              <GoogleIcon className="w-3.5 h-3.5 shrink-0" />
+                              Google OAuth
+                            </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
                               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />

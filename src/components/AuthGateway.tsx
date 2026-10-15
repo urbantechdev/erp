@@ -23,15 +23,22 @@ import {
   MapPin,
   ChevronRight,
   ExternalLink,
-  Globe,
+  Mail,
+  Eye,
+  EyeOff,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
 import { StaffMember, StaffRole, Branch } from '../types';
 import { AnimatedErrorPromptIcon } from './AnimatedFeedback';
+import { Header } from './Header';
+import { GoogleIcon } from './icons/GoogleIcon';
 
 interface AuthGatewayProps {
   staffList: StaffMember[];
   branches?: Branch[];
   onGoogleLogin: (targetRole: 'Admin' | 'Accountant') => Promise<void>;
+  onEmailLogin: (email: string, password: string, targetRole: 'Admin' | 'Accountant') => Promise<void>;
   onPinLogin: (pin: string, selectedRole?: StaffRole, selectedStaffId?: string) => Promise<void>;
   onOpenCustomerPortal: () => void;
   onOpenPhoneScanner?: () => void;
@@ -115,6 +122,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
   staffList,
   branches = [],
   onGoogleLogin,
+  onEmailLogin,
   onPinLogin,
   onOpenCustomerPortal,
   onOpenPhoneScanner,
@@ -123,6 +131,12 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
 }) => {
   const [selectedBox, setSelectedBox] = useState<'Admin' | 'Accountant' | 'Staff'>('Admin');
   const [screenView, setScreenView] = useState<'boxes' | 'departments' | 'branches' | 'users' | 'pin'>('boxes');
+  const [executiveModalRole, setExecutiveModalRole] = useState<'Admin' | 'Accountant' | null>(null);
+  const [authMethodTab, setAuthMethodTab] = useState<'email' | 'google'>('email');
+  const [emailValue, setEmailValue] = useState<string>('');
+  const [passwordValue, setPasswordValue] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [localModalError, setLocalModalError] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<StaffRole | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
   const [selectedBranchName, setSelectedBranchName] = useState<string | null>(null);
@@ -131,6 +145,61 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
   const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
   const pinInputRef = useRef<HTMLInputElement>(null);
   const lastSubmittedPinRef = useRef<string>('');
+
+  const handleOpenExecutiveLogin = (role: 'Admin' | 'Accountant', preferredMode: 'email' | 'google' = 'email') => {
+    setSelectedBox(role);
+    setExecutiveModalRole(role);
+    setAuthMethodTab(preferredMode);
+    setLocalModalError(null);
+    setPasswordValue('');
+    setEmailValue('');
+  };
+
+  const handleCloseExecutiveModal = () => {
+    if (isSubmitting) return;
+    setExecutiveModalRole(null);
+    setLocalModalError(null);
+    setPasswordValue('');
+  };
+
+  const handleSubmitEmailAuth = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!executiveModalRole || isSubmitting) return;
+
+    const trimmedEmail = emailValue.trim().toLowerCase();
+    const trimmedPassword = passwordValue.trim();
+
+    if (!trimmedEmail) {
+      setLocalModalError('Please enter your work or administrative email address.');
+      return;
+    }
+    if (!trimmedPassword) {
+      setLocalModalError('Please enter your password or authorization PIN.');
+      return;
+    }
+
+    setLocalModalError(null);
+    if (executiveModalRole === 'Admin') {
+      localStorage.setItem('erp_last_admin_email', trimmedEmail);
+    } else {
+      localStorage.setItem('erp_last_accountant_email', trimmedEmail);
+    }
+
+    try {
+      await onEmailLogin(trimmedEmail, trimmedPassword, executiveModalRole);
+    } catch (err: any) {
+      setLocalModalError(err?.message || 'Authentication failed. Please verify credentials.');
+    }
+  };
+
+  const handleTriggerGoogleAuthFromModal = async () => {
+    if (!executiveModalRole || isSubmitting) return;
+    try {
+      await onGoogleLogin(executiveModalRole);
+    } catch {
+      // Handled in parent
+    }
+  };
 
   // Auto-focus hidden input whenever entering the PIN screen
   useEffect(() => {
@@ -371,58 +440,15 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
 
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
-      {/* VAAIRO Deep Navy Header with Curved Single-Wave Bottom Edge */}
-      <header className="relative bg-[#0A006E] text-white sticky top-0 z-40 pt-3.5 sm:pt-6 pb-8 sm:pb-14 px-3 sm:px-8 flex items-center justify-between gap-3 sm:gap-8 overflow-hidden shadow-lg">
-        <a
-          href="#top"
-          onClick={(e) => {
-            e.preventDefault();
-            setScreenView('boxes');
-          }}
-          className="flex items-center gap-2.5 sm:gap-4 relative z-10 whitespace-nowrap shrink-0"
-        >
-          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white text-[#0A006E] flex items-center justify-center shadow-lg border-2 border-white">
-            <Wine className="w-5 h-5 sm:w-7 sm:h-7 stroke-[2.5]" />
-          </div>
-          <span className="font-montserrat font-black italic text-xl sm:text-4xl lg:text-5xl tracking-tighter text-white">
-            VAAIRO{' '}
-            <span className="text-[#FFDE00] not-italic text-xs sm:text-base font-black px-2 sm:px-2.5 py-0.5 sm:py-1 bg-white/10 rounded-xl ml-1 sm:ml-1.5 align-middle">
-              ERP
-            </span>
-          </span>
-        </a>
-
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0 relative z-10">
-          <button
-            type="button"
-            onClick={onOpenCustomerPortal}
-            className="h-9 sm:h-12 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-white hover:bg-[#FFDE00] text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 text-[11px] sm:text-xs font-montserrat font-black group"
-            title="Customer Website & Online Storefront"
-            aria-label="Customer Website & Online Storefront"
-          >
-            <Globe className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.3] text-[#0A006E] group-hover:rotate-12 transition-transform" />
-            <span className="hidden sm:inline font-bold">Customer Website</span>
-          </button>
-        </div>
-
-        {/* Single Smooth Curved Wave Bottom Edge */}
-        <svg
-          className="absolute bottom-0 left-0 w-full h-6 sm:h-12 pointer-events-none block"
-          viewBox="0 0 1440 80"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,25 C480,85 960,-15 1440,45 L1440,80 L0,80 Z"
-            fill="#FFFFFF"
-          />
-          <path
-            d="M0,25 C480,85 960,-15 1440,45"
-            fill="none"
-            stroke="#FFDE00"
-            strokeWidth="5"
-          />
-        </svg>
-      </header>
+      {/* VAAIRO Signature Deep Navy Header (2x Height) with Curved Single-Wave Bottom Edge */}
+      <Header
+        variant="gateway"
+        onHomeClick={() => setScreenView('boxes')}
+        onOpenCustomerPortal={onOpenCustomerPortal}
+        onOpenPhoneScanner={onOpenPhoneScanner}
+        branches={branches}
+        totalStaffCount={staffList.length}
+      />
 
       {/* On-Screen Login Canvas */}
       <main className="flex-1 flex flex-col justify-center max-w-6xl w-full mx-auto px-3 sm:px-8 py-2.5 sm:py-6 space-y-3 sm:space-y-6">
@@ -442,8 +468,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                 <div
                   onClick={() => {
                     if (isSubmitting) return;
-                    setSelectedBox('Admin');
-                    onGoogleLogin('Admin');
+                    handleOpenExecutiveLogin('Admin', 'email');
                   }}
                   className={`w-full group min-h-[68px] sm:min-h-0 aspect-auto sm:aspect-square rounded-2xl sm:rounded-3xl p-3 sm:p-8 flex flex-row sm:flex-col items-center justify-between sm:justify-center gap-3 sm:gap-6 text-left sm:text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 sm:hover:-translate-y-3 hover:scale-[1.01] sm:hover:scale-[1.04] hover:shadow-[0_20px_40px_-12px_rgba(10,0,110,0.5)] ${
                     selectedBox === 'Admin'
@@ -465,7 +490,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                         ADMIN
                       </h2>
                       <p className="text-[11px] sm:hidden font-montserrat font-semibold text-white/80 mt-0.5 truncate">
-                        Executive Google Sign-In
+                        Executive Sign-In
                       </p>
                     </div>
                   </div>
@@ -482,8 +507,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                 <div
                   onClick={() => {
                     if (isSubmitting) return;
-                    setSelectedBox('Accountant');
-                    onGoogleLogin('Accountant');
+                    handleOpenExecutiveLogin('Accountant', 'email');
                   }}
                   className={`w-full group min-h-[68px] sm:min-h-0 aspect-auto sm:aspect-square rounded-2xl sm:rounded-3xl p-3 sm:p-8 flex flex-row sm:flex-col items-center justify-between sm:justify-center gap-3 sm:gap-6 text-left sm:text-center cursor-pointer border-3 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 sm:hover:-translate-y-3 hover:scale-[1.01] sm:hover:scale-[1.04] hover:shadow-[0_20px_40px_-12px_rgba(255,222,0,0.6)] ${
                     selectedBox === 'Accountant'
@@ -505,7 +529,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                         ACCOUNTS
                       </h2>
                       <p className="text-[11px] sm:hidden font-montserrat font-semibold text-[#0A006E]/80 mt-0.5 truncate">
-                        Finance & Ledger Google Auth
+                        Finance & Ledger Auth
                       </p>
                     </div>
                   </div>
@@ -1196,6 +1220,286 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
           </div>
         </div>
       </footer>
+
+      {/* EXECUTIVE AUTHENTICATION MODAL (ADMIN & ACCOUNTANT) */}
+      {executiveModalRole && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseExecutiveModal();
+          }}
+        >
+          <div
+            className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border-2 border-slate-200 overflow-hidden my-auto transition-all animate-in fade-in zoom-in-95 duration-200"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Header with Role Branding */}
+            <div
+              className={`p-4 sm:p-5 flex items-center justify-between gap-3 text-left relative ${
+                executiveModalRole === 'Admin'
+                  ? 'bg-[#0A006E] text-white border-b-4 border-[#FFDE00]'
+                  : 'bg-[#FFDE00] text-[#0A006E] border-b-4 border-[#0A006E]'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-md border-2 border-white shrink-0 ${
+                    executiveModalRole === 'Admin'
+                      ? 'bg-[#FFDE00] text-[#0A006E]'
+                      : 'bg-[#0A006E] text-[#FFDE00]'
+                  }`}
+                >
+                  {executiveModalRole === 'Admin' ? (
+                    <ShieldCheck className="w-6 h-6 stroke-[2.4]" />
+                  ) : (
+                    <Calculator className="w-6 h-6 stroke-[2.4]" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-montserrat font-black italic text-lg sm:text-xl tracking-tight leading-tight truncate">
+                      {executiveModalRole === 'Admin' ? 'ADMIN ACCESS' : 'ACCOUNTS ACCESS'}
+                    </h3>
+                  </div>
+                  <p
+                    className={`text-[11px] font-montserrat font-semibold mt-0.5 truncate ${
+                      executiveModalRole === 'Admin' ? 'text-white/80' : 'text-[#0A006E]/80'
+                    }`}
+                  >
+                    {executiveModalRole === 'Admin'
+                      ? 'System Administrator Authentication'
+                      : 'Finance & General Ledger Gateway'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseExecutiveModal}
+                disabled={isSubmitting}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
+                  executiveModalRole === 'Admin'
+                    ? 'bg-white/10 hover:bg-white/20 text-white'
+                    : 'bg-[#0A006E]/10 hover:bg-[#0A006E]/20 text-[#0A006E]'
+                }`}
+                aria-label="Close"
+              >
+                <X className="w-5 h-5 stroke-[2.5]" />
+              </button>
+            </div>
+
+            {/* Method Tabs: Email vs Google */}
+            <div className="p-2 bg-slate-100 border-b border-slate-200 grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMethodTab('email');
+                  setLocalModalError(null);
+                }}
+                className={`py-2 px-3 rounded-xl font-montserrat font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  authMethodTab === 'email'
+                    ? 'bg-white text-[#0A006E] shadow-sm font-black'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <Mail className="w-4 h-4 stroke-[2.2]" />
+                <span>Sign In with Email</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMethodTab('google');
+                  setLocalModalError(null);
+                }}
+                className={`py-2 px-3 rounded-xl font-montserrat font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  authMethodTab === 'google'
+                    ? 'bg-white text-[#0A006E] shadow-sm font-black'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <GoogleIcon className="w-4 h-4 shrink-0" />
+                <span>Google OAuth</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 space-y-4">
+              {/* Errors if any */}
+              {(localModalError || authError) && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-300 text-xs text-red-950 flex items-start gap-2.5 font-montserrat font-semibold">
+                  <AnimatedErrorPromptIcon size="sm" />
+                  <span className="leading-snug">{localModalError || authError}</span>
+                </div>
+              )}
+
+              {/* TAB 1: EMAIL SIGN-IN FORM */}
+              {authMethodTab === 'email' && (
+                <form onSubmit={handleSubmitEmailAuth} className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-montserrat font-bold text-slate-700 mb-1.5">
+                      Work / Executive Email Address
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="email"
+                        required
+                        value={emailValue}
+                        onChange={(e) => setEmailValue(e.target.value)}
+                        placeholder="name@company.com"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-2 border-slate-200 focus:border-[#0A006E] focus:bg-white rounded-xl text-sm font-montserrat font-medium text-slate-900 outline-none transition"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-montserrat font-bold text-slate-700 mb-1.5">
+                      Password or Authorization Passcode
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={passwordValue}
+                        onChange={(e) => setPasswordValue(e.target.value)}
+                        placeholder="Enter your password..."
+                        className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border-2 border-slate-200 focus:border-[#0A006E] focus:bg-white rounded-xl text-sm font-montserrat font-medium text-slate-900 outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-3 px-4 rounded-xl bg-[#0A006E] hover:bg-[#12009E] disabled:opacity-50 text-[#FFDE00] font-montserrat font-black text-sm tracking-wide shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-[#FFDE00]" />
+                        <span>Verifying Credentials...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="w-4 h-4 stroke-[2.5]" />
+                        <span>Sign In as {executiveModalRole}</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="relative flex py-1 items-center">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="flex-shrink mx-3 text-[11px] font-montserrat font-bold text-slate-400 uppercase">
+                      Or Single Sign-On
+                    </span>
+                    <div className="flex-grow border-t border-slate-200"></div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMethodTab('google');
+                      handleTriggerGoogleAuthFromModal();
+                    }}
+                    disabled={isSubmitting}
+                    className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-montserrat font-bold text-xs border-2 border-slate-200 transition cursor-pointer flex items-center justify-center gap-2 shadow-xs active:scale-98"
+                  >
+                    <GoogleIcon className="w-4 h-4 shrink-0" />
+                    <span>Continue with Google OAuth</span>
+                  </button>
+                </form>
+              )}
+
+              {/* TAB 2: GOOGLE SIGN-IN */}
+              {authMethodTab === 'google' && (
+                <div className="space-y-4 py-2 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-white border-2 border-slate-200 mx-auto flex items-center justify-center shadow-sm">
+                    <GoogleIcon className="w-8 h-8 shrink-0" />
+                  </div>
+                  <div>
+                    <h4 className="font-montserrat font-black text-base text-slate-900">
+                      Google Executive Authentication
+                    </h4>
+                    <p className="text-xs text-slate-500 font-montserrat mt-1">
+                      Sign in directly using your authorized Google corporate identity for {executiveModalRole}.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleTriggerGoogleAuthFromModal}
+                    disabled={isSubmitting}
+                    className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 border-2 border-slate-300 text-slate-800 disabled:opacity-50 font-montserrat font-bold text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-3 active:scale-98"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-[#0A006E]" />
+                        <span>Connecting Google Auth...</span>
+                      </>
+                    ) : (
+                      <>
+                        <GoogleIcon className="w-5 h-5 shrink-0" />
+                        <span>Continue with Google</span>
+                      </>
+                    )}
+                  </button>
+
+                  <p className="text-[11px] text-slate-400 font-montserrat">
+                    Prefer email &amp; password?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setAuthMethodTab('email')}
+                      className="text-[#0A006E] font-bold underline cursor-pointer"
+                    >
+                      Sign In with Email
+                    </button>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Bottom Switch to PIN */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs font-montserrat text-slate-600">
+              <button
+                type="button"
+                onClick={() => {
+                  handleCloseExecutiveModal();
+                  handleBypassToPin();
+                }}
+                className="text-slate-600 hover:text-[#0A006E] font-bold flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Use 6-Digit PIN Terminal</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseExecutiveModal}
+                className="text-slate-400 hover:text-slate-600 font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
