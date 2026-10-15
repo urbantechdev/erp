@@ -246,19 +246,10 @@ service cloud.firestore {
       allow delete: if isValidId(orderId);
     }
 
-    function isValidActivePosCart(data) {
-      return data.keys().hasAll(['staffId', 'cartJson', 'totalUnits', 'grandTotal', 'updatedAt']) &&
-             data.staffId is string && data.staffId.size() <= 128 &&
-             data.cartJson is string && data.cartJson.size() <= 100000 &&
-             data.totalUnits is number &&
-             data.grandTotal is number &&
-             data.updatedAt is string && data.updatedAt.size() <= 64;
-    }
-
-    match /active_pos_carts/{cartId} {
-      allow get, list: if isValidId(cartId);
-      allow create, update: if isValidId(cartId) && isValidActivePosCart(incoming());
-      allow delete: if isValidId(cartId);
+    match /product_ratings/{ratingId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(ratingId);
+      allow delete: if isValidId(ratingId);
     }
   }
 }

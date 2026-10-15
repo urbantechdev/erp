@@ -48,19 +48,10 @@ export const ProductImage: React.FC<ProductImageProps> = React.memo(({
     setUsedFallback(false);
   }, [product.image, product.name, product.brand, product.subCategory, product.category]);
 
-  const isFullOrCustomSize =
-    size === 'full' ||
-    className.includes('w-full') ||
-    className.includes('h-full') ||
-    className.includes('max-h-full') ||
-    className.includes('aspect-');
-
-  const baseSizeClass = isFullOrCustomSize ? 'w-full h-full rounded-xl' : SIZE_CLASSES[size];
-
   return (
     <div
       onClick={onClick}
-      className={`relative overflow-hidden bg-slate-900 border border-slate-200/90 shadow-2xs select-none group/img ${baseSizeClass} ${
+      className={`relative shrink-0 overflow-hidden bg-slate-900 border border-slate-200/90 shadow-2xs select-none group/img ${SIZE_CLASSES[size]} ${
         onClick ? 'cursor-pointer hover:ring-2 hover:ring-[#0A006E] transition-all' : ''
       } ${className}`}
       title={onClick ? `Click to view or update image for ${product.name || 'Product'}` : product.name}
@@ -82,7 +73,7 @@ export const ProductImage: React.FC<ProductImageProps> = React.memo(({
             setImgSrc(generateStudioBottleSvgDataUri(product));
           }
         }}
-        className="w-full h-full min-w-full min-h-full object-cover object-center block transition-transform duration-200 group-hover/img:scale-105"
+        className="w-full h-full object-cover object-center block transition-transform duration-200 group-hover/img:scale-105"
       />
 
       {/* Subtle brand/volume corner indicator for larger thumbnails */}

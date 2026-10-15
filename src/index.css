@@ -40,12 +40,14 @@
 :root {
   --font-heading: 'Montserrat', sans-serif;
   --font-body: 'Raleway', sans-serif;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 body {
   font-family: 'Raleway', sans-serif;
   background-color: #FFFFFF;
   color: #0f172a;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .font-montserrat {
@@ -70,71 +72,54 @@ body {
 }
 
 /* ==========================================================================
-   ENTERPRISE TYPOGRAPHY: MONTSERRAT BOLD ON ALL DASHBOARD DIGITS & FIGURES
+   ENTERPRISE TYPOGRAPHY: BOLD DIGITS & FIGURES CONFIGURATION
    ========================================================================== */
+
+/* All digits, figures, currency amounts, codes, and tabular values render in bold modern sans (Plus Jakarta Sans & Montserrat) */
 .font-mono,
 .font-mono-tabular,
 .tabular-nums,
-[class*="font-mono"],
-[class*="tabular-nums"],
-.font-montserrat-bold-digits,
-.stat-digit,
-.metric-digit,
-.dashboard-figure,
-.kpi-figure,
-.stat-card-value {
-  font-family: 'Montserrat', sans-serif !important;
-  font-weight: 800 !important;
-  font-variant-numeric: tabular-nums lining-nums !important;
-  letter-spacing: -0.02em !important;
+[class*="font-mono"] {
+  font-family: 'Plus Jakarta Sans', 'Montserrat', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums lining-nums diagonal-fractions !important;
+  letter-spacing: -0.01em;
 }
 
-td.font-mono-tabular,
-span.font-mono-tabular,
-div.font-mono-tabular,
-p.font-mono-tabular,
+/* Heaviest figures in KPI dashboards, executive summaries, and prominent hero amounts */
+.font-mono.font-black,
+.font-mono-tabular.font-black,
+.font-black .font-mono,
+.font-black .font-mono-tabular,
+.font-black.font-mono,
+.font-black.font-mono-tabular {
+  font-weight: 900 !important;
+}
+
+.font-mono.font-extrabold,
+.font-mono-tabular.font-extrabold {
+  font-weight: 800 !important;
+}
+
+.font-mono.font-bold,
+.font-mono-tabular.font-bold {
+  font-weight: 700 !important;
+}
+
+/* Ensure bold font weight for all figures across table rows, stats, and badges */
 td.font-mono,
+td.font-mono-tabular,
+th.font-mono,
+th.font-mono-tabular,
 span.font-mono,
+span.font-mono-tabular,
 div.font-mono,
-p.font-mono {
-  font-family: 'Montserrat', sans-serif !important;
-  font-weight: 800 !important;
-  font-variant-numeric: tabular-nums lining-nums !important;
-}
-
-/* ==========================================================================
-   MOBILE FULL-SCREEN MODALS & WINDOWS (Viewport < 640px)
-   ========================================================================== */
-@media (max-width: 640px) {
-  /* Ensure any modal/window container goes 100% full screen on mobile phones */
-  .fixed.inset-0[class*="z-"] > div:not(.silent-scanner-beam):not([class*="pointer-events-none"]),
-  [role="dialog"] > div:not(.silent-scanner-beam),
-  .modal-dialog,
-  .modal-container,
-  .erp-modal-window {
-    width: 100vw !important;
-    height: 100dvh !important;
-    max-width: 100vw !important;
-    max-height: 100dvh !important;
-    min-height: 100dvh !important;
-    border-radius: 0 !important;
-    margin: 0 !important;
-    border: none !important;
-    display: flex !important;
-    flex-direction: column !important;
-  }
-
-  /* Inner scrollable area expands to fill the full screen modal */
-  .fixed.inset-0[class*="z-"] > div > .overflow-y-auto,
-  [role="dialog"] > div > .overflow-y-auto {
-    flex: 1 1 0% !important;
-    max-height: none !important;
-  }
-
-  /* Remove outer padding on modal backdrop overlays on mobile */
-  .fixed.inset-0[class*="z-"]:not([class*="pointer-events-none"]) {
-    padding: 0 !important;
-  }
+div.font-mono-tabular,
+p.font-mono,
+p.font-mono-tabular {
+  font-family: 'Plus Jakarta Sans', 'Montserrat', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 /* Custom scrollbars for high density ERP data */
@@ -314,7 +299,9 @@ button:not(:disabled):active {
   z-index: 5;
 }
 
-.silent-surface-scanner,
+div.bg-white.rounded-3xl,
+div.bg-white.rounded-2xl,
+div.bg-white.rounded-xl,
 .hover-card-lift {
   background-image: linear-gradient(
     115deg,
@@ -331,8 +318,7 @@ button:not(:disabled):active {
 }
 
 /* Yellow Dashboard Hero Banners with Moving Silent Scanner Sweep */
-div.bg-\[\#FFDE00\].hover-card-lift,
-.silent-surface-scanner-gold {
+div.bg-\[\#FFDE00\].hover-card-lift {
   background-color: #FFDE00;
   background-image: linear-gradient(
     115deg,
@@ -347,7 +333,10 @@ div.bg-\[\#FFDE00\].hover-card-lift,
   box-shadow: 0 12px 28px -4px rgba(10, 0, 110, 0.18), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
 }
 
-.silent-surface-scanner-subtle {
+div.bg-\[\#F0F2F0\].rounded-2xl,
+div.bg-\[\#F0F2F0\].rounded-xl,
+div.bg-slate-50.rounded-2xl,
+div.bg-slate-50.rounded-xl {
   background-image: linear-gradient(
     115deg,
     rgba(255, 255, 255, 0) 38%,
@@ -361,16 +350,12 @@ div.bg-\[\#FFDE00\].hover-card-lift,
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+div.bg-white.rounded-3xl:not(.fixed *):hover,
+div.bg-white.rounded-2xl:not(.fixed *):hover,
+div.bg-white.rounded-xl:not(.fixed *):hover,
 .hover-card-lift:hover {
   transform: translateY(-3px);
   box-shadow: 0 18px 36px -6px rgba(10, 0, 110, 0.22), 0 8px 16px -4px rgba(15, 23, 42, 0.12);
-}
-
-/* High-performance storefront card optimizations */
-.storefront-product-card {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 440px;
-  contain: layout style paint;
 }
 
 /* Print optimization for receipts, invoices, packing lists, delivery notes, quotes, and credit notes */
