@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   UtensilsCrossed,
   Store,
@@ -91,6 +91,17 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
     if (currentUser.businessUnitId) return currentUser.businessUnitId;
     return businessUnits[0]?.id || '';
   });
+
+  // Automatically keep selectedUnitId valid when businessUnits are added or removed
+  useEffect(() => {
+    if (businessUnits.length > 0) {
+      if (!businessUnits.some((u) => u.id === selectedUnitId)) {
+        setSelectedUnitId(businessUnits[0].id);
+      }
+    } else {
+      setSelectedUnitId('');
+    }
+  }, [businessUnits, selectedUnitId]);
 
   const isPrivilegedManager =
     currentUser.role === 'Admin' ||
@@ -402,11 +413,45 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
     }
   };
 
+  // Populate Standard Food Categories
+  const handleLoadDefaultFoodCategories = async () => {
+    if (!activeBusinessUnit) return;
+    const existing = activeBusinessUnit.foodCategories || [];
+    const merged = Array.from(new Set([...existing, ...DEFAULT_RESTAURANT_FOOD_CATEGORIES]));
+    await onUpdateBusinessUnit(activeBusinessUnit.id, { foodCategories: merged });
+    setFeedbackToast({
+      type: 'success',
+      title: 'Categories Loaded',
+      message: `Loaded ${DEFAULT_RESTAURANT_FOOD_CATEGORIES.length} standard food categories for ${activeBusinessUnit.name}.`,
+    });
+  };
+
+  // Populate Standard Beverage Categories
+  const handleLoadDefaultBeverageCategories = async () => {
+    if (!activeBusinessUnit) return;
+    const existing = activeBusinessUnit.beverageCategories || [];
+    const merged = Array.from(new Set([...existing, ...DEFAULT_RESTAURANT_BEVERAGE_CATEGORIES]));
+    await onUpdateBusinessUnit(activeBusinessUnit.id, { beverageCategories: merged });
+    setFeedbackToast({
+      type: 'success',
+      title: 'Categories Loaded',
+      message: `Loaded ${DEFAULT_RESTAURANT_BEVERAGE_CATEGORIES.length} standard beverage categories for ${activeBusinessUnit.name}.`,
+    });
+  };
+
   // Open item modal for add
   const handleOpenAddItemModal = () => {
+    if (!activeBusinessUnit) {
+      handleOpenCreateOutletModal('restaurant_club');
+      return;
+    }
     setEditingItem(null);
     setItemName('');
-    const defaultCat = activeBusinessUnit?.foodCategories?.[0] || 'Starters';
+    const defaultCat =
+      activeBusinessUnit?.foodCategories?.[0] ||
+      activeBusinessUnit?.beverageCategories?.[0] ||
+      DEFAULT_RESTAURANT_FOOD_CATEGORIES[0] ||
+      'Main Courses';
     setItemCategory(defaultCat);
     setItemType('food');
     setItemPortionUnit('Plate');
@@ -700,8 +745,41 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
             </button>
           </div>
 
-          {/* Outlets Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Outlets Grid or Empty State */}
+          {filteredUnits.length === 0 ? (
+            <div className="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 sm:p-12 text-center space-y-5 shadow-xs">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 border-2 border-amber-200 text-amber-700 flex items-center justify-center mx-auto shadow-sm">
+                <UtensilsCrossed className="w-8 h-8 stroke-[2.2]" />
+              </div>
+              <div className="max-w-md mx-auto space-y-2">
+                <h3 className="font-montserrat font-black text-lg sm:text-xl text-slate-900">
+                  No Outlets or Facilities Found
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                  All demo and mock hospitality records have been removed. You can now build your real operations by creating your first restaurant, bar lounge, or merchant shop.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateOutletModal('restaurant_club')}
+                  className="px-5 py-2.5 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-2 cursor-pointer shadow-md transition active:scale-95"
+                >
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span>Create Hospitality / Kitchen Outlet</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateOutletModal('store')}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition"
+                >
+                  <Building2 className="w-4 h-4" />
+                  <span>Create Retail Store / Shop</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredUnits.map((unit) => {
               const unitItems = restaurantInventory.filter((i) => i.businessUnitId === unit.id);
               const isRestaurant = unit.unitType === 'restaurant_club';
@@ -974,6 +1052,7 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
               );
             })}
           </div>
+          )}
         </div>
       )}
 
@@ -998,12 +1077,26 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                     onChange={(e) => setSelectedUnitId(e.target.value)}
                     className="px-3 py-1.5 bg-slate-50 border-2 border-[#0A006E] rounded-xl text-sm font-montserrat font-black text-[#0A006E] cursor-pointer"
                   >
-                    {businessUnits.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.branchName}) — {u.unitType === 'restaurant_club' ? 'Restaurant & Club' : 'Merchant Shop'}
-                      </option>
-                    ))}
+                    {businessUnits.length === 0 ? (
+                      <option value="">No outlets available yet</option>
+                    ) : (
+                      businessUnits.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.branchName}) — {u.unitType === 'restaurant_club' ? 'Restaurant & Club' : u.unitType === 'bar_lounge' ? 'Bar & Lounge' : 'Merchant Shop'}
+                        </option>
+                      ))
+                    )}
                   </select>
+                  {businessUnits.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCreateOutletModal('restaurant_club')}
+                      className="px-3 py-1.5 bg-[#FFDE00] text-[#0A006E] rounded-xl text-xs font-montserrat font-black hover:bg-amber-400 cursor-pointer shadow-xs inline-flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                      <span>+ New Outlet</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1104,6 +1197,19 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                       </span>
                     ))}
                   </div>
+
+                  {(!activeBusinessUnit.foodCategories || activeBusinessUnit.foodCategories.length === 0) && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={handleLoadDefaultFoodCategories}
+                        className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition w-full justify-center"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Load Standard Food Categories</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Beverage Categories Card */}
@@ -1162,6 +1268,19 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                       </span>
                     ))}
                   </div>
+
+                  {(!activeBusinessUnit.beverageCategories || activeBusinessUnit.beverageCategories.length === 0) && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={handleLoadDefaultBeverageCategories}
+                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-xl text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition w-full justify-center"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Load Standard Beverage Categories</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1330,7 +1449,25 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
               </div>
             </div>
           ) : (
-            <div className="p-8 text-center text-slate-500">Please select or create an outlet above.</div>
+            <div className="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 sm:p-12 text-center space-y-4 shadow-xs">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 border-2 border-amber-200 text-amber-700 flex items-center justify-center mx-auto shadow-sm">
+                <ChefHat className="w-8 h-8 stroke-[2.2]" />
+              </div>
+              <h3 className="font-montserrat font-black text-lg text-slate-900">
+                No Active Hospitality Outlet Selected
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+                Before configuring food categories and dish menus, create or select an active restaurant, bar lounge, or dining outlet.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleOpenCreateOutletModal('restaurant_club')}
+                className="px-5 py-2.5 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black inline-flex items-center gap-2 cursor-pointer shadow-md transition active:scale-95"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Create Hospitality / Kitchen Outlet</span>
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -1360,11 +1497,15 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                 onChange={(e) => setSelectedUnitId(e.target.value)}
                 className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 cursor-pointer"
               >
-                {businessUnits.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
+                {businessUnits.length === 0 ? (
+                  <option value="">No outlets available yet</option>
+                ) : (
+                  businessUnits.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))
+                )}
               </select>
 
               {activeBusinessUnit && (
@@ -1411,7 +1552,29 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
             </div>
           </div>
 
-          {/* Kitchen KPIs */}
+          {!activeBusinessUnit ? (
+            <div className="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 sm:p-12 text-center space-y-4 shadow-xs">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-50 border-2 border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto shadow-sm">
+                <UtensilsCrossed className="w-8 h-8 stroke-[2.2]" />
+              </div>
+              <h3 className="font-montserrat font-black text-lg text-slate-900">
+                No Dedicated Kitchen or Outlet Selected
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+                Create a restaurant or bar outlet first to track its segregated kitchen portion stock and inventory alerts.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleOpenCreateOutletModal('restaurant_club')}
+                className="px-5 py-2.5 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black inline-flex items-center gap-2 cursor-pointer shadow-md transition active:scale-95"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Create Hospitality Outlet</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Kitchen KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
               <div className="text-[11px] font-bold text-slate-600 font-montserrat">Kitchen Items Active</div>
@@ -1495,8 +1658,30 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
                   {displayedInventory.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-500">
-                        No kitchen inventory items found matching your filters.
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                          <Package className="w-5 h-5" />
+                        </div>
+                        <div className="font-montserrat font-bold text-sm text-slate-700">
+                          No Kitchen Inventory Items Found
+                        </div>
+                        <div className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                          {inventorySearch.trim() || inventoryCategoryFilter !== 'ALL'
+                            ? 'No kitchen items match your current filter criteria.'
+                            : 'This kitchen currently has no stock or food portions logged. Add dishes to track kitchen portion stock and stock alerts.'}
+                        </div>
+                        {!inventorySearch.trim() && inventoryCategoryFilter === 'ALL' && activeBusinessUnit && (
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={handleOpenAddItemModal}
+                              className="px-4 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-bold inline-flex items-center gap-1.5 shadow-xs transition active:scale-95"
+                            >
+                              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                              <span>Add First Kitchen Portion / Dish</span>
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -1564,6 +1749,8 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
               </table>
             </div>
           </div>
+            </>
+          )}
         </div>
       )}
 

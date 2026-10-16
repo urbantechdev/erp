@@ -1169,7 +1169,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
       </main>
 
       {/* Signature Curved Single-Wave Footer */}
-      <footer className="relative bg-[#0A006E] text-white pt-8 sm:pt-10 pb-6 px-4 sm:px-8 mt-auto shrink-0 shadow-2xl">
+      <footer className="sticky bottom-0 z-20 bg-[#0A006E] text-white pt-8 sm:pt-10 pb-6 px-4 sm:px-8 shrink-0 shadow-2xl">
         {/* Single Smooth Curved Wave Top Edge */}
         <svg
           className="absolute top-0 left-0 w-full h-7 sm:h-9 -translate-y-[96%] pointer-events-none block overflow-visible"

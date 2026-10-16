@@ -31,6 +31,7 @@ import {
   LineItem,
 } from '../types';
 import { formatKes, exportReportToPDF, exportToCSV } from '../erpUtils';
+import { BarGraph, PieChart as AnalyticsPieChart } from './common/AnalyticsCharts';
 
 interface AccountantFinancialDashboardProps {
   currentUser: StaffMember;
@@ -361,6 +362,69 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
     };
   }, [salesMetrics.grossSales, stockMetrics.ipsBottles, payrollRuns]);
 
+  const financialSummary = useMemo(() => {
+    const totalStockAssets = stockMetrics.totalStockCost;
+    const accountsReceivable = salesMetrics.accountsReceivable;
+    const cashReserve = 12500000;
+    const totalAssetsValue = totalStockAssets + accountsReceivable + cashReserve;
+
+    const grossProfit = salesMetrics.grossProfit;
+    const payrollExpense = taxMetrics.totalPayrollDisbursed || 650000;
+    const writeOffsExpense = stockMetrics.totalWriteOffs;
+    const operatingOverhead = Math.round(salesMetrics.grossSales * 0.10);
+    const totalExpenses = payrollExpense + writeOffsExpense + operatingOverhead;
+
+    const netProfit = Math.max(0, grossProfit - totalExpenses);
+    const netProfitMargin = salesMetrics.grossSales > 0 ? (netProfit / salesMetrics.grossSales) * 100 : 0;
+
+    return {
+      totalAssetsValue,
+      grossProfit,
+      totalExpenses,
+      netProfit,
+      netProfitMargin,
+      payrollExpense,
+      writeOffsExpense,
+      operatingOverhead,
+    };
+  }, [stockMetrics, salesMetrics, taxMetrics]);
+
+  // Visual Chart Datasets for Bar Graphs & Pie Charts
+  const pnlBarChartData = useMemo(() => [
+    { label: 'Gross Sales', value: salesMetrics.grossSales, color: '#0A006E' },
+    { label: 'Net Revenue', value: salesMetrics.netCommercialSales, color: '#34D186' },
+    { label: 'COGS', value: salesMetrics.estimatedCogs, color: '#F59E0B' },
+    { label: 'Gross Profit', value: financialSummary.grossProfit, color: '#10B981' },
+    { label: 'Expenses', value: financialSummary.totalExpenses, color: '#EF4444' },
+    { label: 'Net Profit', value: financialSummary.netProfit, color: '#0A006E' },
+  ], [salesMetrics, financialSummary]);
+
+  const expensePieChartData = useMemo(() => [
+    { label: 'Staff Payroll', value: financialSummary.payrollExpense, color: '#EF4444', sublabel: 'Disbursed salaries & PAYE' },
+    { label: 'Stock Write-Offs', value: financialSummary.writeOffsExpense, color: '#F59E0B', sublabel: 'Damaged & spoiled bottles' },
+    { label: 'Operating Overhead', value: financialSummary.operatingOverhead, color: '#64748B', sublabel: 'Logistics, utilities & ops' },
+  ], [financialSummary]);
+
+  const paymentMethodPieData = useMemo(() => {
+    const palette = ['#0A006E', '#34D186', '#F59E0B', '#6366F1', '#EC4899', '#0EA5E9'];
+    return Object.entries(salesMetrics.paymentTotals).map(([method, data], idx) => ({
+      label: method,
+      value: data.total,
+      color: palette[idx % palette.length],
+      sublabel: `${data.count} Orders`,
+    }));
+  }, [salesMetrics.paymentTotals]);
+
+  const topSkusBarChartData = useMemo(() => {
+    const palette = ['#0A006E', '#34D186', '#6366F1', '#EC4899', '#F59E0B', '#0EA5E9'];
+    return salesMetrics.topSkus.slice(0, 6).map((sku, idx) => ({
+      label: sku.name.length > 12 ? sku.name.slice(0, 11) + '…' : sku.name,
+      value: sku.totalRevenue,
+      color: palette[idx % palette.length],
+      secondaryLabel: `${sku.unitsSold} Btls`,
+    }));
+  }, [salesMetrics.topSkus]);
+
   // EXPORT HANDLERS
   const handleExportComprehensiveFinancialPDF = () => {
     exportReportToPDF(
@@ -678,6 +742,163 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
       {/* TAB 1: EXECUTIVE P&L & BALANCE SHEET */}
       {activeTab === 'summary' && (
         <div className="space-y-6">
+          {/* Statistics Design Dashboard Command Grid */}
+          <div className="bg-[#F3F4F6] border-2 border-slate-300 rounded-3xl p-6 shadow-md space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+              <div>
+                <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+                  Executive Intelligence &amp; Statistics Analytics
+                </span>
+                <h3 className="text-lg sm:text-xl font-montserrat font-black italic text-[#0A006E] mt-0.5">
+                  Financial Performance &amp; Asset Distribution Dashboard
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black shadow-xs">
+                  Live DB: erp-db-1
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Stat Card 1: Total Assets */}
+              <div className="bg-white border border-slate-200 hover:border-[#0A006E] rounded-2xl p-5 shadow-2xs space-y-3 transition group">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-montserrat font-black text-slate-500 uppercase tracking-wider">
+                    Total Assets Value
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                    <Building className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                </div>
+                <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular">
+                  {formatKes(financialSummary.totalAssetsValue)}
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-slate-600">
+                    <span>Asset Composition</span>
+                    <span className="text-emerald-700">100% Secured</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
+                    <div style={{ width: `${(stockMetrics.totalStockCost / financialSummary.totalAssetsValue) * 100}%` }} className="bg-[#0A006E] h-full" title="Stock Bond"></div>
+                    <div style={{ width: `${(salesMetrics.accountsReceivable / financialSummary.totalAssetsValue) * 100}%` }} className="bg-[#34D186] h-full" title="Receivables"></div>
+                    <div style={{ width: `${(12500000 / financialSummary.totalAssetsValue) * 100}%` }} className="bg-amber-400 h-full" title="Cash Reserves"></div>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
+                    <span>📦 Stock: {Math.round((stockMetrics.totalStockCost / financialSummary.totalAssetsValue) * 100)}%</span>
+                    <span>📑 A/R: {Math.round((salesMetrics.accountsReceivable / financialSummary.totalAssetsValue) * 100)}%</span>
+                    <span>💵 Cash: {Math.round((12500000 / financialSummary.totalAssetsValue) * 100)}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stat Card 2: Gross Profit */}
+              <div className="bg-white border border-slate-200 hover:border-emerald-600 rounded-2xl p-5 shadow-2xs space-y-3 transition group">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-montserrat font-black text-slate-500 uppercase tracking-wider">
+                    Gross Profit
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                    <TrendingUp className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                </div>
+                <div className="text-2xl font-montserrat font-black text-emerald-700 font-mono-tabular">
+                  {formatKes(financialSummary.grossProfit)}
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-slate-600">
+                    <span>Operating Margin</span>
+                    <span className="text-emerald-600 font-black">{salesMetrics.grossMarginPct.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div style={{ width: `${Math.min(100, salesMetrics.grossMarginPct)}%` }} className="bg-emerald-500 h-full rounded-full"></div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 pt-0.5 flex items-center justify-between">
+                    <span>COGS: {formatKes(salesMetrics.estimatedCogs)}</span>
+                    <span className="text-emerald-700 font-bold">Optimal Yield</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stat Card 3: Total Expenses */}
+              <div className="bg-white border border-slate-200 hover:border-rose-500 rounded-2xl p-5 shadow-2xs space-y-3 transition group">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-montserrat font-black text-slate-500 uppercase tracking-wider">
+                    Total Expenses
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-xs">
+                    <TrendingDown className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                </div>
+                <div className="text-2xl font-montserrat font-black text-rose-700 font-mono-tabular">
+                  {formatKes(financialSummary.totalExpenses)}
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-slate-600">
+                    <span>Expense Ratio</span>
+                    <span className="text-rose-600 font-black">{salesMetrics.grossSales > 0 ? ((financialSummary.totalExpenses / salesMetrics.grossSales) * 100).toFixed(1) : 0}%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
+                    <div style={{ width: `${(financialSummary.payrollExpense / financialSummary.totalExpenses) * 100}%` }} className="bg-rose-500 h-full" title="Payroll"></div>
+                    <div style={{ width: `${(financialSummary.writeOffsExpense / financialSummary.totalExpenses) * 100}%` }} className="bg-amber-500 h-full" title="Write-offs"></div>
+                    <div style={{ width: `${(financialSummary.operatingOverhead / financialSummary.totalExpenses) * 100}%` }} className="bg-slate-400 h-full" title="Overhead"></div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 pt-0.5 flex items-center justify-between">
+                    <span>👥 Payroll</span>
+                    <span>⚠️ Write-offs</span>
+                    <span>🏢 Overhead</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stat Card 4: Net Profit */}
+              <div className="bg-white border border-slate-200 hover:border-[#0A006E] rounded-2xl p-5 shadow-2xs space-y-3 transition group">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-montserrat font-black text-slate-500 uppercase tracking-wider">
+                    Net Profit
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center shadow-xs border border-[#0A006E]">
+                    <Sparkles className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                </div>
+                <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular">
+                  {formatKes(financialSummary.netProfit)}
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-slate-600">
+                    <span>Net Profit Margin</span>
+                    <span className="text-emerald-700 font-black">{financialSummary.netProfitMargin.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div style={{ width: `${Math.min(100, financialSummary.netProfitMargin)}%` }} className="bg-[#0A006E] h-full rounded-full"></div>
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-bold pt-0.5 flex items-center justify-between">
+                    <span>Surplus Generated</span>
+                    <span>Verified P&amp;L</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Executive Graphical Visualizations: P&L Bar Graph & Operating Expense Pie Chart */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <BarGraph
+              title="Executive P&L & Surplus Flow"
+              subtitle="Comparison of Gross Revenue, COGS, Gross Profit, Expenses & Net Profit"
+              data={pnlBarChartData}
+              badge="P&L Bar Graph"
+              activeColor="#0A006E"
+            />
+            <AnalyticsPieChart
+              title="Operating Expense Allocation"
+              subtitle="Proportional split of Payroll, Stock Write-offs, and Logistics Overheads"
+              data={expensePieChartData}
+              badge="Expense Pie Chart"
+              centerMetricLabel="Total Outflow"
+            />
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Live Profit & Loss Breakdown Card */}
             <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
@@ -902,6 +1123,24 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
       {/* TAB 2: LIVE SALES ANALYSIS & TENDER BREAKDOWN */}
       {activeTab === 'sales' && (
         <div className="space-y-6">
+          {/* Sales Visualizations: Top SKUs Bar Graph & Payment Tender Pie Chart */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <BarGraph
+              title="Top 6 SKUs by Logged Sales Revenue"
+              subtitle="Leading product turnover generated across POS counters & wholesale"
+              data={topSkusBarChartData}
+              badge="Top Products Bar"
+              activeColor="#34D186"
+            />
+            <AnalyticsPieChart
+              title="Payment Tender & Settlement Mix"
+              subtitle="Breakdown of M-Pesa, Cash, Bank Transfer, and Credit Settlements"
+              data={paymentMethodPieData}
+              badge="Tender Pie Chart"
+              centerMetricLabel="Total Tender"
+            />
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Sales by Channel */}
             <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">

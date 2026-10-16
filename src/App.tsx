@@ -81,8 +81,6 @@ import {
 import {
   ensureOperationalFoundationSeeded,
   NAIROBI_GEO_REGIONS,
-  INITIAL_BUSINESS_UNITS,
-  INITIAL_RESTAURANT_INVENTORY,
 } from './seedData';
 import { AuthGateway } from './components/AuthGateway';
 import { PosViews } from './components/PosViews';
@@ -105,7 +103,6 @@ import { DocumentPrintModal } from './components/DocumentPrintModal';
 import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { OnboardItemsModal } from './components/OnboardItemsModal';
 import { AccessModelMatrixModal } from './components/AccessModelMatrixModal';
-import { AdminInventoryUploader } from './components/AdminInventoryUploader';
 import { UserFeatureAccessModal } from './components/UserFeatureAccessModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
@@ -131,8 +128,46 @@ const MODULE_META: Record<
   hr_rbac: { label: 'HR & Role Provisioning', shortMobileLabel: 'HR & Roles', icon: UserPlus },
   audit_security: { label: 'User Monitoring & Security Logs', shortMobileLabel: 'Security', icon: Activity },
   customer_portal: { label: 'Customer Online Portal', shortMobileLabel: 'Online Store', icon: ShoppingBag },
-  outlets_restaurants: { label: 'Branch Outlets & Restaurants', shortMobileLabel: 'Outlets', icon: UtensilsCrossed },
+  outlets_restaurants: { label: 'Hospitality, Kitchen & Bars', shortMobileLabel: 'Outlets', icon: UtensilsCrossed },
 };
+
+const ERP_DEPARTMENTS: {
+  id: string;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  modules: ERPModuleId[];
+}[] = [
+  {
+    id: 'executive',
+    title: 'Executive & Governance',
+    icon: ShieldCheck,
+    modules: ['overview', 'hr_rbac', 'compliance', 'geo_pricing'],
+  },
+  {
+    id: 'sales',
+    title: 'Sales & Commercial POS',
+    icon: Store,
+    modules: ['retail_pos', 'sales_pos', 'customer_portal', 'documents_credit'],
+  },
+  {
+    id: 'inventory',
+    title: 'Inventory, Depots & Logistics',
+    icon: Package,
+    modules: ['inventory', 'branches_transfers', 'partners'],
+  },
+  {
+    id: 'hospitality',
+    title: 'Hospitality & Branch Outlets',
+    icon: UtensilsCrossed,
+    modules: ['outlets_restaurants'],
+  },
+  {
+    id: 'security',
+    title: 'Security, Fingerprint & Audit Logs',
+    icon: Activity,
+    modules: ['audit_security'],
+  },
+];
 
 export default function App() {
   // Real-time Firestore state with local persistent backup recovery
@@ -221,11 +256,13 @@ export default function App() {
       const saved = localStorage.getItem('erp_business_units');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.some((u: any) => u.id === 'out-hq-rest-01' || u.name?.includes('Sovereign'))) {
-          localStorage.removeItem('erp_business_units');
-          return [];
-        }
-        return parsed;
+        const filtered = parsed.filter(
+          (u: any) =>
+            u.id !== 'out-hq-rest-01' &&
+            !u.name?.toLowerCase().includes('sovereign')
+        );
+        localStorage.setItem('erp_business_units', JSON.stringify(filtered));
+        return filtered;
       }
     } catch {}
     return [];
@@ -235,11 +272,15 @@ export default function App() {
       const saved = localStorage.getItem('erp_restaurant_inventory');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.some((i: any) => i.id === 'dish-01' || i.name?.includes('Angus'))) {
-          localStorage.removeItem('erp_restaurant_inventory');
-          return [];
-        }
-        return parsed;
+        const filtered = parsed.filter(
+          (i: any) =>
+            !i.id?.startsWith('dish-') &&
+            i.businessUnitId !== 'out-hq-rest-01' &&
+            !i.name?.toLowerCase().includes('angus') &&
+            !i.name?.toLowerCase().includes('nyama choma')
+        );
+        localStorage.setItem('erp_restaurant_inventory', JSON.stringify(filtered));
+        return filtered;
       }
     } catch {}
     return [];
@@ -297,6 +338,8 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('erp_active_module', activeModule);
   }, [activeModule]);
+
+  const [openDepartments, setOpenDepartments] = useState<Record<string, boolean>>({});
 
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -601,9 +644,15 @@ export default function App() {
     const unsubBusinessUnits = subscribeWithFallback<BusinessUnit>(
       'business_units',
       (list) => {
-        setBusinessUnits(list);
+        // Filter out legacy demo/mock hospitality units
+        const sanitized = list.filter(
+          (u) =>
+            u.id !== 'out-hq-rest-01' &&
+            !u.name?.toLowerCase().includes('sovereign')
+        );
+        setBusinessUnits(sanitized);
         try {
-          localStorage.setItem('erp_business_units', JSON.stringify(list));
+          localStorage.setItem('erp_business_units', JSON.stringify(sanitized));
         } catch {}
       },
       'business_units'
@@ -612,9 +661,17 @@ export default function App() {
     const unsubRestaurantInventory = subscribeWithFallback<RestaurantInventoryItem>(
       'restaurant_inventory',
       (list) => {
-        setRestaurantInventory(list);
+        // Filter out legacy demo/mock dishes
+        const sanitized = list.filter(
+          (i) =>
+            !i.id?.startsWith('dish-') &&
+            i.businessUnitId !== 'out-hq-rest-01' &&
+            !i.name?.toLowerCase().includes('angus') &&
+            !i.name?.toLowerCase().includes('nyama choma')
+        );
+        setRestaurantInventory(sanitized);
         try {
-          localStorage.setItem('erp_restaurant_inventory', JSON.stringify(list));
+          localStorage.setItem('erp_restaurant_inventory', JSON.stringify(sanitized));
         } catch {}
       },
       'restaurant_inventory'
@@ -944,12 +1001,25 @@ export default function App() {
         }
       }
 
-      // 2. Local fallback verification (master passcodes 123456 or admin123, or encrypted PIN/password hash)
+      // 2. Local fallback verification (master passcodes or encrypted PIN/password hash)
       if (!isVerified) {
-        const isMaster =
-          cleanPassword === '123456' ||
-          cleanPassword === 'admin123' ||
-          cleanPassword === 'Admin@2026';
+        let isMaster = false;
+        try {
+          const storedMasterHash = localStorage.getItem('erp_master_passcode_hash');
+          if (storedMasterHash) {
+            isMaster = await verifyPassword(cleanPassword, storedMasterHash);
+          } else {
+            isMaster =
+              cleanPassword === '123456' ||
+              cleanPassword === 'admin123' ||
+              cleanPassword === 'Admin@2026';
+          }
+        } catch {
+          isMaster =
+            cleanPassword === '123456' ||
+            cleanPassword === 'admin123' ||
+            cleanPassword === 'Admin@2026';
+        }
 
         if (isMaster) {
           isVerified = true;
@@ -968,7 +1038,7 @@ export default function App() {
 
       if (!isVerified) {
         throw new Error(
-          'Invalid email or password. You may use master passcode 123456 or admin123 if you have not set a custom password.'
+          'Invalid email or password. Please verify your credentials or use your master security passcode.'
         );
       }
 
@@ -1066,8 +1136,18 @@ export default function App() {
     setAuthError(null);
     setIsAuthenticating(true);
     try {
-      // Master PIN (123456) support for Admin and Accountant
-      if (pin === '123456' && (selectedRole === 'Admin' || selectedRole === 'Accountant' || !selectedRole)) {
+      // Master PIN support for Admin and Accountant
+      let isMasterPin = pin === '123456';
+      if (!isMasterPin) {
+        try {
+          const storedMasterHash = localStorage.getItem('erp_master_passcode_hash');
+          if (storedMasterHash) {
+            isMasterPin = await verifyPassword(pin, storedMasterHash);
+          }
+        } catch {}
+      }
+
+      if (isMasterPin && (selectedRole === 'Admin' || selectedRole === 'Accountant' || !selectedRole)) {
         const effectiveRole = selectedRole || 'Admin';
         const existing = staffList.find((s) => s.role === effectiveRole && s.status === 'Active');
         const defaultBranch = branches[0] || { id: 'branch-hq-001', name: 'HQ - Main Branch' };
@@ -2795,73 +2875,106 @@ export default function App() {
               </button>
             )}
 
-            {/* 3. All ERP Modules Navigation Inside Hamburger */}
-            <div className="space-y-1.5">
-              <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider px-1">
-                Authorized ERP Navigation Modules ({allowedModules.length})
+            {/* 3. All ERP Modules Navigation Grouped Per Department */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+                  Departmental Navigation ({allowedModules.length} Modules)
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const anyOpen = ERP_DEPARTMENTS.some((d) => openDepartments[`mobile_${d.id}`]);
+                    const nextState: Record<string, boolean> = { ...openDepartments };
+                    ERP_DEPARTMENTS.forEach((d) => {
+                      nextState[`mobile_${d.id}`] = !anyOpen;
+                    });
+                    setOpenDepartments(nextState);
+                  }}
+                  className="text-[10px] font-montserrat font-bold text-slate-500 hover:text-[#0A006E] transition cursor-pointer"
+                >
+                  {ERP_DEPARTMENTS.some((d) => openDepartments[`mobile_${d.id}`]) ? 'Collapse All' : 'Expand All'}
+                </button>
               </div>
-              <div className="space-y-1.5">
-                {allowedModules.map((modId) => {
-                  const IconComp = MODULE_META[modId].icon;
-                  const isActive = activeModule === modId;
+              <div className="space-y-2">
+                {ERP_DEPARTMENTS.map((dept) => {
+                  const deptAllowedModules = dept.modules.filter((m) => allowedModules.includes(m));
+                  if (deptAllowedModules.length === 0) return null;
+                  const isOpen = Boolean(openDepartments[`mobile_${dept.id}`]);
+                  const hasActiveModule = deptAllowedModules.includes(activeModule);
+                  const DeptIcon = dept.icon;
+
                   return (
-                    <button
-                      key={modId}
-                      type="button"
-                      onClick={() => {
-                        handleSelectModule(modId);
-                        setMobileDrawerOpen(false);
-                      }}
-                      className={`w-full p-3 rounded-2xl flex items-center gap-3.5 border-2 text-left cursor-pointer transition ${
-                        isActive
-                          ? 'bg-[#0A006E] border-[#0A006E] text-white shadow-md'
-                          : 'bg-white border-slate-200 hover:border-[#0A006E] text-slate-800'
-                      }`}
-                    >
-                      <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          isActive
-                            ? 'bg-[#FFDE00] text-[#0A006E]'
-                            : 'bg-[#F0F2F0] text-[#0A006E]'
-                        }`}
+                    <div key={dept.id} className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenDepartments((prev) => ({
+                            ...prev,
+                            [`mobile_${dept.id}`]: !prev[`mobile_${dept.id}`],
+                          }))
+                        }
+                        className="w-full p-3 bg-slate-100 hover:bg-slate-200 flex items-center justify-between cursor-pointer transition select-none"
                       >
-                        <IconComp className="w-5 h-5 stroke-[2.2]" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-xs font-montserrat font-black truncate ${
-                          isActive ? 'text-white' : 'text-slate-900'
-                        }`}>
-                          {MODULE_META[modId].label}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-6 h-6 rounded-lg bg-[#0A006E]/10 text-[#0A006E] flex items-center justify-center shrink-0">
+                            <DeptIcon className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="text-xs font-montserrat font-black text-[#0A006E] tracking-wide truncate">
+                            {dept.title} ({deptAllowedModules.length})
+                          </span>
+                          {hasActiveModule && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40 shrink-0">
+                              Active
+                            </span>
+                          )}
                         </div>
-                        <div className={`text-[10px] truncate ${
-                          isActive ? 'text-[#FFDE00]' : 'text-slate-500'
-                        }`}>
-                          {modId === 'overview'
-                            ? 'Operations & Real-Time KPIs'
-                            : modId === 'retail_pos'
-                            ? 'Customer Counter Checkout'
-                            : modId === 'sales_pos'
-                            ? 'B2B Wholesale Invoicing'
-                            : modId === 'inventory'
-                            ? 'IPS & LPS Stock Valuation'
-                            : modId === 'branches_transfers'
-                            ? 'Inter-Depot Stock Transfers'
-                            : modId === 'geo_pricing'
-                            ? 'Zone Pricing & Currency'
-                            : modId === 'partners'
-                            ? 'Suppliers & Retail Partners'
-                            : modId === 'documents_credit'
-                            ? 'Official Invoices & Credit Notes'
-                            : modId === 'compliance'
-                            ? 'KRA eTIMS & Excise Audit'
-                            : modId === 'hr_rbac'
-                            ? 'Staff Roles & Payroll Run'
-                            : modId === 'audit_security'
-                            ? 'Security Logs & Device Trace'
-                            : 'Client Shopping Catalog'}
+                        <ChevronRight
+                          className={`w-4 h-4 text-[#0A006E] transition-transform duration-200 ${
+                            isOpen ? 'rotate-90' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {isOpen && (
+                        <div className="p-2 space-y-1.5 bg-white border-t border-slate-200">
+                          {deptAllowedModules.map((modId) => {
+                            const IconComp = MODULE_META[modId].icon;
+                            const isActive = activeModule === modId;
+                            return (
+                              <button
+                                key={modId}
+                                type="button"
+                                onClick={() => {
+                                  handleSelectModule(modId);
+                                  setMobileDrawerOpen(false);
+                                }}
+                                className={`w-full p-2.5 rounded-xl flex items-center gap-3 border-2 text-left cursor-pointer transition ${
+                                  isActive
+                                    ? 'bg-[#0A006E] border-[#0A006E] text-white shadow-md'
+                                    : 'bg-white border-slate-200 hover:border-[#0A006E] text-slate-800'
+                                }`}
+                              >
+                                <div
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                    isActive ? 'bg-[#FFDE00] text-[#0A006E]' : 'bg-[#F0F2F0] text-[#0A006E]'
+                                  }`}
+                                >
+                                  <IconComp className="w-4 h-4 stroke-[2.2]" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className={`text-xs font-montserrat font-black truncate ${
+                                    isActive ? 'text-white' : 'text-slate-900'
+                                  }`}>
+                                    {MODULE_META[modId].label}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
-                      </div>
-                    </button>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -2982,37 +3095,97 @@ export default function App() {
               </div>
             </div>
 
-            {/* Role-Filtered Navigation Links with Big Icons */}
-            <div className="space-y-2">
-              <div className="px-2.5 text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider mb-1">
-                Authorized ERP Modules ({allowedModules.length})
+            {/* Departmental Collapsible Sidebar Menus */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-2.5 mb-1">
+                <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+                  Departmental Navigation ({allowedModules.length} Modules)
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const anyOpen = ERP_DEPARTMENTS.some((d) => openDepartments[d.id]);
+                    const nextState: Record<string, boolean> = { ...openDepartments };
+                    ERP_DEPARTMENTS.forEach((d) => {
+                      nextState[d.id] = !anyOpen;
+                    });
+                    setOpenDepartments(nextState);
+                  }}
+                  className="text-[10px] font-montserrat font-bold text-slate-500 hover:text-[#0A006E] transition cursor-pointer"
+                >
+                  {ERP_DEPARTMENTS.some((d) => openDepartments[d.id]) ? 'Collapse All' : 'Expand All'}
+                </button>
               </div>
-              {allowedModules.map((modId) => {
-                const IconComp = MODULE_META[modId].icon;
-                const isActive = activeModule === modId;
+
+              {ERP_DEPARTMENTS.map((dept) => {
+                const deptAllowedModules = dept.modules.filter((m) => allowedModules.includes(m));
+                if (deptAllowedModules.length === 0) return null;
+                const isOpen = Boolean(openDepartments[dept.id]);
+                const hasActiveModule = deptAllowedModules.includes(activeModule);
+                const DeptIcon = dept.icon;
+
                 return (
-                  <button
-                    key={modId}
-                    onClick={() => handleSelectModule(modId)}
-                    className={`group w-full min-h-[54px] px-3 py-2 rounded-2xl text-xs font-montserrat flex items-center gap-3.5 transition-all cursor-pointer whitespace-nowrap border-2 ${
-                      isActive
-                        ? 'bg-[#0A006E] text-white border-[#0A006E] font-black shadow-lg'
-                        : 'bg-white text-slate-800 border-slate-200 hover:border-[#0A006E] hover:bg-[#FFDE00]/30 font-bold shadow-2xs'
-                    }`}
-                  >
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                        isActive
-                          ? 'bg-[#FFDE00] text-[#0A006E] shadow-xs'
-                          : 'bg-[#F0F2F0] text-[#0A006E] group-hover:bg-[#0A006E] group-hover:text-[#FFDE00]'
-                      }`}
+                  <div key={dept.id} className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenDepartments((prev) => ({ ...prev, [dept.id]: !prev[dept.id] }))
+                      }
+                      className="w-full px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 flex items-center justify-between cursor-pointer transition select-none"
                     >
-                      <IconComp className="w-6 h-6 stroke-[2.2]" />
-                    </div>
-                    <span className="truncate text-xs sm:text-[13px]">
-                      {MODULE_META[modId].label}
-                    </span>
-                  </button>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-6 h-6 rounded-lg bg-[#0A006E]/10 text-[#0A006E] flex items-center justify-center shrink-0">
+                          <DeptIcon className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-xs font-montserrat font-black text-[#0A006E] tracking-wide truncate">
+                          {dept.title} ({deptAllowedModules.length})
+                        </span>
+                        {hasActiveModule && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40 shrink-0">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <ChevronRight
+                        className={`w-4 h-4 text-[#0A006E] transition-transform duration-200 ${
+                          isOpen ? 'rotate-90' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {isOpen && (
+                      <div className="p-2 space-y-1.5 bg-white border-t border-slate-200">
+                        {deptAllowedModules.map((modId: ERPModuleId) => {
+                          const IconComp = MODULE_META[modId].icon;
+                          const isActive = activeModule === modId;
+                          return (
+                            <button
+                              key={modId}
+                              onClick={() => handleSelectModule(modId)}
+                              className={`group w-full min-h-[48px] px-3 py-2 rounded-xl text-xs font-montserrat flex items-center gap-3 transition-all cursor-pointer whitespace-nowrap border-2 ${
+                                isActive
+                                  ? 'bg-[#0A006E] text-white border-[#0A006E] font-black shadow-md'
+                                  : 'bg-white text-slate-800 border-slate-200 hover:border-[#0A006E] hover:bg-[#FFDE00]/20 font-bold shadow-2xs'
+                              }`}
+                            >
+                              <div
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                                  isActive
+                                    ? 'bg-[#FFDE00] text-[#0A006E] shadow-xs'
+                                    : 'bg-[#F0F2F0] text-[#0A006E] group-hover:bg-[#0A006E] group-hover:text-[#FFDE00]'
+                                }`}
+                              >
+                                <IconComp className="w-4 h-4 stroke-[2.2]" />
+                              </div>
+                              <span className="truncate text-xs">
+                                {MODULE_META[modId].label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -3307,9 +3480,7 @@ export default function App() {
         />
       )}
 
-      {currentUser?.role === 'Admin' && (
-        <AdminInventoryUploader onBatchImport={handleBatchCreateProducts} />
-      )}
+
 
       {/* Admin User Feature Access & Feature Stripping Modal */}
       {isUserFeatureModalOpen && userFeatureModalStaff && currentUser && (

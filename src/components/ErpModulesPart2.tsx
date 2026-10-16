@@ -54,6 +54,7 @@ import {
   formatKes,
   isUserFeaturePermitted,
 } from '../erpUtils';
+import { hashPassword } from '../utils/security';
 import { cleanFirestoreData } from '../firebase';
 import { AnimatedSuccessTickIcon, StatusFeedbackToast } from './AnimatedFeedback';
 import { ConfirmationModal } from './common/ConfirmationModal';
@@ -1424,7 +1425,39 @@ export const HrAndRbacModule: React.FC<{
     (currentUser.role === 'HR' || currentUser.role === 'Admin') &&
     isUserFeaturePermitted(currentUser, 'manage_staff_salaries');
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'payroll'>('roster');
+  const [activeTab, setActiveTab] = useState<'roster' | 'payroll' | 'master_security'>('roster');
+  const [newMasterPasscode, setNewMasterPasscode] = useState('');
+  const [confirmMasterPasscode, setConfirmMasterPasscode] = useState('');
+  const [isUpdatingMaster, setIsUpdatingMaster] = useState(false);
+
+  const handleUpdateMasterPasscode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentUser.role !== 'Admin') {
+      onTriggerToast('error', 'Unauthorized', 'Only Administrators can change the master security passcode.');
+      return;
+    }
+    if (!newMasterPasscode || newMasterPasscode.length < 6) {
+      onTriggerToast('error', 'Invalid Passcode', 'Master passcode must be at least 6 characters long.');
+      return;
+    }
+    if (newMasterPasscode !== confirmMasterPasscode) {
+      onTriggerToast('error', 'Mismatch', 'New master passcode and confirmation do not match.');
+      return;
+    }
+    setIsUpdatingMaster(true);
+    try {
+      const hashed = await hashPassword(newMasterPasscode);
+      localStorage.setItem('erp_master_passcode_hash', hashed);
+      setNewMasterPasscode('');
+      setConfirmMasterPasscode('');
+      setFeedback('Master security passcode successfully updated and secured.');
+      onTriggerToast('success', 'Master Passcode Updated', 'Administrator master security passcode has been securely updated.');
+    } catch (err: any) {
+      onTriggerToast('error', 'Update Failed', err?.message || 'Could not update master passcode.');
+    } finally {
+      setIsUpdatingMaster(false);
+    }
+  };
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -1831,6 +1864,21 @@ export const HrAndRbacModule: React.FC<{
           </button>
         )}
 
+        {currentUser.role === 'Admin' && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('master_security')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-montserrat font-black flex items-center gap-2 cursor-pointer transition ${
+              activeTab === 'master_security'
+                ? 'bg-[#0A006E] text-[#FFDE00] shadow-md'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-[#FFDE00]" />
+            Master Passcode & Security Settings
+          </button>
+        )}
+
         {onOpenAccessMatrix && (
           <button
             type="button"
@@ -1842,6 +1890,79 @@ export const HrAndRbacModule: React.FC<{
           </button>
         )}
       </div>
+
+      {activeTab === 'master_security' && currentUser.role === 'Admin' && (
+        <div className="bg-white border-2 border-[#0A006E]/20 rounded-2xl p-6 shadow-sm space-y-6 max-w-2xl mx-auto">
+          <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
+            <div className="p-3 bg-[#0A006E] text-[#FFDE00] rounded-xl">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-montserrat font-black text-[#0A006E]">
+                Administrator Master Passcode & Security Settings
+              </h3>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Change the system master passcode used for emergency access and fallback authentication. For maximum security, passcodes are hashed and never revealed or displayed in plaintext.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleUpdateMasterPasscode} className="space-y-4">
+            <div>
+              <label className="block text-xs font-montserrat font-bold text-slate-700 mb-1">
+                New Master Passcode (Minimum 6 characters)
+              </label>
+              <input
+                type="password"
+                required
+                value={newMasterPasscode}
+                onChange={(e) => setNewMasterPasscode(e.target.value)}
+                placeholder="Enter new secure master passcode..."
+                className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-200 focus:border-[#0A006E] rounded-xl text-sm font-montserrat font-medium text-slate-900 outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-montserrat font-bold text-slate-700 mb-1">
+                Confirm New Master Passcode
+              </label>
+              <input
+                type="password"
+                required
+                value={confirmMasterPasscode}
+                onChange={(e) => setConfirmMasterPasscode(e.target.value)}
+                placeholder="Confirm new master passcode..."
+                className="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-200 focus:border-[#0A006E] rounded-xl text-sm font-montserrat font-medium text-slate-900 outline-none transition"
+              />
+            </div>
+
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-900 font-medium">
+                Security Policy: Changing the master passcode updates executive override and recovery authentication. Keep your passcode secure and confidential.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isUpdatingMaster}
+              className="w-full py-3 px-4 rounded-xl bg-[#0A006E] hover:bg-[#12009E] disabled:opacity-50 text-[#FFDE00] font-montserrat font-black text-sm tracking-wide shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              {isUpdatingMaster ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-[#FFDE00]" />
+                  <span>Securing & Updating Master Passcode...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4 text-[#FFDE00]" />
+                  <span>Save New Master Passcode</span>
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+      )}
 
       {activeTab === 'roster' && (
         <>
@@ -3063,32 +3184,41 @@ export const AuditAndSecurityModule: React.FC<{
 
   return (
     <div className="space-y-6">
-      <div className="bg-[#FFDE00] hover-card-lift border-2 border-[#0A006E] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden">
-        <div className="silent-scanner-beam-dark" />
-        <div className="relative z-10">
-          <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-            Zero-Trust Telemetry & Activity Surveillance · {currentUser.role} Scope
-          </span>
-          <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
-            User Monitoring, Device Fingerprints, Last Login Status & Security Audit Trail
+      {/* Zero-Trust Telemetry & Activity Surveillance Banner */}
+      <div className="bg-[#F8FAFC] border-2 border-slate-300 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0A006E] text-[#FFDE00] text-[11px] font-montserrat font-black uppercase tracking-wider shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Zero-Trust Telemetry &amp; Activity Surveillance · {currentUser.role} Scope
+          </div>
+          <h2 className="text-xl sm:text-2xl font-montserrat font-black text-[#0A006E] tracking-tight">
+            User Monitoring, Device Fingerprints, Last Login Status &amp; Security Audit Trail
           </h2>
-          <p className="text-xs font-medium text-slate-900 mt-0.5">
-            Audit Scope: {currentUser.role} ({filteredLogs.length} Scoped Records) · Device Fingerprints & Verification
-          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs">
+              <Users className="w-3.5 h-3.5 text-[#0A006E]" />
+              Audit Scope: <strong className="text-[#0A006E]">{currentUser.role}</strong> ({filteredLogs.length} Scoped Records)
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#1E9E60]" />
+              Device Fingerprints &amp; Verification
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 relative z-10 flex-wrap">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
           {onOpenAccessMatrix && (
             <button
               type="button"
               onClick={onOpenAccessMatrix}
-              className="px-3.5 py-2 bg-white text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition hover:bg-slate-50"
+              className="h-10 px-4 inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition active:scale-95 whitespace-nowrap"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#0A006E]" />
+              <ShieldCheck className="w-4 h-4 text-[#0A006E]" />
               8-Role Access Matrix
             </button>
           )}
           <button
+            type="button"
             onClick={() =>
               exportReportToPDF(
                 'Security Audit & User Device Monitoring Log',
@@ -3106,12 +3236,13 @@ export const AuditAndSecurityModule: React.FC<{
                 'Vaairo_Security_Audit_Logs'
               )
             }
-            className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
+            className="h-10 px-4 inline-flex items-center justify-center gap-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition active:scale-95 whitespace-nowrap"
           >
-            <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
+            <Download className="w-4 h-4 text-[#FFDE00]" />
             Export Security PDF
           </button>
           <button
+            type="button"
             onClick={() =>
               exportToCSV(
                 'Vaairo_Security_Audit_Logs',
@@ -3130,9 +3261,9 @@ export const AuditAndSecurityModule: React.FC<{
                 ])
               )
             }
-            className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
+            className="h-10 px-4 inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition active:scale-95 whitespace-nowrap"
           >
-            <Download className="w-3.5 h-3.5 text-[#0A006E]" />
+            <Download className="w-4 h-4 text-[#0A006E]" />
             Export CSV
           </button>
         </div>

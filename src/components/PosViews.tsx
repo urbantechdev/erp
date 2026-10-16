@@ -203,6 +203,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
   // Barcode Scanner Integration & Activation (Phone, Desktop USB & Bluetooth Scanners)
   const [barcodeInput, setBarcodeInput] = useState('');
   const [activatedProductIds, setActivatedProductIds] = useState<string[]>([]);
+  const [scanQueue, setScanQueue] = useState<{ id: string; name: string; barcode: string; timestamp: number }[]>([]);
   const [isPhoneScannerOpen, setIsPhoneScannerOpen] = useState(false);
 
   // Real-time listener for product activations
