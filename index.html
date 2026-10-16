@@ -9,13 +9,45 @@
     <meta property="og:description" content="Multi-operational liquor distribution and importer ERP with real-time inventory, geo-regional pricing, regulatory compliance, dual POS, and role-based access control." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,600;1,900&family=Raleway:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet" />
+    <script>
+      (function() {
+        function filterNoise(msg, file, stack) {
+          var m = String(msg || '');
+          var f = String(file || '');
+          var s = String(stack || '');
+          return (
+            f.indexOf('chrome-extension://') !== -1 ||
+            f.indexOf('moz-extension://') !== -1 ||
+            s.indexOf('chrome-extension://') !== -1 ||
+            s.indexOf('moz-extension://') !== -1 ||
+            m.indexOf('Could not establish connection') !== -1 ||
+            m.indexOf('Receiving end does not exist') !== -1 ||
+            m.indexOf('message channel closed') !== -1 ||
+            m.indexOf('Extension context invalidated') !== -1
+          );
+        }
+        window.addEventListener('error', function(e) {
+          if (filterNoise(e.message || (e.error && e.error.message), e.filename, e.error && e.error.stack)) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+        window.addEventListener('unhandledrejection', function(e) {
+          var r = e.reason || {};
+          if (filterNoise(r.message || String(r), '', r.stack)) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+      })();
+    </script>
   </head>
-  <body class="bg-[#F0F2F0] text-slate-900 font-sans antialiased selection:bg-[#FFDE00] selection:text-[#0A006E]">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

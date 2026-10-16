@@ -8,11 +8,14 @@ if (typeof window !== 'undefined') {
   window.addEventListener(
     'error',
     (event) => {
-      const msg = event.message || '';
-      const filename = event.filename || '';
+      const msg = String(event.message || event.error?.message || '');
+      const filename = String(event.filename || '');
+      const stack = String(event.error?.stack || '');
       const isExtensionError =
         filename.includes('chrome-extension://') ||
         filename.includes('moz-extension://') ||
+        stack.includes('chrome-extension://') ||
+        stack.includes('moz-extension://') ||
         msg.includes('Could not establish connection') ||
         msg.includes('Receiving end does not exist') ||
         msg.includes('message channel closed') ||
@@ -21,6 +24,7 @@ if (typeof window !== 'undefined') {
 
       if (isExtensionError) {
         event.preventDefault();
+        event.stopPropagation();
         event.stopImmediatePropagation?.();
         return true;
       }

@@ -181,13 +181,25 @@ export const ErpProvider: React.FC<{
 
   // Sync orders and website orders from Firestore
   useEffect(() => {
-    const unsubOrders = onSnapshot(collection(db, 'sale_orders'), (snapshot) => {
-      setOrders(snapshot.docs.map(doc => doc.data() as SaleOrder));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'sale_orders'));
+    const unsubOrders = onSnapshot(
+      collection(db, 'sale_orders'),
+      (snapshot) => {
+        setOrders(snapshot.docs.map((doc) => doc.data() as SaleOrder));
+      },
+      (error) => {
+        console.warn('[sale_orders] sync notice:', error?.message || error);
+      }
+    );
 
-    const unsubWebOrders = onSnapshot(collection(db, 'website_delivery_orders'), (snapshot) => {
-      setWebsiteDeliveryOrders(snapshot.docs.map(doc => doc.data() as WebsiteDeliveryOrder));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'website_delivery_orders'));
+    const unsubWebOrders = onSnapshot(
+      collection(db, 'website_delivery_orders'),
+      (snapshot) => {
+        setWebsiteDeliveryOrders(snapshot.docs.map((doc) => doc.data() as WebsiteDeliveryOrder));
+      },
+      (error) => {
+        console.warn('[website_delivery_orders] sync notice:', error?.message || error);
+      }
+    );
 
     return () => {
       unsubOrders();
@@ -200,16 +212,28 @@ export const ErpProvider: React.FC<{
   const [productRatings, setProductRatings] = useState<ProductRatingRecord[]>([]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'approval_requests'), (snapshot) => {
-      setApprovalRequests(snapshot.docs.map(doc => doc.data() as ApprovalRequest));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'approval_requests'));
+    const unsub = onSnapshot(
+      collection(db, 'approval_requests'),
+      (snapshot) => {
+        setApprovalRequests(snapshot.docs.map((doc) => doc.data() as ApprovalRequest));
+      },
+      (error) => {
+        console.warn('[approval_requests] sync notice:', error?.message || error);
+      }
+    );
     return () => unsub();
   }, []);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'product_ratings'), (snapshot) => {
-      setProductRatings(snapshot.docs.map(doc => doc.data() as ProductRatingRecord));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'product_ratings'));
+    const unsub = onSnapshot(
+      collection(db, 'product_ratings'),
+      (snapshot) => {
+        setProductRatings(snapshot.docs.map((doc) => doc.data() as ProductRatingRecord));
+      },
+      (error) => {
+        console.warn('[product_ratings] sync notice:', error?.message || error);
+      }
+    );
     return () => unsub();
   }, []);
 

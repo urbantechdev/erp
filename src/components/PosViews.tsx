@@ -213,10 +213,16 @@ export const PosViews: React.FC<PosViewsProps> = ({
       collection(db, 'branch_product_activations'),
       where('branchId', '==', activeBranch.id)
     );
-    const unsub = onSnapshot(q, (snap) => {
-      const ids = snap.docs.map((d) => d.data().productId);
-      setActivatedProductIds(ids);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const ids = snap.docs.map((d) => d.data().productId);
+        setActivatedProductIds(ids);
+      },
+      (error) => {
+        console.warn('[branch_product_activations] sync notice:', error?.message || error);
+      }
+    );
     return unsub;
   }, [activeBranch]);
 
@@ -392,6 +398,16 @@ export const PosViews: React.FC<PosViewsProps> = ({
       playPosBeep(isCaseScan ? 'case' : 'success');
       triggerScanHaptic();
       setLastScannedBarcode(code);
+
+      // Mark product as scanned & activated in ERP catalog
+      if (!matched!.isScanned) {
+        matched!.isScanned = true;
+        setDoc(doc(db, 'products', matched!.id), {
+          isScanned: true,
+          scannedAt: new Date().toISOString(),
+          scannerId: currentUser.id,
+        }, { merge: true }).catch((err) => console.error('Product scan activation write failed:', err));
+      }
 
       // Activate product into POS checkout session shelf
       if (!activatedProductIds.includes(matched!.id)) {

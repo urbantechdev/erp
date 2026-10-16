@@ -271,6 +271,9 @@ export interface Product {
   manufactureDate?: string;
   defaultExpiryDate?: string;
   createdAt?: string;
+  isScanned?: boolean; // false / undefined = Awaiting Scan (inactive), true = Scanned & Activated
+  scannedAt?: string;
+  scannerId?: string;
 
   // Stock Health, Expiry & Governance Thresholds set by Inventory Manager
   deadStockThresholdDays?: number;

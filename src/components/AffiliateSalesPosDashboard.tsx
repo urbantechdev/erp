@@ -38,6 +38,7 @@ import {
   QrCode,
   ArrowRight,
   RefreshCw,
+  Download,
 } from 'lucide-react';
 import {
   Product,
@@ -47,7 +48,7 @@ import {
   StaffMember,
   StockCategory,
 } from '../types';
-import { calculateGeoPrice, formatKes } from '../erpUtils';
+import { calculateGeoPrice, formatKes, exportReportToPDF, exportToCSV } from '../erpUtils';
 import { playPosBeep } from '../utils/audioBeep';
 import { ProductImage } from './ProductImage';
 import { EtimsReceiptModal, EtimsReceiptData } from './EtimsReceiptModal';
@@ -125,7 +126,85 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   onNavigateModule,
 }) => {
   // Navigation / View Tabs
-  const [activeTab, setActiveTab] = useState<'pos' | 'orders'>('pos');
+  const [activeTab, setActiveTab] = useState<'pos' | 'orders' | 'sales_statement'>('pos');
+
+  // Download Order Statement PDF
+  const handleDownloadOrderStatementPDF = () => {
+    const filename = `Vaairo_Order_Statement_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
+    exportReportToPDF(
+      `OFFICIAL AFFILIATE ORDER STATEMENT — ${currentUser.name.toUpperCase()} (${affiliateCode})`,
+      `Branch Depot: ${currentUser.branchName} | Assigned Commission: ${commPct}%`,
+      ['Doc Number', 'Date & Time', 'Customer Name', 'Channel', 'Branch', 'Total Amount (KES)', 'Commission (KES)', 'Status'],
+      ownTransactions.map((tx) => [
+        tx.docNumber,
+        new Date(tx.createdAt).toLocaleString(),
+        tx.customerName,
+        tx.channel,
+        tx.branchName,
+        Math.round(tx.totalAmount).toLocaleString(),
+        Math.round((tx.totalAmount * commPct) / 100).toLocaleString(),
+        tx.status,
+      ]),
+      filename
+    );
+  };
+
+  // Download Order Statement CSV
+  const handleDownloadOrderStatementCSV = () => {
+    const filename = `Vaairo_Order_Statement_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
+    exportToCSV(
+      filename,
+      ['Doc Number', 'Date & Time', 'Customer Name', 'Channel', 'Branch', 'Total Amount (KES)', 'Commission (KES)', 'Status'],
+      ownTransactions.map((tx) => [
+        tx.docNumber,
+        new Date(tx.createdAt).toLocaleString(),
+        tx.customerName,
+        tx.channel,
+        tx.branchName,
+        Math.round(tx.totalAmount),
+        Math.round((tx.totalAmount * commPct) / 100),
+        tx.status,
+      ])
+    );
+  };
+
+  // Download Sales Statement PDF
+  const handleDownloadSalesStatementPDF = () => {
+    const filename = `Vaairo_Sales_Statement_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
+    exportReportToPDF(
+      `OFFICIAL AFFILIATE SALES & COMMISSION STATEMENT — ${currentUser.name.toUpperCase()} (${affiliateCode})`,
+      `Total Volume: ${formatKes(totalSalesVolume)} | Total Earned Commission: ${formatKes(totalEarnedCommission)} | Branch: ${currentUser.branchName}`,
+      ['Order / Invoice', 'Date', 'Customer', 'Items Summary', 'Sales Volume (KES)', 'Commission (KES)', 'Payment Method'],
+      ownTransactions.map((tx) => [
+        tx.docNumber,
+        new Date(tx.createdAt).toLocaleDateString(),
+        tx.customerName,
+        tx.itemsSummary || 'Multiple Items',
+        Math.round(tx.totalAmount).toLocaleString(),
+        Math.round((tx.totalAmount * commPct) / 100).toLocaleString(),
+        tx.paymentMethod,
+      ]),
+      filename
+    );
+  };
+
+  // Download Sales Statement CSV
+  const handleDownloadSalesStatementCSV = () => {
+    const filename = `Vaairo_Sales_Statement_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
+    exportToCSV(
+      filename,
+      ['Order / Invoice', 'Date', 'Customer', 'Items Summary', 'Sales Volume (KES)', 'Commission (KES)', 'Payment Method'],
+      ownTransactions.map((tx) => [
+        tx.docNumber,
+        new Date(tx.createdAt).toLocaleDateString(),
+        tx.customerName,
+        tx.itemsSummary || 'Multiple Items',
+        Math.round(tx.totalAmount),
+        Math.round((tx.totalAmount * commPct) / 100),
+        tx.paymentMethod,
+      ])
+    );
+  };
 
   // Branch & Region Scope (default to affiliate's assigned branch)
   const defaultBranch = useMemo(
@@ -222,6 +301,9 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   // Filtered Products
   const filteredProducts = useMemo(() => {
     return products.filter((prod) => {
+      // Move all SKU to awaiting scan until they are scanned to activate
+      if (!prod.isScanned) return false;
+
       if (categoryFilter !== 'ALL') {
         const matchesCat =
           prod.subCategory === categoryFilter ||
@@ -695,12 +777,25 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Orders</span>
+                <span>Order Statement</span>
                 {queuedTransactions.length > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-[#0A006E] text-[10px] font-black">
                     {queuedTransactions.length}
                   </span>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('sales_statement')}
+                className={`px-3 py-1.5 rounded-lg font-montserrat font-bold text-xs cursor-pointer transition-all flex items-center gap-1.5 ${
+                  activeTab === 'sales_statement'
+                    ? 'bg-[#FFDE00] text-[#0A006E] shadow-2xs'
+                    : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>Sales Statement</span>
               </button>
             </div>
           </div>
@@ -1207,49 +1302,68 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
             <div>
               <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
                 <FileText className="w-4 h-4 text-[#0A006E]" />
-                Affiliate Sales &amp; Queued Order Ledger
+                Official Affiliate Order Statement &amp; Ledger
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Real-time tracking of orders queued to branch cashiers and completed commercial sales.
+                Comprehensive order statement tracking all orders queued to branch cashiers and completed commercial sales.
               </p>
             </div>
 
-            {/* Filter Chips */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
               <button
                 type="button"
-                onClick={() => setOrdersFilterStatus('ALL')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
-                  ordersFilterStatus === 'ALL'
-                    ? 'bg-[#0A006E] text-[#FFDE00]'
-                    : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
-                }`}
+                onClick={handleDownloadOrderStatementCSV}
+                className="px-3 py-2 bg-white border border-[#0A006E] hover:bg-slate-50 text-[#0A006E] rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
-                All Orders ({ownTransactions.length})
+                <FileText className="w-3.5 h-3.5" />
+                <span>CSV Order Statement</span>
               </button>
               <button
                 type="button"
-                onClick={() => setOrdersFilterStatus('QUEUED')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
-                  ordersFilterStatus === 'QUEUED'
-                    ? 'bg-amber-400 text-[#0A006E]'
-                    : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
-                }`}
+                onClick={handleDownloadOrderStatementPDF}
+                className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
-                Queued ({queuedTransactions.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setOrdersFilterStatus('PAID')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
-                  ordersFilterStatus === 'PAID'
-                    ? 'bg-[#1E9E60] text-white'
-                    : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                Paid &amp; Fulfilled ({paidTransactions.length})
+                <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
+                <span>PDF Order Statement</span>
               </button>
             </div>
+          </div>
+
+          {/* Filter Chips */}
+          <div className="flex items-center gap-1.5 justify-between flex-wrap">
+            <button
+              type="button"
+              onClick={() => setOrdersFilterStatus('ALL')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
+                ordersFilterStatus === 'ALL'
+                  ? 'bg-[#0A006E] text-[#FFDE00]'
+                  : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              All Orders ({ownTransactions.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrdersFilterStatus('QUEUED')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
+                ordersFilterStatus === 'QUEUED'
+                  ? 'bg-amber-400 text-[#0A006E]'
+                  : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Queued ({queuedTransactions.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrdersFilterStatus('PAID')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition ${
+                ordersFilterStatus === 'PAID'
+                  ? 'bg-[#1E9E60] text-white'
+                  : 'bg-[#F0F2F0] text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Paid &amp; Fulfilled ({paidTransactions.length})
+            </button>
           </div>
 
           {/* Search box inside orders */}
@@ -1401,6 +1515,104 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                       </tr>
                     );
                   })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------------------- */}
+      {/* 4. TAB 3: OFFICIAL AFFILIATE SALES & COMMISSION STATEMENT             */}
+      {/* --------------------------------------------------------------------- */}
+      {activeTab === 'sales_statement' && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <div>
+              <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#0A006E]" />
+                Official Affiliate Sales &amp; Commission Statement
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Official commercial statement detailing your total gross sales volume, commission earnings, and fulfilled orders.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={handleDownloadSalesStatementCSV}
+                className="px-3 py-2 bg-white border border-[#0A006E] hover:bg-slate-50 text-[#0A006E] rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>CSV Sales Statement</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadSalesStatementPDF}
+                className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
+                <span>PDF Sales Statement</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Statement Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-[#F0F2F0] rounded-2xl p-4 border border-slate-200">
+              <span className="text-[10px] uppercase font-mono text-slate-500 block">Total Gross Sales</span>
+              <span className="text-lg font-montserrat font-black text-[#0A006E] font-mono-tabular mt-0.5 block">
+                {formatKes(totalSalesVolume)}
+              </span>
+            </div>
+            <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-200">
+              <span className="text-[10px] uppercase font-mono text-emerald-700 block">Total Earned Commission ({commPct}%)</span>
+              <span className="text-lg font-montserrat font-black text-[#1E9E60] font-mono-tabular mt-0.5 block">
+                {formatKes(totalEarnedCommission)}
+              </span>
+            </div>
+            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
+              <span className="text-[10px] uppercase font-mono text-amber-800 block">Fulfilled Orders Count</span>
+              <span className="text-lg font-montserrat font-black text-amber-900 font-mono-tabular mt-0.5 block">
+                {paidTransactions.length} orders ({ownTransactions.length} total)
+              </span>
+            </div>
+          </div>
+
+          {/* Sales Transactions Ledger Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                  <th className="py-2.5 px-3 font-black">Order / Invoice</th>
+                  <th className="py-2.5 px-3 font-black">Date</th>
+                  <th className="py-2.5 px-3 font-black">Customer</th>
+                  <th className="py-2.5 px-3 font-black">Payment</th>
+                  <th className="py-2.5 px-3 font-black text-right">Sales Volume</th>
+                  <th className="py-2.5 px-3 font-black text-right">Commission Earned</th>
+                  <th className="py-2.5 px-3 font-black text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {ownTransactions.map((tx) => {
+                  const comm = Math.round((tx.totalAmount * commPct) / 100);
+                  const isPaid = tx.status === 'Paid' || tx.status === 'Approved' || tx.status === 'Fulfilled';
+                  return (
+                    <tr key={tx.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-3 font-mono font-bold text-[#0A006E]">{tx.docNumber}</td>
+                      <td className="py-3 px-3 text-slate-600">{new Date(tx.createdAt).toLocaleDateString()}</td>
+                      <td className="py-3 px-3 font-bold text-slate-900">{tx.customerName}</td>
+                      <td className="py-3 px-3 text-slate-700">{tx.paymentMethod}</td>
+                      <td className="py-3 px-3 text-right font-mono-tabular font-black text-slate-900">{formatKes(tx.totalAmount)}</td>
+                      <td className="py-3 px-3 text-right font-mono-tabular font-black text-[#1E9E60]">{formatKes(comm)}</td>
+                      <td className="py-3 px-3 text-center">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {tx.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -76,6 +76,7 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
     branchStockSummary: raw.branchStockSummary || defaultBranchStock,
     geoPriceOverrides: raw.geoPriceOverrides || JSON.stringify({}),
     createdAt: raw.createdAt || '2026-10-01T00:00:00.000Z',
+    isScanned: raw.isScanned ?? false, // Default to Awaiting Scan until scanned
   };
 }
 

@@ -39,6 +39,7 @@ import {
   Barcode,
   ChevronRight,
   UtensilsCrossed,
+  Clock,
 } from 'lucide-react';
 import {
   db,
@@ -84,6 +85,7 @@ import {
 } from './seedData';
 import { AuthGateway } from './components/AuthGateway';
 import { PosViews } from './components/PosViews';
+import { AffiliateSalesPosDashboard } from './components/AffiliateSalesPosDashboard';
 import { CustomerPortalView } from './components/CustomerPortalView';
 import {
   OverviewModule,
@@ -291,6 +293,81 @@ export default function App() {
 
   // Active User Session State
   const [currentUser, setCurrentUser] = useState<StaffMember | null>(null);
+
+  // Inactivity & Auto-Logoff State (2 minutes total: 90s idle + 30s countdown)
+  const [showInactivityWarning, setShowInactivityWarning] = useState(false);
+  const [inactivityCountdown, setInactivityCountdown] = useState(30);
+  const inactivityTimerRef = useRef<any>(null);
+  const countdownIntervalRef = useRef<any>(null);
+
+  // Auto Fullscreen on open
+  useEffect(() => {
+    const enterFullscreen = () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+      }
+    };
+    enterFullscreen();
+    const handleFirstClick = () => {
+      enterFullscreen();
+      window.removeEventListener('click', handleFirstClick);
+    };
+    window.addEventListener('click', handleFirstClick);
+    return () => {
+      window.removeEventListener('click', handleFirstClick);
+    };
+  }, []);
+
+  // 2-minute inactivity auto-logoff with 30-second warning countdown
+  useEffect(() => {
+    if (!currentUser) {
+      setShowInactivityWarning(false);
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      return;
+    }
+
+    const resetInactivityTimer = () => {
+      if (showInactivityWarning) return;
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+
+      inactivityTimerRef.current = setTimeout(() => {
+        setShowInactivityWarning(true);
+        setInactivityCountdown(30);
+      }, 90 * 1000);
+    };
+
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach((ev) => window.addEventListener(ev, resetInactivityTimer));
+    resetInactivityTimer();
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, resetInactivityTimer));
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    };
+  }, [currentUser, showInactivityWarning]);
+
+  // Countdown interval when warning modal is open
+  useEffect(() => {
+    if (!showInactivityWarning || !currentUser) return;
+
+    countdownIntervalRef.current = setInterval(() => {
+      setInactivityCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownIntervalRef.current);
+          setCurrentUser(null);
+          setShowInactivityWarning(false);
+          triggerToast('success', 'Auto Logged Off', 'Session ended due to 2 minutes of inactivity.');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, [showInactivityWarning, currentUser]);
   const [standaloneCustomerPortal, setStandaloneCustomerPortal] = useState(() => {
     if (typeof window === 'undefined') return false;
     const path = window.location.pathname.toLowerCase();
@@ -1481,6 +1558,51 @@ export default function App() {
       'Financial'
     );
     return fullTx;
+  };
+
+  const handleUpdateTransaction = async (
+    txId: string,
+    updates: Partial<TransactionDoc>,
+    updatedProducts?: { productId: string; newTotal: number; newBranchStockJson: string }[]
+  ): Promise<boolean> => {
+    try {
+      setTransactions((prev) => {
+        const next = prev.map((t) => (t.id === txId ? { ...t, ...updates } : t));
+        try {
+          localStorage.setItem('erp_transactions_backup', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      await setDoc(doc(db, 'transactions', txId), cleanFirestoreData(updates), { merge: true });
+
+      if (updatedProducts && updatedProducts.length > 0) {
+        for (const up of updatedProducts) {
+          await persistProductState(up.productId, {
+            totalBottles: up.newTotal,
+            branchStockSummary: up.newBranchStockJson,
+          });
+        }
+      }
+
+      await recordAuditLog(
+        currentUser?.name || 'Affiliate Rep',
+        currentUser?.role || 'Affiliate Sales Representative',
+        currentUser?.email || 'Affiliate',
+        'UPDATE_TRANSACTION',
+        'Sales POS',
+        `Updated transaction ${txId}`,
+        currentUser?.branchName,
+        'Info'
+      );
+
+      triggerToast('success', 'Transaction Updated', `Transaction ${txId} successfully updated.`);
+      return true;
+    } catch (error) {
+      console.error('Failed to update transaction:', error);
+      triggerToast('error', 'Update Failed', 'Could not update transaction.');
+      return false;
+    }
   };
 
   const handleCreateProduct = async (prodDraft: Omit<Product, 'id' | 'createdAt'>) => {
@@ -3251,19 +3373,33 @@ export default function App() {
           )}
 
           {activeModule === 'sales_pos' && (
-            <PosViews
-              mode="wholesale"
-              currentUser={currentUser}
-              products={products}
-              branches={branches}
-              regions={regions}
-              partners={partners}
-              businessUnits={businessUnits}
-              restaurantInventory={restaurantInventory}
-              onCommitTransaction={handleCommitTransaction}
-              onPreviewDoc={(d) => setPreviewDoc(d)}
-              onUpdateRestaurantItem={handleUpdateRestaurantItem}
-            />
+            currentUser?.role === 'Affiliate Sales Representative' ? (
+              <AffiliateSalesPosDashboard
+                currentUser={currentUser}
+                products={products}
+                branches={branches}
+                regions={regions}
+                transactions={transactions}
+                onCommitTransaction={handleCommitTransaction}
+                onUpdateTransaction={handleUpdateTransaction}
+                onPreviewDoc={(d) => setPreviewDoc(d)}
+                onNavigateModule={handleSelectModule}
+              />
+            ) : (
+              <PosViews
+                mode="wholesale"
+                currentUser={currentUser}
+                products={products}
+                branches={branches}
+                regions={regions}
+                partners={partners}
+                businessUnits={businessUnits}
+                restaurantInventory={restaurantInventory}
+                onCommitTransaction={handleCommitTransaction}
+                onPreviewDoc={(d) => setPreviewDoc(d)}
+                onUpdateRestaurantItem={handleUpdateRestaurantItem}
+              />
+            )
           )}
 
           {activeModule === 'inventory' && (
@@ -3495,6 +3631,52 @@ export default function App() {
           customRoleMatrix={customRoleMatrix}
           onSavePermissions={handleSaveUserPermissions}
         />
+      )}
+
+      {/* Inactivity Auto-Logoff Warning Modal */}
+      {showInactivityWarning && currentUser && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-md w-full p-6 text-center space-y-5">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
+              <Clock className="w-8 h-8 animate-spin-slow" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-xl font-montserrat font-black text-[#0A006E]">
+                Inactivity Warning
+              </h3>
+              <p className="text-xs text-slate-600">
+                No activity detected. You will be automatically logged out in:
+              </p>
+              <div className="text-3xl font-montserrat font-black text-amber-600 font-mono-tabular py-2">
+                00:{inactivityCountdown < 10 ? `0${inactivityCountdown}` : inactivityCountdown}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentUser(null);
+                  setShowInactivityWarning(false);
+                  triggerToast('success', 'Logged Out', 'Session ended by user.');
+                }}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-montserrat font-bold cursor-pointer transition"
+              >
+                End Session Now
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInactivityWarning(false);
+                  setInactivityCountdown(30);
+                }}
+                className="flex-2 py-3 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-2xl text-xs font-montserrat font-black cursor-pointer shadow-md transition"
+              >
+                Continue Session
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

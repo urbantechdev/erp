@@ -1197,6 +1197,9 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
 
     const matched = products.filter(p => {
+      // Move all SKU to awaiting scan until they are scanned to activate
+      if (!p.isScanned) return false;
+
       if (tokens.length > 0) {
         const searchableText = `${p.name} ${p.brand} ${p.sku} ${p.subCategory || ''} ${p.category || ''} ${p.volumeMl || 750}ml`.toLowerCase();
         const allTokensMatch = tokens.every(token => searchableText.includes(token));
