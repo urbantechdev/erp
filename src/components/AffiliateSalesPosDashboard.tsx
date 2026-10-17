@@ -42,6 +42,7 @@ import {
   Barcode,
   Camera,
   ScanLine,
+  Keyboard,
 } from 'lucide-react';
 import {
   Product,
@@ -57,6 +58,7 @@ import { ProductImage } from './ProductImage';
 import { EtimsReceiptModal, EtimsReceiptData } from './EtimsReceiptModal';
 import { PhoneBarcodeScannerModal } from './PhoneBarcodeScannerModal';
 import { subscribeToProductScans } from '../utils/productScanBroadcast';
+import { FloatingSalesKeyboardModal } from './FloatingSalesKeyboardModal';
 
 interface CartItem {
   productId: string;
@@ -251,6 +253,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   const [checkoutCashTendered, setCheckoutCashTendered] = useState<number>(0);
   const [etimsReceipt, setEtimsReceipt] = useState<EtimsReceiptData | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   // Orders Filter State (for Tab 2)
   const [ordersFilterStatus, setOrdersFilterStatus] = useState<'ALL' | 'QUEUED' | 'PAID'>('ALL');
@@ -895,6 +898,15 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
               >
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>Sales Statement</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsKeyboardOpen(true)}
+                className="px-3 py-1.5 rounded-lg font-montserrat font-black text-xs cursor-pointer transition-all flex items-center gap-1.5 bg-[#FFDE00]/20 hover:bg-[#FFDE00] text-[#FFDE00] hover:text-[#0A006E] border border-[#FFDE00]/40 shadow-xs"
+              >
+                <Keyboard className="w-3.5 h-3.5" />
+                <span>Keyboard</span>
               </button>
             </div>
           </div>
@@ -2023,6 +2035,58 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
           onBarcodeScanned={(code) => handleScanBarcode(code)}
         />
       )}
+
+      {/* Floating Keyboard Modal */}
+      <FloatingSalesKeyboardModal
+        isOpen={isKeyboardOpen}
+        onClose={() => setIsKeyboardOpen(false)}
+      />
+
+      {/* Fixed Bottom Navigation Bar for Sales Reps */}
+      <div className="sticky bottom-0 left-0 right-0 z-40 bg-[#0A006E] text-white border-t border-[#FFDE00]/30 px-3 py-2 flex items-center justify-around shadow-2xl mt-6 rounded-t-2xl">
+        <button
+          type="button"
+          onClick={() => setActiveTab('pos')}
+          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition cursor-pointer ${
+            activeTab === 'pos' ? 'text-[#FFDE00] font-bold' : 'text-white/70 hover:text-white'
+          }`}
+        >
+          <ShoppingCart className="w-5 h-5" />
+          <span className="text-[10px]">POS Terminal</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('orders')}
+          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition cursor-pointer ${
+            activeTab === 'orders' ? 'text-[#FFDE00] font-bold' : 'text-white/70 hover:text-white'
+          }`}
+        >
+          <FileText className="w-5 h-5" />
+          <span className="text-[10px]">Orders</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('sales_statement')}
+          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition cursor-pointer ${
+            activeTab === 'sales_statement' ? 'text-[#FFDE00] font-bold' : 'text-white/70 hover:text-white'
+          }`}
+        >
+          <TrendingUp className="w-5 h-5" />
+          <span className="text-[10px]">Statements</span>
+        </button>
+
+        {/* Floating Keyboard Trigger Button at Bottom Nav */}
+        <button
+          type="button"
+          onClick={() => setIsKeyboardOpen(true)}
+          className="flex flex-col items-center gap-0.5 px-4 py-1.5 bg-[#FFDE00] text-[#0A006E] rounded-2xl shadow-md font-montserrat font-black cursor-pointer hover:bg-amber-400 transition animate-pulse"
+        >
+          <Keyboard className="w-5 h-5" />
+          <span className="text-[10px]">Keypad</span>
+        </button>
+      </div>
     </div>
   );
 };
