@@ -347,7 +347,7 @@ export interface InventoryItem {
 
 export interface Partner {
   id: string;
-  partnerType: 'Supplier' | 'Retailer' | 'Logistics' | 'Direct Clients' | 'Individual' | 'Business';
+  partnerType: 'Supplier' | 'Retailer' | 'Logistics';
   code: string;
   companyName: string;
   contactPerson: string;
@@ -392,13 +392,10 @@ export interface ExternalCustomer {
   kraPin?: string; // Kenya Revenue Authority PIN
   liquorLicenseNo?: string; // County Liquor License if licensed commercial buyer
   address?: string;
-  deliveryAddress?: string;
   regionId?: string;
   regionName?: string;
   assignedBranchId?: string;
   assignedBranchName?: string;
-  preferredBranchId?: string;
-  preferredBranchName?: string;
   paymentTerms: ExternalCustomerPaymentTerms;
   creditLimitKes: number;
   currentBalanceKes?: number;
@@ -408,7 +405,6 @@ export interface ExternalCustomer {
   updatedAt?: string;
   totalOrdersCount?: number;
   totalSalesVolumeKes?: number;
-  totalSpentKes?: number;
   lastSaleDate?: string;
 }
 
