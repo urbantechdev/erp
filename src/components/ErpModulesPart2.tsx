@@ -111,7 +111,18 @@ export const PartnersOnboardingModule: React.FC<{
     e.preventDefault();
     if (!companyName.trim() || !liquorLicenseNo.trim()) return;
     const reg = regions.find((r) => r.id === regionId) || regions[0];
-    const prefix = partnerType === 'Supplier' ? 'SUP' : partnerType === 'Retailer' ? 'RET' : 'LOG';
+    const prefix =
+      partnerType === 'Supplier'
+        ? 'SUP'
+        : partnerType === 'Retailer'
+        ? 'RET'
+        : partnerType === 'Logistics'
+        ? 'LOG'
+        : partnerType === 'Direct Clients'
+        ? 'DIR'
+        : partnerType === 'Individual'
+        ? 'IND'
+        : 'BIZ';
     await onCreatePartner({
       partnerType,
       code: `${prefix}-${Date.now().toString().slice(-4)}`,
@@ -330,6 +341,9 @@ export const PartnersOnboardingModule: React.FC<{
               <option value="Retailer">Licensed Liquor Retailer / Bar / Hotel</option>
               <option value="Supplier">Overseas Importer / Distillery Supplier</option>
               <option value="Logistics">Bonded Freight & Fleet Logistics Provider</option>
+              <option value="Direct Clients">Direct Client / VIP Buyer</option>
+              <option value="Individual">Individual Customer</option>
+              <option value="Business">Business / Corporate Account</option>
             </select>
           </div>
 
@@ -437,8 +451,8 @@ export const PartnersOnboardingModule: React.FC<{
 
       {/* Directory Table */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          {['All', 'Supplier', 'Retailer', 'Logistics'].map((t) => (
+        <div className="flex items-center gap-2 flex-wrap">
+          {['All', 'Supplier', 'Retailer', 'Logistics', 'Direct Clients', 'Individual', 'Business'].map((t) => (
             <button
               key={t}
               onClick={() => setFilterType(t)}

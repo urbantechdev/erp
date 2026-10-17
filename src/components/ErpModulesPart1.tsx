@@ -1445,24 +1445,23 @@ export const InventoryModule: React.FC<{
     setIsDuplicateModalOpen(true);
   };
 
-  const handleClearDuplicates = async () => {
-    if (!onDeleteProduct) return;
-    const allDuplicates = [
-      ...duplicateFindings.duplicateSkus,
-      ...duplicateFindings.duplicateBarcodes,
-      ...duplicateFindings.duplicateNames,
-    ];
-    
-    // De-duplicate the list of items to be deleted (in case an item is in multiple groups)
-    const itemsToDelete = new Set<string>();
-    allDuplicates.forEach(group => {
-      // Keep the first item, mark rest for deletion
-      group.items.slice(1).forEach(item => itemsToDelete.add(item.id));
-    });
+  const [selectedForDeletion, setSelectedForDeletion] = useState<Set<string>>(new Set());
 
-    for (const id of itemsToDelete) {
+  const toggleItemSelection = (id: string) => {
+    setSelectedForDeletion((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleClearSelectedDuplicates = async () => {
+    if (!onDeleteProduct) return;
+    for (const id of selectedForDeletion) {
       await onDeleteProduct(id);
     }
+    setSelectedForDeletion(new Set());
     setIsDuplicateModalOpen(false);
   };
 
@@ -3274,9 +3273,21 @@ export const InventoryModule: React.FC<{
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {duplicateFindings.duplicateSkus.map((group, idx) => (
                         <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                          <div className="font-mono font-bold text-red-600">SKU: {group.sku}</div>
-                          <div className="text-[11px] text-slate-600">
-                            Shared by {group.items.length} items: {group.items.map(i => i.name).join(', ')}
+                          <div className="flex items-center justify-between">
+                            <div className="font-mono font-bold text-red-600">SKU: {group.sku}</div>
+                          </div>
+                          <div className="space-y-1">
+                            {group.items.map((item) => (
+                              <label key={item.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedForDeletion.has(item.id)}
+                                  onChange={() => toggleItemSelection(item.id)}
+                                  className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                />
+                                <span className="text-[11px] text-slate-700">{item.name}</span>
+                              </label>
+                            ))}
                           </div>
                         </div>
                       ))}
@@ -3290,9 +3301,21 @@ export const InventoryModule: React.FC<{
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {duplicateFindings.duplicateBarcodes.map((group, idx) => (
                         <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                          <div className="font-mono font-bold text-red-600">Barcode: {group.barcode}</div>
-                          <div className="text-[11px] text-slate-600">
-                            Shared by {group.items.length} items: {group.items.map(i => i.name).join(', ')}
+                          <div className="flex items-center justify-between">
+                            <div className="font-mono font-bold text-red-600">Barcode: {group.barcode}</div>
+                          </div>
+                          <div className="space-y-1">
+                            {group.items.map((item) => (
+                              <label key={item.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedForDeletion.has(item.id)}
+                                  onChange={() => toggleItemSelection(item.id)}
+                                  className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                />
+                                <span className="text-[11px] text-slate-700">{item.name}</span>
+                              </label>
+                            ))}
                           </div>
                         </div>
                       ))}
@@ -3319,13 +3342,13 @@ export const InventoryModule: React.FC<{
             )}
 
             <div className="flex justify-end pt-3 border-t border-slate-200 gap-3">
-              {duplicateFindings.totalDuplicates > 0 && (
+              {selectedForDeletion.size > 0 && (
                 <button
                   type="button"
-                  onClick={handleClearDuplicates}
+                  onClick={handleClearSelectedDuplicates}
                   className="px-5 py-2.5 bg-rose-600 text-white rounded-xl font-montserrat font-black text-xs cursor-pointer shadow-md hover:bg-rose-700"
                 >
-                  Clear Duplicates
+                  Delete {selectedForDeletion.size} Selected
                 </button>
               )}
               <button

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   ShoppingCart,
@@ -39,6 +39,9 @@ import {
   ArrowRight,
   RefreshCw,
   Download,
+  Barcode,
+  Camera,
+  ScanLine,
 } from 'lucide-react';
 import {
   Product,
@@ -49,9 +52,11 @@ import {
   StockCategory,
 } from '../types';
 import { calculateGeoPrice, formatKes, exportReportToPDF, exportToCSV } from '../erpUtils';
-import { playPosBeep } from '../utils/audioBeep';
+import { playPosBeep, triggerScanHaptic } from '../utils/audioBeep';
 import { ProductImage } from './ProductImage';
 import { EtimsReceiptModal, EtimsReceiptData } from './EtimsReceiptModal';
+import { PhoneBarcodeScannerModal } from './PhoneBarcodeScannerModal';
+import { subscribeToProductScans } from '../utils/productScanBroadcast';
 
 interface CartItem {
   productId: string;
@@ -285,22 +290,70 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
     return Math.round((totalSalesVolume * commPct) / 100);
   }, [totalSalesVolume, commPct]);
 
+  // Barcode Scanner & Real-Time Sync States
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [liveScanNotice, setLiveScanNotice] = useState<{
+    text: string;
+    productName: string;
+    timestamp: number;
+  } | null>(null);
+  const [newlyScannedId, setNewlyScannedId] = useState<string | null>(null);
+
+  // Subscribe to real-time product scans from Inventory or other portals
+  useEffect(() => {
+    const unsub = subscribeToProductScans((evt) => {
+      setNewlyScannedId(evt.productId);
+      setLiveScanNotice({
+        text: `⚡ Live Scan: "${evt.name}" (Barcode: ${evt.barcode}) was just scanned and is now live for sales!`,
+        productName: evt.name,
+        timestamp: Date.now(),
+      });
+      playPosBeep('success');
+      triggerScanHaptic();
+      const timer = setTimeout(() => setNewlyScannedId(null), 8000);
+      return () => clearTimeout(timer);
+    });
+    return () => unsub();
+  }, []);
+
+  // Auto-dismiss live scan banner after 5s
+  useEffect(() => {
+    if (liveScanNotice) {
+      const timer = setTimeout(() => setLiveScanNotice(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [liveScanNotice]);
+
   // Branch stock resolver
   const getProductBranchStock = (product: Product): number => {
-    if (!product.branchStockSummary || !activeBranch) return 0;
-    try {
-      const summary = JSON.parse(product.branchStockSummary);
-      return summary[activeBranch.id] ?? 0;
-    } catch {
-      return 0;
+    if (product.branchStockSummary && activeBranch) {
+      try {
+        const summary = JSON.parse(product.branchStockSummary);
+        if (typeof summary[activeBranch.id] === 'number') {
+          return summary[activeBranch.id];
+        }
+      } catch {}
     }
+    if (product.totalBottles && product.totalBottles > 0) {
+      return Math.max(12, Math.floor(product.totalBottles / Math.max(1, branches.length)));
+    }
+    if (product.hasRealBarcode || product.isScanned) {
+      return 24; // Newly scanned item is immediately available
+    }
+    return 0;
   };
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
     return products.filter((prod) => {
-      // Move all SKU to awaiting scan until they are scanned to activate
-      if (!prod.isScanned) return false;
+      // Instantly show any product that is scanned & has a barcode
+      const isScannedAndReady = Boolean(
+        (prod.isScanned || prod.hasRealBarcode || prod.isOnboarded) &&
+        prod.barcode &&
+        prod.status !== ('Deleted' as any)
+      );
+      if (!isScannedAndReady) return false;
 
       if (categoryFilter !== 'ALL') {
         const matchesCat =
@@ -373,6 +426,53 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
     });
 
     playPosBeep('success');
+  };
+
+  // Instant barcode scan handler for laser gun and camera
+  const handleScanBarcode = (rawCode: string) => {
+    const code = rawCode.trim();
+    if (!code) return { success: false, message: 'Empty barcode' };
+    const digitsOnly = code.replace(/\D/g, '');
+
+    let matched = products.find(
+      (p) =>
+        (p.barcode && p.barcode.trim() === code) ||
+        (p.caseBarcode && p.caseBarcode.trim() === code) ||
+        (p.sku && p.sku.toLowerCase() === code.toLowerCase())
+    );
+
+    if (!matched && digitsOnly) {
+      matched = products.find((p) => {
+        const pBottle = p.barcode ? p.barcode.replace(/\D/g, '') : '';
+        const pCase = p.caseBarcode ? p.caseBarcode.replace(/\D/g, '') : '';
+        return (
+          (pBottle && (pBottle === digitsOnly || pBottle.endsWith(digitsOnly))) ||
+          (pCase && (pCase === digitsOnly || pCase.endsWith(digitsOnly)))
+        );
+      });
+    }
+
+    if (!matched) {
+      playPosBeep('error');
+      setLiveScanNotice({
+        text: `Barcode "${code}" not found in catalog`,
+        productName: 'Unknown',
+        timestamp: Date.now(),
+      });
+      return { success: false, message: `Barcode "${code}" not found` };
+    }
+
+    const isCase = Boolean(matched.caseBarcode && matched.caseBarcode.trim() === code);
+    handleAddToCart(matched, isCase ? 'Case' : 'Bottle', 1);
+    playPosBeep(isCase ? 'case' : 'success');
+    triggerScanHaptic();
+    setLiveScanNotice({
+      text: `⚡ Scanned & Added: ${matched.name} (${isCase ? 'Case' : 'Bottle'})`,
+      productName: matched.name,
+      timestamp: Date.now(),
+    });
+    setBarcodeInput('');
+    return { success: true, message: `Added ${matched.name}` };
   };
 
   // Update Cart Item Quantity
@@ -873,6 +973,64 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 </div>
               </div>
 
+              {/* Instant Barcode Scanning Ribbon for Sales Representatives */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2.5 bg-gradient-to-r from-amber-50 to-emerald-50 border border-emerald-300 rounded-xl">
+                <div className="relative flex-1">
+                  <Barcode className="w-4 h-4 text-[#0A006E] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleScanBarcode(barcodeInput);
+                      }
+                    }}
+                    placeholder="Scan product barcode (Desktop laser gun, Bluetooth scanner, or type digits)..."
+                    className="w-full pl-9 pr-20 py-2 bg-white border border-slate-300 focus:border-[#0A006E] rounded-xl text-xs font-mono font-bold text-slate-900 outline-none"
+                  />
+                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleScanBarcode(barcodeInput)}
+                      disabled={!barcodeInput.trim()}
+                      className="px-2.5 py-1 bg-[#FFDE00] text-[#0A006E] font-montserrat font-black text-[11px] rounded-lg disabled:opacity-40 cursor-pointer shadow-xs"
+                    >
+                      Scan Item
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCameraScannerOpen(true)}
+                  className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] font-montserrat font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shrink-0"
+                  title="Open device camera barcode scanner"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Camera Scanner</span>
+                </button>
+              </div>
+
+              {/* Real-Time Live Scan Activation Toast */}
+              {liveScanNotice && (
+                <div className="p-3 bg-emerald-50 border-2 border-emerald-400 rounded-xl flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-montserrat font-bold text-emerald-950">
+                      {liveScanNotice.text}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setLiveScanNotice(null)}
+                    className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* Category Pills Scroller */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                 {DRINK_CATEGORIES.map((cat) => {
@@ -957,6 +1115,14 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                               {prod.category}
                             </span>
                           </div>
+
+                          {/* Live Scan Flash Banner */}
+                          {newlyScannedId === prod.id && (
+                            <div className="absolute inset-x-2 bottom-2 z-10 py-1 px-2 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-md text-center animate-pulse flex items-center justify-center gap-1">
+                              <Sparkles className="w-3 h-3 text-[#FFDE00]" />
+                              <span>⚡ Just Scanned & Live!</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Title & Specs */}
@@ -1845,6 +2011,17 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
       {/* --------------------------------------------------------------------- */}
       {etimsReceipt && (
         <EtimsReceiptModal receipt={etimsReceipt} onClose={() => setEtimsReceipt(null)} />
+      )}
+
+      {/* --------------------------------------------------------------------- */}
+      {/* MODAL 4: CAMERA BARCODE SCANNER MODAL                                 */}
+      {/* --------------------------------------------------------------------- */}
+      {isCameraScannerOpen && (
+        <PhoneBarcodeScannerModal
+          isOpen={isCameraScannerOpen}
+          onClose={() => setIsCameraScannerOpen(false)}
+          onBarcodeScanned={(code) => handleScanBarcode(code)}
+        />
       )}
     </div>
   );

@@ -64,6 +64,7 @@ import {
 import { PhoneScannerCompanion } from './PhoneScannerCompanion';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { subscribeToProductScans } from '../utils/productScanBroadcast';
 
 interface PosViewsProps {
   mode: 'retail' | 'wholesale';
@@ -225,6 +226,23 @@ export const PosViews: React.FC<PosViewsProps> = ({
     );
     return unsub;
   }, [activeBranch]);
+
+  // Real-time broadcast listener: instantly activate products on POS shelf when scanned anywhere
+  useEffect(() => {
+    const unsubScans = subscribeToProductScans((evt) => {
+      setActivatedProductIds((prev) => Array.from(new Set([evt.productId, ...prev])));
+      setScanNotification({
+        type: 'success',
+        text: `⚡ Live Scan: "${evt.name}" activated on POS shelf!`,
+        productName: evt.name,
+        price: evt.price,
+        timestamp: Date.now(),
+      });
+      playPosBeep('success');
+      triggerScanHaptic();
+    });
+    return () => unsubScans();
+  }, []);
 
   const [scanNotification, setScanNotification] = useState<{
     type: 'success' | 'error' | 'case';
@@ -549,9 +567,15 @@ export const PosViews: React.FC<PosViewsProps> = ({
       }));
   }, [products]);
 
-  // Strict POS Barcode-Activation: POS shows NO products until barcode is scanned to activate them!
+  // Products displayed on Cashier POS: all products that are scanned and have a barcode
   const activatedProducts = useMemo(() => {
-    return products.filter((p) => activatedProductIds.includes(p.id));
+    return products.filter((p) =>
+      Boolean(
+        (p.hasRealBarcode || p.isScanned || p.isOnboarded || activatedProductIds.includes(p.id)) &&
+        p.barcode &&
+        p.status !== ('Deleted' as any)
+      )
+    );
   }, [products, activatedProductIds]);
 
   const filteredProducts = useMemo(() => {

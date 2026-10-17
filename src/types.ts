@@ -347,7 +347,7 @@ export interface InventoryItem {
 
 export interface Partner {
   id: string;
-  partnerType: 'Supplier' | 'Retailer' | 'Logistics';
+  partnerType: 'Supplier' | 'Retailer' | 'Logistics' | 'Direct Clients' | 'Individual' | 'Business';
   code: string;
   companyName: string;
   contactPerson: string;

@@ -81,6 +81,7 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
 
   // Scanner UI States
   const [activeTab, setActiveTab] = useState<'camera' | 'gun' | 'manual' | 'photo'>('camera');
+  const [instantAutoRegister, setInstantAutoRegister] = useState<boolean>(true);
   const [scannedCode, setScannedCode] = useState<string>('');
   const [gunInput, setGunInput] = useState<string>('');
   const [manualInput, setManualInput] = useState<string>('');
@@ -116,34 +117,118 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
     );
   }, [products, scannedCode, selectedProduct]);
 
+  // Core instant commit function
+  const commitBarcodeForProduct = useCallback(
+    async (targetProd: Product, cleanCode: string) => {
+      // Check collision
+      const collision = products.find(
+        (p) => p.id !== targetProd.id && p.hasRealBarcode && p.barcode && p.barcode.trim() === cleanCode
+      );
+
+      if (collision) {
+        playPosBeep('error');
+        setStatusMessage({
+          type: 'warning',
+          text: `Barcode "${cleanCode}" is already linked to "${collision.name}" (${collision.sku}). Duplicate registration blocked.`,
+        });
+        return false;
+      }
+
+      setIsSaving(true);
+      setStatusMessage(null);
+      try {
+        await onUpdateProduct(targetProd.id, {
+          barcode: cleanCode,
+          hasRealBarcode: true,
+          isScanned: true,
+          status: 'Active',
+          barcodeVerificationStatus: 'APPROVED_MASTER',
+          barcodeRegisteredAt: new Date().toISOString(),
+          barcodeRegisteredBy: currentUser.name,
+          barcodeRegisteredByRole: currentUser.role,
+        });
+
+        // Optimistically record the assigned barcode
+        setLocallyAssignedBarcodes((prev) => ({
+          ...prev,
+          [targetProd.id]: cleanCode,
+        }));
+
+        playPosBeep('success');
+        triggerScanHaptic();
+
+        // Clear input buffers
+        setScannedCode('');
+        setGunInput('');
+        setManualInput('');
+
+        // Find next product awaiting barcode
+        const nextAwaiting = products.find(
+          (p) => p.id !== targetProd.id && !p.hasRealBarcode && !locallyAssignedBarcodes[p.id]
+        );
+
+        setSelectedProductId(nextAwaiting?.id || '');
+
+        if (nextAwaiting) {
+          setStatusMessage({
+            type: 'success',
+            text: `⚡ Registered "${cleanCode}" to "${targetProd.name}"! Displaying instantly on Customer Portal, Sales & Cashier dashboards. Advanced to "${nextAwaiting.name}".`,
+          });
+        } else {
+          setStatusMessage({
+            type: 'success',
+            text: `🎉 All items in catalog now verified with real barcodes! Displaying instantly across all dashboards.`,
+          });
+        }
+        return true;
+      } catch (err: any) {
+        console.error('Barcode save error:', err);
+        setStatusMessage({
+          type: 'error',
+          text: err?.message || 'Failed to save real barcode to database.',
+        });
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [products, currentUser, locallyAssignedBarcodes, onUpdateProduct]
+  );
+
   // Handle newly detected barcode string
   const handleBarcodeDetected = useCallback(
     (rawCode: string) => {
       const clean = rawCode.trim();
       if (!clean) return;
 
-      playPosBeep('success');
-      triggerScanHaptic();
       setScannedCode(clean);
 
-      // Check collision
-      const collision = products.find(
-        (p) => p.id !== selectedProduct?.id && p.hasRealBarcode && p.barcode && p.barcode.trim() === clean
-      );
-
-      if (collision) {
-        setStatusMessage({
-          type: 'warning',
-          text: `Barcode "${clean}" is already assigned to "${collision.name}" (${collision.sku}). Scanning duplicate real barcodes is blocked.`,
-        });
+      // Instant 1-Step Auto-Register
+      if (instantAutoRegister && selectedProduct) {
+        commitBarcodeForProduct(selectedProduct, clean);
       } else {
-        setStatusMessage({
-          type: 'success',
-          text: `Real barcode "${clean}" captured! Ready to register.`,
-        });
+        playPosBeep('success');
+        triggerScanHaptic();
+
+        // Check collision
+        const collision = products.find(
+          (p) => p.id !== selectedProduct?.id && p.hasRealBarcode && p.barcode && p.barcode.trim() === clean
+        );
+
+        if (collision) {
+          setStatusMessage({
+            type: 'warning',
+            text: `Barcode "${clean}" is already assigned to "${collision.name}" (${collision.sku}). Scanning duplicate real barcodes is blocked.`,
+          });
+        } else {
+          setStatusMessage({
+            type: 'success',
+            text: `Real barcode "${clean}" captured! Click "Save & Link Real Barcode" or toggle Auto-Register.`,
+          });
+        }
       }
     },
-    [products, selectedProduct]
+    [instantAutoRegister, selectedProduct, commitBarcodeForProduct, products]
   );
 
   // Auto focus gun input when in gun mode
@@ -323,74 +408,7 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
       return;
     }
 
-    if (duplicateCollision) {
-      setStatusMessage({
-        type: 'error',
-        text: `Cannot save: Barcode is already used by ${duplicateCollision.name} (${duplicateCollision.sku}).`,
-      });
-      return;
-    }
-
-    setIsSaving(true);
-    setStatusMessage(null);
-    try {
-      await onUpdateProduct(selectedProduct.id, {
-        barcode: clean,
-        hasRealBarcode: true,
-        barcodeVerificationStatus: 'APPROVED_MASTER',
-        barcodeRegisteredAt: new Date().toISOString(),
-        barcodeRegisteredBy: currentUser.name,
-        barcodeRegisteredByRole: currentUser.role,
-      });
-
-      // Optimistically record the assigned barcode
-      setLocallyAssignedBarcodes((prev) => ({
-        ...prev,
-        [selectedProduct.id]: clean,
-      }));
-
-      playPosBeep('success');
-      setStatusMessage({
-        type: 'success',
-        text: `Successfully registered real barcode ${clean} to "${selectedProduct.name}"!`,
-      });
-
-      // Clear scanned code for next bottle
-      setScannedCode('');
-      setGunInput('');
-      setManualInput('');
-
-      // Auto-advance to next product awaiting real barcode if available
-      const nextAwaiting = products.find(
-        (p) => p.id !== selectedProduct.id && !p.hasRealBarcode && !locallyAssignedBarcodes[p.id]
-      );
-      if (nextAwaiting) {
-        setTimeout(() => {
-          setSelectedProductId(nextAwaiting.id);
-          setStatusMessage({
-            type: 'success',
-            text: `Advanced to next bottle awaiting barcode: "${nextAwaiting.name}".`,
-          });
-        }, 800);
-      }
-    } catch (err: any) {
-      console.error('Barcode save error:', err);
-      let errorMsg = 'Failed to save real barcode to database.';
-      if (err?.message) {
-        try {
-          const parsed = JSON.parse(err.message);
-          errorMsg = parsed.error || err.message;
-        } catch {
-          errorMsg = err.message;
-        }
-      }
-      setStatusMessage({
-        type: 'error',
-        text: errorMsg,
-      });
-    } finally {
-      setIsSaving(false);
-    }
+    await commitBarcodeForProduct(selectedProduct, clean);
   };
 
   return (
@@ -442,7 +460,45 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
         </div>
 
         {/* Scrollable Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1 text-xs">
+          {/* Instant Auto-Register on Scan Switch Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-amber-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center font-black shadow-xs shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-montserrat font-black text-slate-900 text-xs">
+                    ⚡ Instant 1-Step Auto-Register on Scan
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                    instantAutoRegister ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {instantAutoRegister ? 'Active' : 'Manual Mode'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  {instantAutoRegister
+                    ? 'Each barcode scanned by camera or laser gun instantly registers to the bottle, pushes live to dashboards, and auto-advances to the next bottle in queue.'
+                    : 'Scans are held in the preview box for manual review before saving.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setInstantAutoRegister((prev) => !prev)}
+              className={`px-4 py-2 rounded-xl font-montserrat font-black text-xs transition cursor-pointer shrink-0 shadow-xs flex items-center gap-1.5 ${
+                instantAutoRegister
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-[#0A006E] hover:bg-slate-800 text-[#FFDE00]'
+              }`}
+            >
+              {instantAutoRegister ? '✓ Instant Active' : 'Enable Instant Scan'}
+            </button>
+          </div>
+
           {/* Target Product Selection Card */}
           <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
@@ -467,7 +523,7 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
               <div className="sm:col-span-8 relative">
                 <select
-                  value={selectedProductId}
+                  value={selectedProductId || ''}
                   onChange={(e) => {
                     setSelectedProductId(e.target.value);
                     setScannedCode('');

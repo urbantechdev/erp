@@ -16,6 +16,7 @@ import {
 import { MASTER_IMPORTED_INVENTORY } from '../erpUtils';
 import { auth, db } from '../firebase';
 import { collection, doc, setDoc, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
+import { subscribeToProductScans } from '../utils/productScanBroadcast';
 
 enum OperationType {
   CREATE = 'create',
@@ -150,6 +151,33 @@ export const ErpProvider: React.FC<{
     setCurrentUser(initialCurrentUser);
   }, [initialCurrentUser]);
 
+  // Real-time broadcast sync: instantly update product state across all open views
+  useEffect(() => {
+    const unsubProductScans = subscribeToProductScans((evt) => {
+      setProducts((prev) => {
+        const idx = prev.findIndex(
+          (p) => p.id === evt.productId || (p.barcode && p.barcode === evt.barcode)
+        );
+        if (idx >= 0) {
+          const updated = [...prev];
+          const existing = updated[idx];
+          updated[idx] = {
+            ...existing,
+            barcode: evt.barcode,
+            hasRealBarcode: true,
+            isScanned: true,
+            status: 'Active',
+            totalBottles: existing.totalBottles && existing.totalBottles > 0 ? existing.totalBottles : (evt.totalBottles || 48),
+          };
+          return updated;
+        }
+        return prev;
+      });
+    });
+
+    return () => unsubProductScans();
+  }, []);
+
   // Derive active branch
   const activeBranch = useMemo(() => {
     return (
@@ -160,20 +188,34 @@ export const ErpProvider: React.FC<{
     );
   }, [branches]);
 
-  // Synthesize or derive inventory items from products
+  // Synthesize or derive inventory items across all branches from products
   const inventoryItems = useMemo<InventoryItem[]>(() => {
-    return products.map(p => ({
-      id: `inv-${p.id}`,
-      productId: p.id,
-      branchId: activeBranch.id,
-      bottlesOnHand: p.totalBottles ?? 36,
-      casesOnHand: Math.floor((p.totalBottles ?? 36) / (p.packSize || 12)),
-      reorderLevel: p.minReorderThresholdBottles ?? 10,
-      batchNumber: 'BATCH-2026-A1',
-      expiryDate: p.batchExpiryDate || '2028-12-31',
-      lastScannedAt: new Date().toISOString()
-    }));
-  }, [products, activeBranch]);
+    const branchList = branches.length > 0 ? branches : [DEFAULT_MAIN_BRANCH];
+    return branchList.flatMap((branch) =>
+      products.map((p) => {
+        let bottles = p.totalBottles ?? 36;
+        if (p.branchStockSummary) {
+          try {
+            const summary = JSON.parse(p.branchStockSummary);
+            if (typeof summary[branch.id] === 'number') {
+              bottles = summary[branch.id];
+            }
+          } catch {}
+        }
+        return {
+          id: `inv-${p.id}-${branch.id}`,
+          productId: p.id,
+          branchId: branch.id,
+          bottlesOnHand: bottles,
+          casesOnHand: Math.floor(bottles / (p.packSize || 12)),
+          reorderLevel: p.minReorderThresholdBottles ?? 10,
+          batchNumber: 'BATCH-2026-A1',
+          expiryDate: p.batchExpiryDate || '2028-12-31',
+          lastScannedAt: new Date().toISOString()
+        };
+      })
+    );
+  }, [products, branches]);
 
   // Website delivery orders
   const [websiteDeliveryOrders, setWebsiteDeliveryOrders] = useState<WebsiteDeliveryOrder[]>([]);

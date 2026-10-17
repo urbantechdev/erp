@@ -215,16 +215,15 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
 
         const brand = cols[brandIdx] || productName.split(' ')[0] || 'VAAIRO';
 
-        // Barcode extraction or auto-generation
+        // Barcode extraction - do not auto-generate
         let barcodeVal = (cols[barcodeIdx] || '').replace(/[^0-9]/g, '');
         if (!barcodeVal || barcodeVal.length < 8) {
-          // Deterministic unique 13-digit EAN barcode
-          barcodeVal = String(6160000000000 + Math.floor(Math.random() * 9999999999));
+          barcodeVal = '';
         }
 
         let caseBarcodeVal = (cols[caseBarcodeIdx] || '').replace(/[^0-9]/g, '');
         if (!caseBarcodeVal || caseBarcodeVal.length < 8) {
-          caseBarcodeVal = `1${barcodeVal.padStart(13, '0')}`;
+          caseBarcodeVal = '';
         }
 
         const vol = Number((cols[volumeIdx] || '750').replace(/[^0-9.]/g, '')) || 750;

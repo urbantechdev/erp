@@ -34,26 +34,26 @@ export const EtimsReceiptModal: React.FC<Props> = ({ invoice, order, onClose }) 
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-none sm:rounded-xl shadow-2xl max-w-md w-full min-h-dvh sm:min-h-0 overflow-y-auto sm:overflow-hidden border-0 sm:border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
         {/* Receipt Header Banner */}
-        <div className="bg-[#0A006E] text-white p-4 flex items-center justify-between">
+        <div className="bg-white text-[#0A006E] border-b border-slate-200 p-4 flex items-center justify-between print:bg-white print:text-black">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded bg-[#FFDE00] flex items-center justify-center text-[#0A006E] font-black text-xs font-montserrat">
+            <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-[#0A006E] font-black text-xs font-montserrat">
               VAT
             </div>
             <div>
               <h3 className="font-montserrat font-black text-sm tracking-wide">VAAIRO 16% VAT TAX INVOICE</h3>
-              <p className="text-xs text-slate-300">Official 16% Value Added Tax (VAT) Compliant Receipt</p>
+              <p className="text-xs text-slate-500">Official 16% Value Added Tax (VAT) Compliant Receipt</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-white/80 hover:text-white p-1 rounded hover:bg-white/10"
+            className="text-slate-500 hover:text-black p-1 rounded hover:bg-slate-100 print:hidden"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Printable Receipt Body */}
-        <div className="p-6 font-mono text-xs space-y-4 print:p-0 bg-slate-50/50">
+        <div className="p-6 font-mono text-xs space-y-4 print:p-0 print:bg-white bg-white">
           <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
             <h2 className="font-montserrat font-black italic text-base text-slate-900 tracking-tight">
               VAAIRO BEVERAGES &amp; MERCHANTS LTD
@@ -71,10 +71,12 @@ export const EtimsReceiptModal: React.FC<Props> = ({ invoice, order, onClose }) 
             </div>
             <div className="flex justify-between">
               <span>DATE / TIME:</span>
-              <span>{invoice.invoiceDate}</span>
+              <span className="font-bold text-slate-900">
+                {new Date(invoice.invoiceDate).toLocaleDateString()} {new Date(invoice.invoiceDate).toLocaleTimeString()}
+              </span>
             </div>
             <div className="flex justify-between">
-              <span>SERVED BY -</span>
+              <span>SERVED BY:</span>
               <span className="font-bold text-[#0A006E]">{servedByName}</span>
             </div>
             <div className="flex justify-between">

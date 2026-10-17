@@ -115,6 +115,7 @@ import { Header } from './components/Header';
 import { PhoneScannerCompanion } from './components/PhoneScannerCompanion';
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { hashPin, isPinHashed, verifyPin, hashPassword, verifyPassword } from './utils/security';
+import { broadcastProductScanned } from './utils/productScanBroadcast';
 
 const MODULE_META: Record<
   ERPModuleId,
@@ -589,6 +590,7 @@ export default function App() {
           barcode: override.barcode || (isReal ? baseItem.barcode : undefined),
           caseBarcode: override.caseBarcode || (isReal ? baseItem.caseBarcode : undefined),
           hasRealBarcode: isReal,
+          isScanned: Boolean(override.isScanned || isReal),
         };
       }
       return baseItem;
@@ -602,6 +604,7 @@ export default function App() {
         barcode: item.barcode,
         caseBarcode: item.caseBarcode,
         hasRealBarcode: isReal,
+        isScanned: Boolean(item.isScanned || isReal),
       };
     });
     return [...customCreated, ...merged];
@@ -722,11 +725,10 @@ export default function App() {
     return externalCustomers;
   }, [externalCustomers, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
 
-  // Branch-specific stock bottle count calculation for products
-  const scopedProducts = useMemo(() => {
-    const activeProducts = products.filter((p) => p.status !== 'Deleted');
+  const inventoryCatalogProducts = useMemo(() => {
+    const allActive = products.filter((p) => p.status !== ('Deleted' as any));
     if (isBranchManager && branchManagerBranchId) {
-      return activeProducts.map((p) => {
+      return allActive.map((p) => {
         let branchBottles = 0;
         if (p.branchStockSummary) {
           try {
@@ -746,8 +748,15 @@ export default function App() {
         };
       });
     }
-    return activeProducts;
+    return allActive;
   }, [products, isBranchManager, branchManagerBranchId]);
+
+  // Scanned products with real barcode ready for Cashier POS, Retail, and Customer Storefront
+  const scopedProducts = useMemo(() => {
+    return inventoryCatalogProducts.filter(
+      (p) => Boolean((p.hasRealBarcode || p.isScanned || p.isOnboarded) && p.barcode)
+    );
+  }, [inventoryCatalogProducts]);
 
   const scopedRegions = useMemo(() => {
     if (isBranchManager && branchManagerBranchId) {
@@ -1107,6 +1116,31 @@ export default function App() {
       firestoreProducts.find((p) => p.id === productId);
 
     const now = new Date().toISOString();
+    const isNowScanned = Boolean(
+      patch.barcode || patch.hasRealBarcode || baseProd?.hasRealBarcode || baseProd?.isScanned
+    );
+
+    // Ensure stock across all branches for scanned products so they appear immediately on all dashboards
+    let totalBottles = typeof patch.totalBottles === 'number'
+      ? patch.totalBottles
+      : (baseProd?.totalBottles ?? 0);
+
+    if (isNowScanned && totalBottles <= 0) {
+      totalBottles = 48;
+    }
+
+    let branchStockSummary = patch.branchStockSummary || baseProd?.branchStockSummary;
+    if (isNowScanned && (!branchStockSummary || branchStockSummary === '{}')) {
+      const branchAllocation: Record<string, number> = {};
+      const activeBranchList = branches.length > 0 ? branches : [{ id: 'br-hq-01' }];
+      const perBranch = Math.max(12, Math.floor(totalBottles / Math.max(1, activeBranchList.length)));
+      activeBranchList.forEach((b) => {
+        branchAllocation[b.id] = perBranch;
+      });
+      branchStockSummary = JSON.stringify(branchAllocation);
+    }
+
+    const assignedBarcode = patch.barcode || baseProd?.barcode;
     const docPayload: Product = cleanFirestoreData({
       sku: baseProd?.sku || `SKU-${productId}`,
       name: baseProd?.name || 'Product',
@@ -1115,6 +1149,12 @@ export default function App() {
       createdAt: (baseProd && baseProd.createdAt) || now,
       ...(baseProd || {}),
       ...patch,
+      barcode: assignedBarcode,
+      totalBottles,
+      branchStockSummary,
+      isScanned: isNowScanned ? true : (patch.isScanned ?? baseProd?.isScanned ?? false),
+      hasRealBarcode: Boolean(patch.hasRealBarcode ?? (assignedBarcode ? true : baseProd?.hasRealBarcode)),
+      status: patch.status || (isNowScanned ? 'Active' : baseProd?.status || 'Active'),
       id: productId,
     });
 
@@ -1127,6 +1167,33 @@ export default function App() {
       } catch {}
       return next;
     });
+
+    // Instant broadcast across all tabs and portal dashboards (Cashier, Sales, Customer Storefront)
+    if (isNowScanned && docPayload.barcode) {
+      broadcastProductScanned({
+        productId,
+        barcode: docPayload.barcode,
+        name: docPayload.name,
+        sku: docPayload.sku,
+        category: docPayload.category,
+        price: docPayload.retailPriceKes || docPayload.baseRetailPrice || 0,
+        totalBottles: docPayload.totalBottles,
+        sourceModule: 'inventory',
+        scannedAt: now,
+      });
+
+      // Also register branch product activation in Firestore for POS cashier views
+      branches.forEach((b) => {
+        const activationId = `${b.id}_${productId}`;
+        setDoc(doc(db, 'branch_product_activations', activationId), {
+          id: activationId,
+          branchId: b.id,
+          productId,
+          activatedAt: now,
+          activatedBy: currentUser?.id || 'inventory_scanner',
+        }).catch(() => {});
+      });
+    }
 
     try {
       await setDoc(doc(db, 'products', productId), docPayload, { merge: true });
@@ -1895,6 +1962,8 @@ export default function App() {
     const id = `prod-${Date.now()}`;
     const fullProd: Product = cleanFirestoreData({
       ...prodDraft,
+      barcode: prodDraft.isOnboarded ? prodDraft.barcode : undefined,
+      caseBarcode: prodDraft.isOnboarded ? prodDraft.caseBarcode : undefined,
       id,
       createdAt: new Date().toISOString(),
     });
@@ -2585,7 +2654,7 @@ export default function App() {
       console.warn('Delete failed, falling back to soft delete:', error);
       // Fallback: Soft delete by setting status
       try {
-        const updatedProduct = { ...product, status: 'Deleted' };
+        const updatedProduct = { ...product, status: 'Deleted' as any };
         await updateDoc(doc(db, 'products', productId), updatedProduct);
         setFirestoreProducts((prev) => prev.map((p) => (p.id === productId ? updatedProduct : p)));
         triggerToast('success', 'Product Hidden', 'Product marked as deleted.');
@@ -2599,7 +2668,6 @@ export default function App() {
   const handleWipeAllProducts = async () => {
     if (!confirm('Are you absolutely sure you want to delete ALL SKUs? This cannot be undone.')) return;
     
-    setIsLoading(true);
     let wipedCount = 0;
     for (const product of firestoreProducts) {
       try {
@@ -2607,13 +2675,12 @@ export default function App() {
         wipedCount++;
       } catch (error) {
         console.warn(`Failed to delete ${product.id}, falling back to soft delete:`, error);
-        await updateDoc(doc(db, 'products', product.id), { status: 'Deleted' });
+        await updateDoc(doc(db, 'products', product.id), { status: 'Deleted' as any });
         wipedCount++;
       }
     }
     
     setFirestoreProducts([]);
-    setIsLoading(false);
     triggerToast('success', 'Database Wiped', `Successfully cleared ${wipedCount} products.`);
   };
 
@@ -3783,7 +3850,7 @@ export default function App() {
           {activeModule === 'inventory' && (
             <InventoryModule
               currentUser={currentUser}
-              products={scopedProducts}
+              products={inventoryCatalogProducts}
               branches={scopedBranches}
               onCreateProduct={handleCreateProduct}
               onBatchCreateProducts={handleBatchCreateProducts}
