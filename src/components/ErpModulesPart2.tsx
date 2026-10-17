@@ -189,13 +189,20 @@ export const PartnersOnboardingModule: React.FC<{
     }
   };
 
-  const filtered = useMemo(
-    () =>
-      filterType === 'All'
-        ? partners
-        : partners.filter((p) => p.partnerType === filterType),
-    [partners, filterType]
-  );
+  const filtered = useMemo(() => {
+    let list = partners;
+    if (isBranchManager) {
+      list = partners.filter(
+        (p) =>
+          !p.regionName ||
+          p.regionName.toLowerCase().includes(currentUser.branchName.toLowerCase()) ||
+          currentUser.branchName.toLowerCase().includes(p.regionName.toLowerCase())
+      );
+    }
+    return filterType === 'All'
+      ? list
+      : list.filter((p) => p.partnerType === filterType);
+  }, [partners, filterType, isBranchManager, currentUser]);
 
   return (
     <div className="space-y-6">
@@ -763,8 +770,13 @@ export const DocumentsAndCreditNotesModule: React.FC<{
   const handleCreateCreditNote = async (e: React.FormEvent) => {
     e.preventDefault();
     const prod = products.find((p) => p.id === selectedProdId) || products[0];
-    const br = branches[0];
-    const reg = regions[0];
+    const br =
+      branches.find(
+        (b) => b.id === currentUser.branchId || b.name === currentUser.branchName
+      ) || branches[0];
+    const reg =
+      regions.find((r) => r.id === br?.regionId) ||
+      regions[0];
     if (!prod || !br || !reg) return;
 
     const packSize = prod.packSize || prod.bottlesPerCase || 12;
@@ -2195,30 +2207,65 @@ export const HrAndRbacModule: React.FC<{
               <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
                 Provisioned Organization Directory ({staffList.length} Staff)
               </h3>
-              <button
-                onClick={() =>
-                  exportReportToPDF(
-                    'HR Staff & Role-Based Access Directory',
-                    `Exported by ${currentUser.name}`,
-                    ['Name', 'Email', 'Role', 'Status', 'Auth Method', 'Branch', 'Created By', 'Last Login'],
-                    staffList.map((s) => [
-                      s.name,
-                      s.email,
-                      s.role,
-                      s.status,
-                      s.authMethod === 'google' ? 'Google OAuth' : `6-Digit PIN (${s.pin || '******'})`,
-                      s.branchName,
-                      `${s.createdBy} (${s.createdByRole})`,
-                      s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString() : 'Never',
-                    ]),
-                    'Vaairo_HR_Staff_Directory'
-                  )
-                }
-                className="px-3.5 py-1.5 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
-                Export HR PDF
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() =>
+                    exportToCSV(
+                      'Vaairo_Staff_Directory_Export',
+                      ['ID', 'Name', 'Email', 'Role', 'Status', 'Auth Method', 'Branch ID', 'Branch Name', 'Base Salary (KES)', 'Deductions (KES)', 'Net Salary (KES)', 'KRA PIN', 'Created By', 'Last Login'],
+                      staffList.map((s) => {
+                        const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
+                        const ded = s.deductionsKes ?? Math.round(bSal * 0.18);
+                        const net = Math.max(0, bSal - ded - (s.penaltiesKes ?? 0));
+                        return [
+                          s.id,
+                          s.name,
+                          s.email,
+                          s.role,
+                          s.status,
+                          s.authMethod,
+                          s.branchId,
+                          s.branchName,
+                          bSal,
+                          ded,
+                          net,
+                          s.kraPin || 'N/A',
+                          `${s.createdBy} (${s.createdByRole})`,
+                          s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString() : 'Never',
+                        ];
+                      })
+                    )
+                  }
+                  className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#0A006E]" />
+                  Export Staff CSV
+                </button>
+                <button
+                  onClick={() =>
+                    exportReportToPDF(
+                      'HR Staff & Role-Based Access Directory',
+                      `Exported by ${currentUser.name}`,
+                      ['Name', 'Email', 'Role', 'Status', 'Auth Method', 'Branch', 'Created By', 'Last Login'],
+                      staffList.map((s) => [
+                        s.name,
+                        s.email,
+                        s.role,
+                        s.status,
+                        s.authMethod === 'google' ? 'Google OAuth' : `6-Digit PIN (${s.pin || '******'})`,
+                        s.branchName,
+                        `${s.createdBy} (${s.createdByRole})`,
+                        s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString() : 'Never',
+                      ]),
+                      'Vaairo_HR_Staff_Directory'
+                    )
+                  }
+                  className="px-3.5 py-1.5 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
+                  Export HR PDF
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
@@ -2958,6 +3005,44 @@ export const HrAndRbacModule: React.FC<{
                   </select>
                 </div>
 
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Base Monthly Salary (KES)</label>
+                  <input
+                    type="number"
+                    value={editBaseSalary}
+                    onChange={(e) => setEditBaseSalary(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-mono-tabular font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Statutory Deductions (KES)</label>
+                  <input
+                    type="number"
+                    value={editDeductions}
+                    onChange={(e) => setEditDeductions(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-mono-tabular text-rose-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">KRA Tax PIN</label>
+                  <input
+                    type="text"
+                    value={editKraPin}
+                    onChange={(e) => setEditKraPin(e.target.value.toUpperCase())}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-mono-tabular uppercase"
+                    placeholder="A000000000Z"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Net Take-Home Pay</label>
+                  <div className="w-full mt-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono-tabular font-black text-[#0A006E]">
+                    KES {Math.max(0, editBaseSalary - editDeductions - editPenalties).toLocaleString()}
+                  </div>
+                </div>
+
                 {editRole !== 'Admin' && editRole !== 'Accountant' && (
                   <div className="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-1.5">
                     <label className="font-montserrat font-bold text-slate-700">
@@ -3182,6 +3267,17 @@ export const AuditAndSecurityModule: React.FC<{
     [scopedLogs, severityFilter]
   );
 
+  const visibleStaff = useMemo(() => {
+    if (currentUser.role === 'Branch Manager') {
+      return staffList.filter(
+        (s) =>
+          s.branchId === currentUser.branchId ||
+          s.branchName === currentUser.branchName
+      );
+    }
+    return staffList;
+  }, [staffList, currentUser]);
+
   return (
     <div className="space-y-6">
       {/* Zero-Trust Telemetry & Activity Surveillance Banner */}
@@ -3275,7 +3371,7 @@ export const AuditAndSecurityModule: React.FC<{
           Live Staff Session & Device Monitoring Status
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {staffList.map((s) => (
+          {visibleStaff.map((s) => (
             <div
               key={s.id}
               className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1.5 text-xs"

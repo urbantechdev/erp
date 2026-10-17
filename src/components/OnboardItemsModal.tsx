@@ -297,7 +297,14 @@ export const OnboardItemsModal: React.FC<OnboardItemsModalProps> = ({
                   onChange={(e) => setSelectedBranchId(e.target.value)}
                   className="font-montserrat font-black text-sm text-[#0A006E] bg-transparent border-none p-0 cursor-pointer focus:outline-none"
                 >
-                  {branches.map((b) => (
+                  {(currentUser.role === 'Branch Manager'
+                    ? branches.filter(
+                        (b) =>
+                          b.id === currentUser.branchId ||
+                          b.name === currentUser.branchName
+                      )
+                    : branches
+                  ).map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name} ({b.code})
                     </option>

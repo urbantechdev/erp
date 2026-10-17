@@ -2922,6 +2922,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                     <img
                       src={selectedProductDetail.image || getProductImageUrl(selectedProductDetail)}
                       alt={selectedProductDetail.name}
+                      loading="lazy"
                       decoding="async"
                       className={`w-full h-full object-cover object-center block ${isDetailOutOfStock ? 'opacity-50 grayscale-[35%]' : ''}`}
                     />

@@ -1,20 +1,12 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Aegis Spirits & Beverage ERP
 
-# Run and deploy your AI Studio app
+Multi-operational liquor distribution and importer ERP with real-time inventory, geo-regional pricing, regulatory compliance, dual POS, and role-based access control.
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/44710f3a-e8b8-4362-b1d0-8371a692275a
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Features
+- Real-time Inventory & Multi-Branch Stock Tracking
+- Geo-Regional Pricing & Currency Conversion (KES)
+- Regulatory Compliance (eTIMS receipts, KRA tax calculations)
+- Dual POS (Affiliate Sales POS & Storefront POS)
+- Role-Based Access Control (Admin, Accountant, Branch Manager, Cashier, Affiliate Sales)
+- Barcode Scanning & Thermal Printing
+- AI-Powered Insights & Analytics

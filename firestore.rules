@@ -196,7 +196,7 @@ service cloud.firestore {
     match /products/{productId} {
       allow get, list: if true;
       allow create, update: if isValidId(productId) && isValidProduct(incoming());
-      allow delete: if isValidId(productId);
+      allow delete: if request.auth != null;
     }
 
     match /partners/{partnerId} {

@@ -1343,6 +1343,8 @@ export const InventoryModule: React.FC<{
   onCreateProduct: (prod: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;
   onBatchCreateProducts?: (prods: Omit<Product, 'id' | 'createdAt'>[]) => Promise<number>;
   onUpdateProduct?: (productId: string, updates: Partial<Product>) => Promise<void>;
+  onDeleteProduct?: (productId: string) => Promise<void>;
+  onWipeAllProducts?: () => Promise<void>;
   onLogStockIncident?: (incident: DamageSpoilageIncident) => Promise<void>;
   onOpenOnboardItems?: () => void;
 }> = ({
@@ -1352,6 +1354,8 @@ export const InventoryModule: React.FC<{
   onCreateProduct,
   onBatchCreateProducts,
   onUpdateProduct,
+  onDeleteProduct,
+  onWipeAllProducts,
   onLogStockIncident,
   onOpenOnboardItems,
 }) => {
@@ -1439,6 +1443,27 @@ export const InventoryModule: React.FC<{
 
     setDuplicateFindings({ duplicateSkus, duplicateBarcodes, duplicateNames, totalDuplicates });
     setIsDuplicateModalOpen(true);
+  };
+
+  const handleClearDuplicates = async () => {
+    if (!onDeleteProduct) return;
+    const allDuplicates = [
+      ...duplicateFindings.duplicateSkus,
+      ...duplicateFindings.duplicateBarcodes,
+      ...duplicateFindings.duplicateNames,
+    ];
+    
+    // De-duplicate the list of items to be deleted (in case an item is in multiple groups)
+    const itemsToDelete = new Set<string>();
+    allDuplicates.forEach(group => {
+      // Keep the first item, mark rest for deletion
+      group.items.slice(1).forEach(item => itemsToDelete.add(item.id));
+    });
+
+    for (const id of itemsToDelete) {
+      await onDeleteProduct(id);
+    }
+    setIsDuplicateModalOpen(false);
   };
 
   const handleSaveThresholdSettings = (newSettings: InventoryThresholdSettings) => {
@@ -2296,9 +2321,10 @@ export const InventoryModule: React.FC<{
                 className="px-2.5 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular"
               />
               <select
-                value={targetBranchId}
+                disabled={currentUser.role === 'Branch Manager'}
+                value={currentUser.role === 'Branch Manager' ? currentUser.branchId : targetBranchId}
                 onChange={(e) => setTargetBranchId(e.target.value)}
-                className="px-2 py-2 bg-white border border-slate-200 rounded-xl"
+                className="px-2 py-2 bg-white border border-slate-200 rounded-xl disabled:bg-slate-100 disabled:text-slate-600"
               >
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -2448,6 +2474,17 @@ export const InventoryModule: React.FC<{
         </div>
 
         {/* Health & Rotation Filter Pills */}
+        {onWipeAllProducts && (
+          <div className="pb-2">
+            <button
+              type="button"
+              onClick={onWipeAllProducts}
+              className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition hover:bg-red-700"
+            >
+              Wipe Database
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider shrink-0 mr-1">
             Stock Rotation & Health:
@@ -2576,7 +2613,11 @@ export const InventoryModule: React.FC<{
                 <th className="py-2.5 px-3 font-black">Spec & Origin</th>
                 <th className="py-2.5 px-3 font-black text-right">Wholesale (KES)</th>
                 <th className="py-2.5 px-3 font-black text-right">Retail (KES)</th>
-                <th className="py-2.5 px-3 font-black text-right">Total Bottles</th>
+                <th className="py-2.5 px-3 font-black text-right">
+                  {currentUser.role === 'Branch Manager'
+                    ? `Branch Stock (${currentUser.branchName})`
+                    : 'Total Bottles'}
+                </th>
                 {canEditProduct && (
                   <th className="py-2.5 px-3 font-black text-right">Action</th>
                 )}
@@ -3277,7 +3318,16 @@ export const InventoryModule: React.FC<{
               </div>
             )}
 
-            <div className="flex justify-end pt-3 border-t border-slate-200">
+            <div className="flex justify-end pt-3 border-t border-slate-200 gap-3">
+              {duplicateFindings.totalDuplicates > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearDuplicates}
+                  className="px-5 py-2.5 bg-rose-600 text-white rounded-xl font-montserrat font-black text-xs cursor-pointer shadow-md hover:bg-rose-700"
+                >
+                  Clear Duplicates
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsDuplicateModalOpen(false)}
@@ -3299,6 +3349,7 @@ export const InventoryModule: React.FC<{
 export const BranchesAndTransfersModule: React.FC<{
   currentUser: StaffMember;
   branches: Branch[];
+  allBranches?: Branch[];
   regions: GeoRegion[];
   products: Product[];
   partners: Partner[];
@@ -3313,6 +3364,7 @@ export const BranchesAndTransfersModule: React.FC<{
 }> = ({
   currentUser,
   branches,
+  allBranches,
   regions,
   products,
   partners,
@@ -3336,6 +3388,8 @@ export const BranchesAndTransfersModule: React.FC<{
   const isSalesManager = currentUser.role === 'Sales Manager';
   const isInventory = currentUser.role === 'Inventory Controller';
 
+  const transferBranches = allBranches && allBranches.length > 0 ? allBranches : branches;
+
   const canManageBranches = isAdmin; // Only Admin can administer branches
   const canInitiateTransfer = isAdmin || isInventory || isBranchManager;
 
@@ -3343,7 +3397,7 @@ export const BranchesAndTransfersModule: React.FC<{
     isBranchManager && currentUser.branchId ? currentUser.branchId : branches[0]?.id || ''
   );
   const [toBranchId, setToBranchId] = useState(
-    branches.find((b) => b.id !== (isBranchManager && currentUser.branchId ? currentUser.branchId : branches[0]?.id))?.id || branches[1]?.id || branches[0]?.id || ''
+    transferBranches.find((b) => b.id !== (isBranchManager && currentUser.branchId ? currentUser.branchId : branches[0]?.id))?.id || transferBranches[1]?.id || transferBranches[0]?.id || ''
   );
   const [productId, setProductId] = useState(products[0]?.id || '');
   const [qtyBottles, setQtyBottles] = useState<number>(12);
@@ -3655,7 +3709,7 @@ export const BranchesAndTransfersModule: React.FC<{
                 onChange={(e) => setFromBranchId(e.target.value)}
                 className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
               >
-                {branches.map((b) => (
+                {transferBranches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.code} · {b.name}
                   </option>
@@ -3670,7 +3724,7 @@ export const BranchesAndTransfersModule: React.FC<{
                 onChange={(e) => setToBranchId(e.target.value)}
                 className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl"
               >
-                {branches.map((b) => (
+                {transferBranches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.code} · {b.name}
                   </option>
@@ -3839,7 +3893,7 @@ export const BranchesAndTransfersModule: React.FC<{
             </thead>
             <tbody className="divide-y divide-slate-200">
               {branches
-                .filter((b) => facilityFilter === 'all' || (facilityFilter === 'branch_depot' ? (!b.facilityType || b.facilityType === 'branch_depot') : b.facilityType === facilityFilter))
+                .filter((b) => isBranchManager ? (b.id === currentUser.branchId || b.name === currentUser.branchName) : (facilityFilter === 'all' || (facilityFilter === 'branch_depot' ? (!b.facilityType || b.facilityType === 'branch_depot') : b.facilityType === facilityFilter)))
                 .map((b) => {
                 const isMainBranch = Boolean(
                   b.isMain ||
@@ -3991,12 +4045,20 @@ export const BranchesAndTransfersModule: React.FC<{
             Inter-Branch Stock Transfer Ledger
           </h3>
           <button
-            onClick={() =>
+            onClick={() => {
+              const visibleTransfers = transfers.filter(
+                (tr) =>
+                  !isBranchManager ||
+                  tr.fromBranchId === currentUser.branchId ||
+                  tr.toBranchId === currentUser.branchId ||
+                  tr.fromBranchName === currentUser.branchName ||
+                  tr.toBranchName === currentUser.branchName
+              );
               exportReportToPDF(
                 'Inter-Branch Bonded Stock Transfer Manifest',
-                `Exported by ${currentUser.name}`,
+                `Exported by ${currentUser.name} (${isBranchManager ? currentUser.branchName : 'All Branches'})`,
                 ['Transfer No', 'From Branch', 'To Branch', 'SKU', 'Product', 'Qty Btls', 'Carrier / Vehicle', 'Status'],
-                transfers.map((t) => [
+                visibleTransfers.map((t) => [
                   t.transferNo,
                   t.fromBranchName,
                   t.toBranchName,
@@ -4007,8 +4069,8 @@ export const BranchesAndTransfersModule: React.FC<{
                   t.status,
                 ]),
                 'Vaairo_Stock_Transfers'
-              )
-            }
+              );
+            }}
             className="px-3.5 py-1.5 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
@@ -4030,14 +4092,30 @@ export const BranchesAndTransfersModule: React.FC<{
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {transfers.length === 0 ? (
+              {transfers.filter(
+                (tr) =>
+                  !isBranchManager ||
+                  tr.fromBranchId === currentUser.branchId ||
+                  tr.toBranchId === currentUser.branchId ||
+                  tr.fromBranchName === currentUser.branchName ||
+                  tr.toBranchName === currentUser.branchName
+              ).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-6 text-center text-slate-500">
-                    No inter-branch stock transfers recorded yet. Use the form above to move stock between branches.
+                    No inter-branch stock transfers recorded yet for your branch. Use the form above to move stock between branches.
                   </td>
                 </tr>
               ) : (
-                transfers.map((tr) => (
+                transfers
+                  .filter(
+                    (tr) =>
+                      !isBranchManager ||
+                      tr.fromBranchId === currentUser.branchId ||
+                      tr.toBranchId === currentUser.branchId ||
+                      tr.fromBranchName === currentUser.branchName ||
+                      tr.toBranchName === currentUser.branchName
+                  )
+                  .map((tr) => (
                   <tr key={tr.id} className="hover:bg-slate-50">
                     <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">
                       {tr.transferNo}

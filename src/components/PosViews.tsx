@@ -957,7 +957,14 @@ export const PosViews: React.FC<PosViewsProps> = ({
               }}
               className="text-[11px] font-montserrat font-black text-[#0A006E] bg-transparent focus:outline-none cursor-pointer"
             >
-              {branches.map((b) => (
+              {(isScopedBranch && currentUser.branchId
+                ? branches.filter(
+                    (b) =>
+                      b.id === currentUser.branchId ||
+                      b.name === currentUser.branchName
+                  )
+                : branches
+              ).map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.code} · {b.name}
                 </option>
@@ -1009,31 +1016,28 @@ export const PosViews: React.FC<PosViewsProps> = ({
 
           {/* Scanner Controls & Modalities */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Scan with My Phone QR / Pair Button */}
-            <button
-              type="button"
-              onClick={() => setIsPhonePairModalOpen(true)}
-              className="px-3.5 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-sm transition hover:scale-[1.02]"
-              title="Point phone camera at QR code to pair and scan into this cashier register"
-            >
-              <Smartphone className="w-4 h-4 text-[#0A006E]" />
-              <span>📱 Scan with My Phone</span>
-              {isPhoneSyncActive ? (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
-              ) : (
-                <span className="px-1.5 py-0.2 rounded text-[9px] bg-[#0A006E] text-[#FFDE00] font-mono">LINK</span>
-              )}
-            </button>
-
-            {/* Phone Camera Scanner Launcher */}
-            <button
-              type="button"
-              onClick={() => setIsPhoneScannerOpen(true)}
-              className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition hover:scale-[1.02]"
-            >
-              <Camera className="w-4 h-4 text-[#FFDE00]" />
-              <span>Webcam Scanner</span>
-            </button>
+            {/* Unified Scanner Toolbar */}
+            <div className="flex items-center gap-1 bg-[#0A006E] p-1 rounded-xl text-xs font-montserrat font-black shadow-md">
+              <button
+                type="button"
+                onClick={() => setIsPhoneScannerOpen(true)}
+                className="px-3 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-lg flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+                title="Use device camera / webcam to scan barcodes"
+              >
+                <Camera className="w-4 h-4 text-[#0A006E]" />
+                <span>Scan Barcode</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPhonePairModalOpen(true)}
+                className="px-2.5 py-2 text-[#FFDE00] hover:text-white rounded-lg flex items-center gap-1 cursor-pointer transition"
+                title="Pair another phone as remote barcode scanner"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span className="text-[10px]">Pair Phone</span>
+                {isPhoneSyncActive && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />}
+              </button>
+            </div>
 
             {/* Sound Mute/Unmute Toggle */}
             <button

@@ -1204,10 +1204,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 )}
               </div>
 
-              {/* Financial Calculation Summary */}
-              {cart.length > 0 && (
-                <div className="space-y-2 pt-3 border-t border-slate-200 text-xs">
-              {/* Footer Summary & Actions (Fixed at bottom) */}
+              {/* Financial Calculation Summary & Footer Actions */}
               <div className="flex-none mt-auto pt-3 border-t border-slate-100 bg-white">
                 {cart.length > 0 && (
                   <div className="bg-slate-50 rounded-xl p-3 space-y-2 mb-3">

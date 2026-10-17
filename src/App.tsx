@@ -174,22 +174,134 @@ const ERP_DEPARTMENTS: {
   },
 ];
 
+const INITIAL_DEFAULT_BRANCHES: Branch[] = [
+  {
+    id: 'br-hq-001',
+    code: 'BR-HQ-001',
+    name: 'HQ - Main Branch',
+    regionId: 'reg-nrb-cbd',
+    regionName: 'Nairobi Central Business District (CBD & High-Street)',
+    address: 'Kenyatta Avenue & Kimathi St, Nairobi CBD',
+    managerName: 'Operations Director',
+    exciseBondLicense: 'KRA-BOND-2026-8841A',
+    status: 'Operational',
+    isMain: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'br-wst-002',
+    code: 'BR-WST-002',
+    name: 'Westlands Distribution Depot',
+    regionId: 'reg-nrb-wst',
+    regionName: 'Westlands, Parklands & Spring Valley Zone',
+    address: 'Mpaka Road, Westlands, Nairobi',
+    managerName: 'Branch Manager Westlands',
+    exciseBondLicense: 'KRA-BOND-2026-8842B',
+    status: 'Operational',
+    isMain: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'br-ind-003',
+    code: 'BR-IND-003',
+    name: 'Industrial Area Bonded Warehouse',
+    regionId: 'reg-nrb-ind',
+    regionName: 'Industrial Area & Mombasa Road Logistics Yard',
+    address: 'Enterprise Road, Industrial Area, Nairobi',
+    managerName: 'Logistics Manager',
+    exciseBondLicense: 'KRA-BOND-2026-8843C',
+    status: 'Operational',
+    isMain: false,
+    createdAt: new Date().toISOString(),
+  },
+];
+
+const INITIAL_DEFAULT_STAFF: StaffMember[] = [
+  {
+    id: 'staff-admin-zamodasports',
+    name: 'Executive System Admin (Zamoda)',
+    email: 'zamodasports@gmail.com',
+    role: 'Admin',
+    authMethod: 'google',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'System Root',
+    createdByRole: 'Root',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'staff-admin-feminiholdings',
+    name: 'Femini Holdings Executive Admin',
+    email: 'feminiholdings@gmail.com',
+    role: 'Admin',
+    authMethod: 'google',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'System Root',
+    createdByRole: 'Root',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'staff-admin-veronicanjus',
+    name: 'Veronica (Executive Admin)',
+    email: 'veronicanjus@gmail.com',
+    role: 'Admin',
+    authMethod: 'google',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'System Root',
+    createdByRole: 'Root',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'staff-manager-01',
+    name: 'David Maina (Branch Manager)',
+    email: 'david.maina@aegisbeverage.co.ke',
+    role: 'Branch Manager',
+    authMethod: 'email',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'Admin',
+    createdByRole: 'Admin',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'staff-cashier-01',
+    name: 'Grace Wanjiru (Counter Cashier)',
+    email: 'grace.wanjiru@aegisbeverage.co.ke',
+    role: 'Counter Cashier',
+    authMethod: 'email',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'Admin',
+    createdByRole: 'Admin',
+    createdAt: new Date().toISOString(),
+  },
+];
+
 export default function App() {
   // Real-time Firestore state with local persistent backup recovery
   const [staffList, setStaffList] = useState<StaffMember[]>(() => {
     try {
       const saved = localStorage.getItem('erp_staff_backup');
-      return saved ? JSON.parse(saved) : [];
+      const parsed = saved ? JSON.parse(saved) : [];
+      return parsed.length > 0 ? parsed : INITIAL_DEFAULT_STAFF;
     } catch {
-      return [];
+      return INITIAL_DEFAULT_STAFF;
     }
   });
   const [branches, setBranches] = useState<Branch[]>(() => {
     try {
       const saved = localStorage.getItem('erp_branches_backup');
-      return saved ? JSON.parse(saved) : [];
+      const parsed = saved ? JSON.parse(saved) : [];
+      return parsed.length > 0 ? parsed : INITIAL_DEFAULT_BRANCHES;
     } catch {
-      return [];
+      return INITIAL_DEFAULT_BRANCHES;
     }
   });
   const [regions, setRegions] = useState<GeoRegion[]>(() => {
@@ -513,6 +625,158 @@ export default function App() {
     }
     return null;
   }, [currentUser, payrollRuns]);
+
+  // Strict Branch Scoping: When currentUser.role === 'Branch Manager', enforce that the manager only sees data related to their specific branch
+  const isBranchManager = currentUser?.role === 'Branch Manager';
+  const branchManagerBranchId = currentUser?.branchId || '';
+  const branchManagerBranchName = currentUser?.branchName || '';
+
+  const scopedBranches = useMemo(() => {
+    if (isBranchManager && branchManagerBranchId) {
+      const matched = branches.filter(
+        (b) => b.id === branchManagerBranchId || b.name === branchManagerBranchName
+      );
+      return matched.length > 0 ? matched : branches.slice(0, 1);
+    }
+    return branches;
+  }, [branches, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const scopedTransactions = useMemo(() => {
+    if (isBranchManager && branchManagerBranchId) {
+      return transactions.filter(
+        (t) =>
+          t.branchId === branchManagerBranchId ||
+          t.branchName === branchManagerBranchName
+      );
+    }
+    return transactions;
+  }, [transactions, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const scopedTransfers = useMemo(() => {
+    if (isBranchManager && branchManagerBranchId) {
+      return transfers.filter(
+        (t) =>
+          t.fromBranchId === branchManagerBranchId ||
+          t.toBranchId === branchManagerBranchId ||
+          t.fromBranchName === branchManagerBranchName ||
+          t.toBranchName === branchManagerBranchName
+      );
+    }
+    return transfers;
+  }, [transfers, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const scopedStaffList = useMemo(() => {
+    if (isBranchManager && branchManagerBranchId) {
+      return staffList.filter(
+        (s) =>
+          s.branchId === branchManagerBranchId ||
+          s.branchName === branchManagerBranchName
+      );
+    }
+    return staffList;
+  }, [staffList, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const scopedBusinessUnits = useMemo(() => {
+    if (isBranchManager && branchManagerBranchId) {
+      return businessUnits.filter(
+        (u) =>
+          u.branchId === branchManagerBranchId ||
+          u.branchName === branchManagerBranchName
+      );
+    }
+    return businessUnits;
+  }, [businessUnits, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const scopedComplianceRecords = useMemo(() => {
+    if (isBranchManager && branchManagerBranchName) {
+      return complianceRecords.filter(
+        (r) =>
+          r.branchName === branchManagerBranchName ||
+          (r as any).branchId === branchManagerBranchId
+      );
+    }
+    return complianceRecords;
+  }, [complianceRecords, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const scopedAuditLogs = useMemo(() => {
+    if (isBranchManager && branchManagerBranchName) {
+      return auditLogs.filter(
+        (l) =>
+          l.branchName === branchManagerBranchName ||
+          (l.details && l.details.toLowerCase().includes(branchManagerBranchName.toLowerCase()))
+      );
+    }
+    return auditLogs;
+  }, [auditLogs, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const scopedExternalCustomers = useMemo(() => {
+    if (isBranchManager && branchManagerBranchId) {
+      return externalCustomers.filter(
+        (c) =>
+          !c.assignedBranchId ||
+          c.assignedBranchId === branchManagerBranchId ||
+          c.assignedBranchName === branchManagerBranchName ||
+          c.preferredBranchId === branchManagerBranchId
+      );
+    }
+    return externalCustomers;
+  }, [externalCustomers, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  // Branch-specific stock bottle count calculation for products
+  const scopedProducts = useMemo(() => {
+    const activeProducts = products.filter((p) => p.status !== 'Deleted');
+    if (isBranchManager && branchManagerBranchId) {
+      return activeProducts.map((p) => {
+        let branchBottles = 0;
+        if (p.branchStockSummary) {
+          try {
+            const parsed = JSON.parse(p.branchStockSummary);
+            if (typeof parsed[branchManagerBranchId] === 'number') {
+              branchBottles = parsed[branchManagerBranchId];
+            } else {
+              branchBottles = 0;
+            }
+          } catch {
+            branchBottles = 0;
+          }
+        }
+        return {
+          ...p,
+          totalBottles: branchBottles,
+        };
+      });
+    }
+    return activeProducts;
+  }, [products, isBranchManager, branchManagerBranchId]);
+
+  const scopedRegions = useMemo(() => {
+    if (isBranchManager && branchManagerBranchId) {
+      const activeBranch = branches.find(
+        (b) => b.id === branchManagerBranchId || b.name === branchManagerBranchName
+      );
+      if (activeBranch && activeBranch.regionId) {
+        const reg = regions.filter(
+          (r) => r.id === activeBranch.regionId || r.name === activeBranch.regionName
+        );
+        if (reg.length > 0) return reg;
+      }
+    }
+    return regions;
+  }, [regions, branches, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const scopedPartners = useMemo(() => {
+    if (isBranchManager && branchManagerBranchId) {
+      const activeBranch = branches.find(
+        (b) => b.id === branchManagerBranchId || b.name === branchManagerBranchName
+      );
+      const regId = activeBranch?.regionId;
+      const regName = activeBranch?.regionName;
+      return partners.filter(
+        (p) => !p.regionId || p.regionId === regId || p.regionName === regName
+      );
+    }
+    return partners;
+  }, [partners, branches, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
 
   // Boot connection test & operational seed (with zero staff)
   useEffect(() => {
@@ -2308,6 +2572,51 @@ export default function App() {
     }
   };
 
+  const handleDeleteProduct = async (productId: string) => {
+    const product = firestoreProducts.find((p) => p.id === productId);
+    if (!product) return;
+
+    try {
+      // Try actual deletion first
+      await deleteDoc(doc(db, 'products', productId));
+      setFirestoreProducts((prev) => prev.filter((p) => p.id !== productId));
+      triggerToast('success', 'Product Deleted', 'Product removed from catalog.');
+    } catch (error) {
+      console.warn('Delete failed, falling back to soft delete:', error);
+      // Fallback: Soft delete by setting status
+      try {
+        const updatedProduct = { ...product, status: 'Deleted' };
+        await updateDoc(doc(db, 'products', productId), updatedProduct);
+        setFirestoreProducts((prev) => prev.map((p) => (p.id === productId ? updatedProduct : p)));
+        triggerToast('success', 'Product Hidden', 'Product marked as deleted.');
+      } catch (innerError) {
+        console.error('Error soft-deleting product:', innerError);
+        triggerToast('error', 'Delete Failed', 'Could not delete or hide product.');
+      }
+    }
+  };
+
+  const handleWipeAllProducts = async () => {
+    if (!confirm('Are you absolutely sure you want to delete ALL SKUs? This cannot be undone.')) return;
+    
+    setIsLoading(true);
+    let wipedCount = 0;
+    for (const product of firestoreProducts) {
+      try {
+        await deleteDoc(doc(db, 'products', product.id));
+        wipedCount++;
+      } catch (error) {
+        console.warn(`Failed to delete ${product.id}, falling back to soft delete:`, error);
+        await updateDoc(doc(db, 'products', product.id), { status: 'Deleted' });
+        wipedCount++;
+      }
+    }
+    
+    setFirestoreProducts([]);
+    setIsLoading(false);
+    triggerToast('success', 'Database Wiped', `Successfully cleared ${wipedCount} products.`);
+  };
+
   const handleSetStaffStatus = async (
     staffId: string,
     newStatus: 'Active' | 'Suspended' | 'Terminated'
@@ -3401,13 +3710,13 @@ export default function App() {
           {activeModule === 'overview' && (
             <OverviewModule
               currentUser={currentUser}
-              products={products}
-              branches={branches}
-              regions={regions}
-              partners={partners}
-              transactions={transactions}
-              transfers={transfers}
-              staffList={staffList}
+              products={scopedProducts}
+              branches={scopedBranches}
+              regions={scopedRegions}
+              partners={scopedPartners}
+              transactions={scopedTransactions}
+              transfers={scopedTransfers}
+              staffList={scopedStaffList}
               latestPayrollRecord={currentUserLatestPayrollRecord}
               payrollRuns={payrollRuns}
               onOpenPayslip={(record) => setViewingPayslipRecord(record)}
@@ -3419,7 +3728,7 @@ export default function App() {
 
           {activeModule === 'external_customers' && (
             <ExternalCustomersModule
-              customers={externalCustomers}
+              customers={scopedExternalCustomers}
               onCreateCustomer={handleCreateExternalCustomer}
               onDeleteCustomer={handleDeleteExternalCustomer}
             />
@@ -3430,10 +3739,10 @@ export default function App() {
               mode="retail"
               currentUser={currentUser}
               products={products}
-              branches={branches}
-              regions={regions}
-              partners={partners}
-              businessUnits={businessUnits}
+              branches={scopedBranches}
+              regions={scopedRegions}
+              partners={scopedPartners}
+              businessUnits={scopedBusinessUnits}
               restaurantInventory={restaurantInventory}
               onCommitTransaction={handleCommitTransaction}
               onPreviewDoc={(d) => setPreviewDoc(d)}
@@ -3446,9 +3755,9 @@ export default function App() {
               <AffiliateSalesPosDashboard
                 currentUser={currentUser}
                 products={products}
-                branches={branches}
-                regions={regions}
-                transactions={transactions}
+                branches={scopedBranches}
+                regions={scopedRegions}
+                transactions={scopedTransactions}
                 onCommitTransaction={handleCommitTransaction}
                 onUpdateTransaction={handleUpdateTransaction}
                 onPreviewDoc={(d) => setPreviewDoc(d)}
@@ -3459,10 +3768,10 @@ export default function App() {
                 mode="wholesale"
                 currentUser={currentUser}
                 products={products}
-                branches={branches}
-                regions={regions}
-                partners={partners}
-                businessUnits={businessUnits}
+                branches={scopedBranches}
+                regions={scopedRegions}
+                partners={scopedPartners}
+                businessUnits={scopedBusinessUnits}
                 restaurantInventory={restaurantInventory}
                 onCommitTransaction={handleCommitTransaction}
                 onPreviewDoc={(d) => setPreviewDoc(d)}
@@ -3474,11 +3783,13 @@ export default function App() {
           {activeModule === 'inventory' && (
             <InventoryModule
               currentUser={currentUser}
-              products={products}
-              branches={branches}
+              products={scopedProducts}
+              branches={scopedBranches}
               onCreateProduct={handleCreateProduct}
               onBatchCreateProducts={handleBatchCreateProducts}
               onUpdateProduct={handleUpdateProduct}
+              onDeleteProduct={handleDeleteProduct}
+              onWipeAllProducts={handleWipeAllProducts}
               onLogStockIncident={handleLogStockIncident}
               onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
             />
@@ -3487,11 +3798,12 @@ export default function App() {
           {activeModule === 'branches_transfers' && (
             <BranchesAndTransfersModule
               currentUser={currentUser}
-              branches={branches}
-              regions={regions}
+              branches={scopedBranches}
+              allBranches={branches}
+              regions={scopedRegions}
               products={products}
-              partners={partners}
-              transfers={transfers}
+              partners={scopedPartners}
+              transfers={scopedTransfers}
               onCreateBranch={handleCreateBranch}
               onDeleteBranch={handleDeleteBranch}
               onSetMainBranch={handleSetMainBranch}
@@ -3502,7 +3814,7 @@ export default function App() {
           {activeModule === 'geo_pricing' && (
             <GeoPricingModule
               currentUser={currentUser}
-              regions={regions}
+              regions={scopedRegions}
               products={products}
               onCreateRegion={handleCreateRegion}
               onUpdateProductGeoOverride={handleUpdateProductGeoOverride}
@@ -3512,8 +3824,8 @@ export default function App() {
           {activeModule === 'partners' && (
             <PartnersOnboardingModule
               currentUser={currentUser}
-              partners={partners}
-              regions={regions}
+              partners={scopedPartners}
+              regions={scopedRegions}
               onCreatePartner={handleCreatePartner}
               onUpdatePartner={handleUpdatePartner}
               onDeletePartner={handleDeletePartner}
@@ -3523,9 +3835,9 @@ export default function App() {
           {activeModule === 'documents_credit' && (
             <DocumentsAndCreditNotesModule
               currentUser={currentUser}
-              transactions={transactions}
-              branches={branches}
-              regions={regions}
+              transactions={scopedTransactions}
+              branches={scopedBranches}
+              regions={scopedRegions}
               products={products}
               onIssueCreditNote={(cn) => handleCommitTransaction(cn, [])}
               onPreviewDoc={(d) => setPreviewDoc(d)}
@@ -3535,8 +3847,8 @@ export default function App() {
           {activeModule === 'compliance' && (
             <ComplianceModule
               currentUser={currentUser}
-              records={complianceRecords}
-              branches={branches}
+              records={scopedComplianceRecords}
+              branches={scopedBranches}
               products={products}
               onCreateCompliance={handleCreateCompliance}
             />
@@ -3545,8 +3857,8 @@ export default function App() {
           {activeModule === 'hr_rbac' && (
             <HrAndRbacModule
               currentUser={currentUser}
-              staffList={staffList}
-              branches={branches}
+              staffList={scopedStaffList}
+              branches={scopedBranches}
               payrollRuns={payrollRuns}
               onCreateStaff={handleCreateStaff}
               onUpdateStaff={handleUpdateStaff}
@@ -3566,8 +3878,8 @@ export default function App() {
           {activeModule === 'audit_security' && (
             <AuditAndSecurityModule
               currentUser={currentUser}
-              auditLogs={auditLogs}
-              staffList={staffList}
+              auditLogs={scopedAuditLogs}
+              staffList={scopedStaffList}
               onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
               onOpenUserFeatureModal={(staff) => {
                 setUserFeatureModalStaff(staff);
@@ -3589,10 +3901,10 @@ export default function App() {
           {activeModule === 'outlets_restaurants' && (
             <RestaurantOutletManagement
               currentUser={currentUser}
-              branches={branches}
-              staffList={staffList}
+              branches={scopedBranches}
+              staffList={scopedStaffList}
               products={products}
-              businessUnits={businessUnits}
+              businessUnits={scopedBusinessUnits}
               restaurantInventory={restaurantInventory}
               onCreateBusinessUnit={handleCreateBusinessUnit}
               onUpdateBusinessUnit={handleUpdateBusinessUnit}
@@ -3611,9 +3923,9 @@ export default function App() {
         onSelectModule={handleSelectModule}
         allowedModules={allowedModules}
         currentUser={currentUser}
-        activeBranch={branches.find((b) => b.id === currentUser.branchId) || branches[0]}
+        activeBranch={scopedBranches.find((b) => b.id === currentUser.branchId) || scopedBranches[0]}
         products={products}
-        transactions={transactions}
+        transactions={scopedTransactions}
         onOpenCustomerPortal={() => handleSelectModule('customer_portal')}
         onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
         onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
@@ -3627,8 +3939,8 @@ export default function App() {
           });
         }}
         onQuickPrintLastDoc={() => {
-          if (transactions.length > 0) {
-            setPreviewDoc(transactions[0]);
+          if (scopedTransactions.length > 0) {
+            setPreviewDoc(scopedTransactions[0]);
           } else {
             triggerToast('error', 'No Transactions', 'No recent commercial document found to reprint.');
           }
@@ -3661,7 +3973,7 @@ export default function App() {
           onClose={() => setIsOnboardModalOpen(false)}
           currentUser={currentUser}
           products={products}
-          branches={branches}
+          branches={scopedBranches}
           onActivateProductStock={handleActivateProductStock}
           onShowSuccessFeedback={(title, msg) => triggerToast('success', title, msg)}
           onShowErrorFeedback={(title, msg) => triggerToast('error', title, msg)}
@@ -3674,7 +3986,7 @@ export default function App() {
           isOpen={isAccessMatrixOpen}
           onClose={() => setIsAccessMatrixOpen(false)}
           currentUser={currentUser}
-          staffList={staffList}
+          staffList={scopedStaffList}
           customRoleMatrix={customRoleMatrix}
           onSaveRoleMatrix={handleSaveRoleMatrix}
           onResetRoleMatrix={handleResetRoleMatrix}

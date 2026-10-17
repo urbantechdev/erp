@@ -121,6 +121,7 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
     try {
       const text = await file.text();
       const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      console.log('CSV Import: Total lines found:', lines.length);
 
       if (lines.length < 2) {
         setParsedRows([]);
