@@ -36,7 +36,7 @@ export function toggleAudioMuted(): boolean {
   return isSoundMuted;
 }
 
-export function playPosBeep(type: 'success' | 'case' | 'error' | 'click' = 'success'): void {
+export function playPosBeep(type: 'success' | 'case' | 'error' = 'success'): void {
   if (isAudioMuted()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -44,18 +44,7 @@ export function playPosBeep(type: 'success' | 'case' | 'error' | 'click' = 'succ
   try {
     const now = ctx.currentTime;
 
-    if (type === 'click') {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1000, now);
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.03);
-    } else if (type === 'success') {
+    if (type === 'success') {
       // Modern high-tech crisp laser scanner chime (Dual harmonic laser chirp)
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();

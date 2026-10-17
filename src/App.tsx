@@ -1414,52 +1414,55 @@ export default function App() {
         }
       }
 
-      // 1. Ultra-fast local verification first (instantaneous login response)
+      // 1. Attempt Firebase Authentication if configured
       let isVerified = false;
-      let isMaster = false;
       try {
-        const storedMasterHash = localStorage.getItem('erp_master_passcode_hash');
-        if (storedMasterHash) {
-          isMaster = await verifyPassword(cleanPassword, storedMasterHash);
-        } else {
+        await signInWithEmailAndPassword(auth, userEmail, cleanPassword);
+        isVerified = true;
+      } catch (fbErr: any) {
+        const code = fbErr?.code;
+        if (code === 'auth/user-not-found' && cleanPassword.length >= 6) {
+          try {
+            await createUserWithEmailAndPassword(auth, userEmail, cleanPassword);
+            isVerified = true;
+          } catch {
+            // Fall through to hash / master PIN verification
+          }
+        }
+      }
+
+      // 2. Local fallback verification (master passcodes or encrypted PIN/password hash)
+      if (!isVerified) {
+        let isMaster = false;
+        try {
+          const storedMasterHash = localStorage.getItem('erp_master_passcode_hash');
+          if (storedMasterHash) {
+            isMaster = await verifyPassword(cleanPassword, storedMasterHash);
+          } else {
+            isMaster =
+              cleanPassword === '123456' ||
+              cleanPassword === 'admin123' ||
+              cleanPassword === 'Admin@2026';
+          }
+        } catch {
           isMaster =
             cleanPassword === '123456' ||
             cleanPassword === 'admin123' ||
             cleanPassword === 'Admin@2026';
         }
-      } catch {
-        isMaster =
-          cleanPassword === '123456' ||
-          cleanPassword === 'admin123' ||
-          cleanPassword === 'Admin@2026';
-      }
 
-      if (isMaster) {
-        isVerified = true;
-      } else if (existingStaff?.pin && (await verifyPin(cleanPassword, existingStaff.pin))) {
-        isVerified = true;
-      } else if (
-        existingStaff?.passwordHash &&
-        (await verifyPassword(cleanPassword, existingStaff.passwordHash))
-      ) {
-        isVerified = true;
-      } else if (!existingStaff && cleanPassword.length >= 4) {
-        isVerified = true;
-      }
-
-      // 2. Fallback to Firebase auth in background if local didn't instantly verify
-      if (!isVerified) {
-        try {
-          await signInWithEmailAndPassword(auth, userEmail, cleanPassword);
+        if (isMaster) {
           isVerified = true;
-        } catch (fbErr: any) {
-          const code = fbErr?.code;
-          if (code === 'auth/user-not-found' && cleanPassword.length >= 6) {
-            try {
-              await createUserWithEmailAndPassword(auth, userEmail, cleanPassword);
-              isVerified = true;
-            } catch {}
-          }
+        } else if (existingStaff?.pin && (await verifyPin(cleanPassword, existingStaff.pin))) {
+          isVerified = true;
+        } else if (
+          existingStaff?.passwordHash &&
+          (await verifyPassword(cleanPassword, existingStaff.passwordHash))
+        ) {
+          isVerified = true;
+        } else if (!existingStaff && cleanPassword.length >= 4) {
+          // Initial credential setup for recognized executive
+          isVerified = true;
         }
       }
 

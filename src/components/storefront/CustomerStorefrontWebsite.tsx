@@ -629,10 +629,12 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
   const [detailQty, setDetailQty] = useState(1);
   const [isMerchantSeoModalOpen, setIsMerchantSeoModalOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isPlatformFullscreen());
-  // Static shuffle tick for super lite performance (no continuous background interval)
-  const storefrontShuffleTick = 0;
-  const storefrontSecondsLeft = 20;
-  const reshuffleStorefrontNow = () => {};
+  // Automatic 20-second catalog reshuffle tick with live countdown
+  const {
+    tick: storefrontShuffleTick,
+    secondsLeft: storefrontSecondsLeft,
+    reshuffleNow: reshuffleStorefrontNow
+  } = useAutoReshuffleTimer(20000);
 
   useEffect(() => {
     const syncFullscreenState = () => {
