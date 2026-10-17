@@ -54,6 +54,7 @@ import {
 import { ProductImage } from './ProductImage';
 import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
 import { PhoneBarcodeScannerModal } from './PhoneBarcodeScannerModal';
+import { FloatingSalesKeyboardModal } from './FloatingSalesKeyboardModal';
 import { playPosBeep, triggerScanHaptic, isAudioMuted, toggleAudioMuted } from '../utils/audioBeep';
 import QRCode from 'qrcode';
 import {
@@ -193,6 +194,66 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const [docTypeToIssue, setDocTypeToIssue] = useState<DocType>(
     mode === 'retail' ? 'Receipt' : 'Invoice'
   );
+
+  // Virtual Keypad State for Wholesale & Retail POS
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [keyboardInitialMode, setKeyboardInitialMode] = useState<'qwerty' | 'numeric'>('qwerty');
+  const [keyboardActiveFieldName, setKeyboardActiveFieldName] = useState('');
+  const [keyboardTargetElement, setKeyboardTargetElement] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  // Automatically and instantly open virtual keypad on tap/focus of any input or textarea
+  useEffect(() => {
+    const handleInputTapOrFocus = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        const inputEl = target as HTMLInputElement | HTMLTextAreaElement;
+
+        if (
+          inputEl.type === 'checkbox' ||
+          inputEl.type === 'radio' ||
+          inputEl.type === 'file' ||
+          inputEl.type === 'submit' ||
+          inputEl.type === 'button'
+        ) {
+          return;
+        }
+
+        if (target.closest('.floating-sales-keyboard-container')) {
+          return;
+        }
+
+        const isNum =
+          inputEl.type === 'number' ||
+          inputEl.type === 'tel' ||
+          inputEl.inputMode === 'numeric' ||
+          inputEl.inputMode === 'decimal' ||
+          inputEl.inputMode === 'tel' ||
+          /phone|kes|amount|cash|tender|price|qty|quantity|markup|pin/i.test(
+            inputEl.name || inputEl.placeholder || inputEl.id || ''
+          );
+
+        setKeyboardInitialMode(isNum ? 'numeric' : 'qwerty');
+        const fieldLabel =
+          inputEl.placeholder ||
+          inputEl.getAttribute('aria-label') ||
+          inputEl.name ||
+          (isNum ? 'Numeric / Amount' : 'Text Input');
+        setKeyboardActiveFieldName(fieldLabel);
+        setKeyboardTargetElement(inputEl);
+        setIsKeyboardOpen(true);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleInputTapOrFocus, true);
+    document.addEventListener('focusin', handleInputTapOrFocus, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleInputTapOrFocus, true);
+      document.removeEventListener('focusin', handleInputTapOrFocus, true);
+    };
+  }, []);
   const [affiliateCode, setAffiliateCode] = useState<string>(
     currentUser.role === 'Affiliate Sales Representative'
       ? `AFF-${currentUser.name.slice(0, 3).toUpperCase()}-01`
@@ -1930,6 +1991,22 @@ export const PosViews: React.FC<PosViewsProps> = ({
           onClose={() => setIsPhoneCompanionModalOpen(false)}
         />
       )}
+
+      {/* Floating Wide Virtual Keypad Modal with Product Autofill & Bold Letters */}
+      <FloatingSalesKeyboardModal
+        isOpen={isKeyboardOpen}
+        onClose={() => setIsKeyboardOpen(false)}
+        initialMode={keyboardInitialMode}
+        activeFieldName={keyboardActiveFieldName}
+        targetElement={keyboardTargetElement}
+        products={products}
+        onSelectProduct={(product) => {
+          handleAddToCart(product);
+        }}
+        onAutofillText={(text) => {
+          setSearchQuery(text);
+        }}
+      />
     </div>
   );
 };

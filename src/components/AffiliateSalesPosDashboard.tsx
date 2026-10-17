@@ -43,6 +43,8 @@ import {
   Camera,
   ScanLine,
   Keyboard,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   Product,
@@ -239,6 +241,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
 
   // Active POS Cart
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartExpanded, setIsCartExpanded] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
@@ -254,6 +257,72 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   const [etimsReceipt, setEtimsReceipt] = useState<EtimsReceiptData | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [keyboardInitialMode, setKeyboardInitialMode] = useState<'qwerty' | 'numeric'>('qwerty');
+  const [keyboardActiveFieldName, setKeyboardActiveFieldName] = useState('');
+  const [keyboardTargetElement, setKeyboardTargetElement] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  // Automatically and instantly open virtual keypad on tap/focus of any input or textarea
+  useEffect(() => {
+    const handleInputTapOrFocus = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        const inputEl = target as HTMLInputElement | HTMLTextAreaElement;
+
+        // Skip non-typing input types
+        if (
+          inputEl.type === 'checkbox' ||
+          inputEl.type === 'radio' ||
+          inputEl.type === 'file' ||
+          inputEl.type === 'submit' ||
+          inputEl.type === 'button'
+        ) {
+          return;
+        }
+
+        // If tap is inside keyboard itself, do not reopen/reconfigure
+        if (target.closest('.floating-sales-keyboard-container')) {
+          return;
+        }
+
+        const isNum =
+          inputEl.type === 'number' ||
+          inputEl.type === 'tel' ||
+          inputEl.inputMode === 'numeric' ||
+          inputEl.inputMode === 'decimal' ||
+          inputEl.inputMode === 'tel' ||
+          /phone|kes|amount|cash|tender|price|qty|quantity|markup|pin/i.test(
+            inputEl.name || inputEl.placeholder || inputEl.id || ''
+          );
+
+        setKeyboardInitialMode(isNum ? 'numeric' : 'qwerty');
+        const fieldLabel =
+          inputEl.placeholder ||
+          inputEl.getAttribute('aria-label') ||
+          inputEl.name ||
+          (isNum ? 'Numeric / Amount' : 'Text Input');
+        setKeyboardActiveFieldName(fieldLabel);
+        setKeyboardTargetElement(inputEl);
+        setIsKeyboardOpen(true);
+      }
+    };
+
+    // Attach to pointerdown & focusin for instant tap response on touchscreens and desktop
+    document.addEventListener('pointerdown', handleInputTapOrFocus, true);
+    document.addEventListener('focusin', handleInputTapOrFocus, true);
+
+    const handleToggleFromDesktopNav = () => {
+      setIsKeyboardOpen((prev) => !prev);
+    };
+    window.addEventListener('toggle-virtual-keyboard', handleToggleFromDesktopNav);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleInputTapOrFocus, true);
+      document.removeEventListener('focusin', handleInputTapOrFocus, true);
+      window.removeEventListener('toggle-virtual-keyboard', handleToggleFromDesktopNav);
+    };
+  }, []);
 
   // Orders Filter State (for Tab 2)
   const [ordersFilterStatus, setOrdersFilterStatus] = useState<'ALL' | 'QUEUED' | 'PAID'>('ALL');
@@ -382,6 +451,20 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
       return true;
     });
   }, [products, categoryFilter, inStockOnly, searchQuery, activeBranch]);
+
+  // Sellable products available in sales rep's branch for instant keyboard autofill
+  const branchScopedProducts = useMemo(() => {
+    return products.filter((prod) => {
+      const isScannedAndReady = Boolean(
+        (prod.isScanned || prod.hasRealBarcode || prod.isOnboarded) &&
+        prod.barcode &&
+        prod.status !== ('Deleted' as any)
+      );
+      if (!isScannedAndReady) return false;
+      const stock = getProductBranchStock(prod);
+      return stock > 0;
+    });
+  }, [products, activeBranch, branches]);
 
   // Pricing helper
   const getProductPrices = (product: Product) => {
@@ -899,15 +982,6 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>Sales Statement</span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => setIsKeyboardOpen(true)}
-                className="px-3 py-1.5 rounded-lg font-montserrat font-black text-xs cursor-pointer transition-all flex items-center gap-1.5 bg-[#FFDE00]/20 hover:bg-[#FFDE00] text-[#FFDE00] hover:text-[#0A006E] border border-[#FFDE00]/40 shadow-xs"
-              >
-                <Keyboard className="w-3.5 h-3.5" />
-                <span>Keyboard</span>
-              </button>
             </div>
           </div>
         </div>
@@ -1201,7 +1275,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
 
           {/* RIGHT 4-5 COLUMNS: ACTIVE SALES CART & THE 2 PRIMARY ACTIONS */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-3.5">
-            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md p-4 sticky top-20 flex flex-col h-[calc(100vh-100px)]">
+            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md p-3.5 sm:p-4 sticky top-20 flex flex-col max-h-[calc(100vh-80px)] overflow-y-auto">
               {/* Cart Header */}
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <div className="flex items-center gap-2">
@@ -1305,85 +1379,117 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 </div>
               </div>
 
-              {/* Cart Line Items */}
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100 py-3">
+              {/* Cart Line Items (Collapsed to show 2 items while buttons float up) */}
+              <div className={`space-y-2 pr-1 divide-y divide-slate-100 py-2.5 ${isCartExpanded ? 'max-h-60 overflow-y-auto' : ''}`}>
                 {cart.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400">
+                  <div className="py-6 text-center text-slate-400">
                     <ShoppingCart className="w-8 h-8 mx-auto mb-1 opacity-40" />
                     <p className="text-xs">Cart is empty. Tap &ldquo;+ Bottle&rdquo; or &ldquo;+ Case&rdquo; on any item.</p>
                   </div>
                 ) : (
-                  cart.map((item, idx) => (
-                    <div key={`${item.productId}-${item.unitMode}`} className="pt-2 first:pt-0 space-y-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h5 className="text-xs font-montserrat font-bold text-slate-900 truncate">
-                            {item.product.name}
-                          </h5>
-                          <div className="text-[10px] text-slate-500 font-medium">
-                            <span className="font-bold text-[#0A006E]">{item.unitMode}</span> · {formatKes(item.unitPrice)} each
+                  <>
+                    {(isCartExpanded ? cart : cart.slice(0, 2)).map((item) => {
+                      const realIdx = cart.findIndex(
+                        (c) => c.productId === item.productId && c.unitMode === item.unitMode
+                      );
+                      const targetIdx = realIdx >= 0 ? realIdx : 0;
+
+                      return (
+                        <div key={`${item.productId}-${item.unitMode}`} className="pt-2 first:pt-0 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h5 className="text-xs font-montserrat font-bold text-slate-900 truncate">
+                                {item.product.name}
+                              </h5>
+                              <div className="text-[10px] text-slate-500 font-medium">
+                                <span className="font-bold text-[#0A006E]">{item.unitMode}</span> · {formatKes(item.unitPrice)} each
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <div className="text-xs font-montserrat font-black text-[#0A006E] font-mono-tabular">
+                                {formatKes(item.lineTotal)}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(targetIdx)}
+                                className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quantity Controls & Markup field */}
+                          <div className="flex items-center justify-between gap-2 pt-0.5">
+                            {/* Stepper */}
+                            <div className="flex items-center bg-[#F0F2F0] rounded-lg border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateQuantity(targetIdx, -1)}
+                                className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="w-8 text-center text-xs font-montserrat font-black text-slate-900">
+                                {item.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateQuantity(targetIdx, 1)}
+                                className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Optional Markup Per Unit */}
+                            <div className="flex items-center gap-1 text-[11px]">
+                              <span className="text-slate-500 font-medium text-[10px]">Markup:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="50"
+                                value={item.affiliateMarkupPerUnit || ''}
+                                onChange={(e) => handleUpdateMarkup(targetIdx, Number(e.target.value))}
+                                placeholder="+0"
+                                className="w-16 px-1.5 py-0.5 bg-[#F0F2F0] border border-slate-200 rounded text-center text-[10px] font-mono font-bold text-[#1E9E60] outline-none"
+                                title="Add your custom profit markup per unit"
+                              />
+                            </div>
                           </div>
                         </div>
+                      );
+                    })}
 
-                        <div className="text-right shrink-0">
-                          <div className="text-xs font-montserrat font-black text-[#0A006E] font-mono-tabular">
-                            {formatKes(item.lineTotal)}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        </div>
+                    {/* Expand / Collapse Toggle Button */}
+                    {cart.length > 2 && (
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsCartExpanded(!isCartExpanded)}
+                          className="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition shadow-2xs"
+                        >
+                          {isCartExpanded ? (
+                            <>
+                              <ChevronUp className="w-3.5 h-3.5 stroke-[2.5]" />
+                              <span>Collapse to 2 items</span>
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
+                              <span>+{cart.length - 2} more item{cart.length - 2 === 1 ? '' : 's'} in cart (View all {cart.length})</span>
+                            </>
+                          )}
+                        </button>
                       </div>
-
-                      {/* Quantity Controls & Markup field */}
-                      <div className="flex items-center justify-between gap-2 pt-1">
-                        {/* Stepper */}
-                        <div className="flex items-center bg-[#F0F2F0] rounded-lg border border-slate-200">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(idx, -1)}
-                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="w-8 text-center text-xs font-montserrat font-black text-slate-900">
-                            {item.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(idx, 1)}
-                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-
-                        {/* Optional Markup Per Unit */}
-                        <div className="flex items-center gap-1 text-[11px]">
-                          <span className="text-slate-500 font-medium text-[10px]">Markup:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="50"
-                            value={item.affiliateMarkupPerUnit || ''}
-                            onChange={(e) => handleUpdateMarkup(idx, Number(e.target.value))}
-                            placeholder="+0"
-                            className="w-16 px-1.5 py-0.5 bg-[#F0F2F0] border border-slate-200 rounded text-center text-[10px] font-mono font-bold text-[#1E9E60] outline-none"
-                            title="Add your custom profit markup per unit"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))
+                    )}
+                  </>
                 )}
               </div>
 
-              {/* Financial Calculation Summary & Footer Actions */}
-              <div className="flex-none mt-auto pt-3 border-t border-slate-100 bg-white">
+              {/* Financial Calculation Summary & Floating Checkout Actions */}
+              <div className="pt-2.5 border-t border-slate-200 bg-white mt-1">
                 {cart.length > 0 && (
                   <div className="bg-slate-50 rounded-xl p-3 space-y-2 mb-3">
                     <div className="flex justify-between text-slate-600">
@@ -2036,10 +2142,20 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
         />
       )}
 
-      {/* Floating Keyboard Modal */}
+      {/* Floating Wide Sales Keyboard Modal with Autofill Search & Bold Letters */}
       <FloatingSalesKeyboardModal
         isOpen={isKeyboardOpen}
         onClose={() => setIsKeyboardOpen(false)}
+        initialMode={keyboardInitialMode}
+        activeFieldName={keyboardActiveFieldName}
+        targetElement={keyboardTargetElement}
+        products={branchScopedProducts}
+        onSelectProduct={(product, unitMode) => {
+          handleAddToCart(product, unitMode || 'Bottle', 1);
+        }}
+        onAutofillText={(text) => {
+          setSearchQuery(text);
+        }}
       />
 
       {/* Fixed Bottom Navigation Bar for Sales Reps */}
@@ -2077,14 +2193,26 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
           <span className="text-[10px]">Statements</span>
         </button>
 
-        {/* Floating Keyboard Trigger Button at Bottom Nav */}
+        {/* Floating Keyboard Trigger Button at Bottom Nav - Desktop Only */}
         <button
           type="button"
-          onClick={() => setIsKeyboardOpen(true)}
-          className="flex flex-col items-center gap-0.5 px-4 py-1.5 bg-[#FFDE00] text-[#0A006E] rounded-2xl shadow-md font-montserrat font-black cursor-pointer hover:bg-amber-400 transition animate-pulse"
+          onClick={() => {
+            if (isKeyboardOpen) {
+              setIsKeyboardOpen(false);
+            } else {
+              setKeyboardInitialMode('qwerty');
+              setIsKeyboardOpen(true);
+            }
+          }}
+          className={`hidden md:flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-2xl shadow-md font-montserrat font-black cursor-pointer transition ${
+            isKeyboardOpen
+              ? 'bg-white text-[#0A006E] ring-2 ring-[#FFDE00]'
+              : 'bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400'
+          }`}
+          title="Toggle Sales Keypad (Desktop)"
         >
           <Keyboard className="w-5 h-5" />
-          <span className="text-[10px]">Keypad</span>
+          <span className="text-[10px]">{isKeyboardOpen ? 'Hide' : 'Keypad'}</span>
         </button>
       </div>
     </div>

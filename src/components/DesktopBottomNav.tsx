@@ -41,6 +41,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Key,
+  Keyboard,
 } from 'lucide-react';
 import { ERPModuleId, StaffMember, Branch, Product, TransactionDoc } from '../types';
 import { formatKes, exportToCSV } from '../erpUtils';
@@ -61,6 +62,8 @@ interface DesktopBottomNavProps {
   onQuickPrintLastDoc?: () => void;
   onOpenPayslip?: () => void;
   onTriggerToast?: (type: 'success' | 'error', title: string, message: string) => void;
+  onToggleKeyboard?: () => void;
+  isKeyboardOpen?: boolean;
 }
 
 const MODULE_NAV_DEFINITIONS: Record<
@@ -102,6 +105,8 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
   onQuickPrintLastDoc,
   onOpenPayslip,
   onTriggerToast,
+  onToggleKeyboard,
+  isKeyboardOpen,
 }) => {
   const [isMobileModulesSheetOpen, setIsMobileModulesSheetOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -109,6 +114,15 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
   const [isQuickSkuSearchOpen, setIsQuickSkuSearchOpen] = useState(false);
   const [skuSearchQuery, setSkuSearchQuery] = useState('');
   const [isDrawerFloatOpen, setIsDrawerFloatOpen] = useState(false);
+
+  const handleToggleKeyboard = () => {
+    playPosBeep('click');
+    if (onToggleKeyboard) {
+      onToggleKeyboard();
+    } else {
+      window.dispatchEvent(new CustomEvent('toggle-virtual-keyboard'));
+    }
+  };
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -638,10 +652,41 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
               <Search className="w-4 h-4 text-blue-700 shrink-0" />
               <span className="whitespace-nowrap">Price Check</span>
             </button>
+
+            {/* Universal Keyboard Button on Desktop Bottom Nav */}
+            <button
+              type="button"
+              onClick={handleToggleKeyboard}
+              title="Open Virtual POS Keypad with Product Autofill"
+              aria-label="Virtual Keypad"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-montserrat font-black transition cursor-pointer shadow-2xs ${
+                isKeyboardOpen
+                  ? 'bg-[#0A006E] text-[#FFDE00] border-[#0A006E] ring-2 ring-[#FFDE00]'
+                  : 'bg-amber-50 hover:bg-amber-100 text-[#0A006E] border-amber-300'
+              }`}
+            >
+              <Keyboard className="w-4 h-4 text-[#0A006E] shrink-0" />
+              <span className="whitespace-nowrap">Keypad</span>
+            </button>
           </div>
 
           {/* Right: Pinned System Utilities */}
           <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-slate-200">
+            {/* Pinned Keyboard Icon Button on Desktop Bottom Nav */}
+            <button
+              type="button"
+              onClick={handleToggleKeyboard}
+              title="Tap to toggle Virtual Keypad"
+              aria-label="Toggle Virtual Keyboard"
+              className={`w-9 h-9 flex items-center justify-center rounded-xl transition cursor-pointer border shadow-2xs group ${
+                isKeyboardOpen
+                  ? 'bg-[#0A006E] border-[#0A006E] text-[#FFDE00] ring-2 ring-[#FFDE00]'
+                  : 'bg-amber-50 hover:bg-amber-100 text-[#0A006E] border-amber-300'
+              }`}
+            >
+              <Keyboard className="w-4 h-4 text-[#0A006E] group-hover:scale-110 transition-transform" />
+            </button>
+
             {/* Customer Online Store Portal Launcher */}
             {onOpenCustomerPortal && (
               <button
