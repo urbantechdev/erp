@@ -391,7 +391,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
         async (position) => {
           const { latitude, longitude } = position.coords;
           try {
-            const resolved = await detectUserRealWorldLocation(latitude, longitude);
+            const resolved = await detectUserRealWorldLocation();
             if (resolved) {
               applyRealLocationSelection(resolved, true);
             }

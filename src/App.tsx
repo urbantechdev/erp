@@ -103,6 +103,7 @@ import {
 } from './components/ErpModulesPart2';
 import { RestaurantOutletManagement } from './components/RestaurantOutletManagement';
 import { DocumentPrintModal } from './components/DocumentPrintModal';
+import { ExternalCustomersModule } from './components/ExternalCustomersModule';
 import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { OnboardItemsModal } from './components/OnboardItemsModal';
 import { AccessModelMatrixModal } from './components/AccessModelMatrixModal';
@@ -132,6 +133,7 @@ const MODULE_META: Record<
   audit_security: { label: 'User Monitoring & Security Logs', shortMobileLabel: 'Security', icon: Activity },
   customer_portal: { label: 'Customer Online Portal', shortMobileLabel: 'Online Store', icon: ShoppingBag },
   outlets_restaurants: { label: 'Hospitality, Kitchen & Bars', shortMobileLabel: 'Outlets', icon: UtensilsCrossed },
+  external_customers: { label: 'External Customers (Sales)', shortMobileLabel: 'Customers', icon: Users },
 };
 
 const ERP_DEPARTMENTS: {
@@ -150,7 +152,7 @@ const ERP_DEPARTMENTS: {
     id: 'sales',
     title: 'Sales & Commercial POS',
     icon: Store,
-    modules: ['retail_pos', 'sales_pos', 'customer_portal', 'documents_credit'],
+    modules: ['retail_pos', 'sales_pos', 'external_customers', 'customer_portal', 'documents_credit'],
   },
   {
     id: 'inventory',
@@ -2132,6 +2134,45 @@ export default function App() {
     }
   };
 
+  const handleCreateExternalCustomer = async (custDraft: Omit<ExternalCustomer, 'id' | 'createdAt'>) => {
+    const id = `cust-${Date.now()}`;
+    const fullCustomer: ExternalCustomer = cleanFirestoreData({
+      ...custDraft,
+      id,
+      createdAt: new Date().toISOString(),
+    });
+
+    setExternalCustomers((prev) => {
+      const next = [...prev.filter((c) => c.id !== id), fullCustomer];
+      try {
+        localStorage.setItem('erp_external_customers_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await setDoc(doc(db, 'external_customers', id), fullCustomer);
+    } catch (error) {
+      console.warn('[Firestore] Customer saved locally, cloud sync pending:', error);
+    }
+  };
+
+  const handleDeleteExternalCustomer = async (customerId: string) => {
+    setExternalCustomers((prev) => {
+      const next = prev.filter((c) => c.id !== customerId);
+      try {
+        localStorage.setItem('erp_external_customers_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await deleteDoc(doc(db, 'external_customers', customerId));
+    } catch (error) {
+      console.warn('[Firestore] Error deleting external customer:', error);
+    }
+  };
+
   const handleCreateCompliance = async (compDraft: Omit<ComplianceRecord, 'id' | 'createdAt'>) => {
     const id = `comp-${Date.now()}`;
     const fullComp: ComplianceRecord = cleanFirestoreData({
@@ -3373,6 +3414,14 @@ export default function App() {
               onPreviewDoc={(d) => setPreviewDoc(d)}
               onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
               onNavigateModule={handleSelectModule}
+            />
+          )}
+
+          {activeModule === 'external_customers' && (
+            <ExternalCustomersModule
+              customers={externalCustomers}
+              onCreateCustomer={handleCreateExternalCustomer}
+              onDeleteCustomer={handleDeleteExternalCustomer}
             />
           )}
 

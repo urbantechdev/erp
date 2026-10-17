@@ -287,15 +287,13 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
 
   // Branch stock resolver
   const getProductBranchStock = (product: Product): number => {
-    const fallbackTotal = product.totalBottles ?? (product.packSize || 12) * 20;
-    if (!product.branchStockSummary) return fallbackTotal;
+    if (!product.branchStockSummary || !activeBranch) return 0;
     try {
       const summary = JSON.parse(product.branchStockSummary);
-      if (activeBranch && summary[activeBranch.id] !== undefined) {
-        return summary[activeBranch.id];
-      }
-    } catch {}
-    return fallbackTotal;
+      return summary[activeBranch.id] ?? 0;
+    } catch {
+      return 0;
+    }
   };
 
   // Filtered Products
@@ -312,7 +310,8 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
         if (!matchesCat) return false;
       }
       const stock = getProductBranchStock(prod);
-      if (inStockOnly && stock <= 0) return false;
+      // REQUIREMENT: Must have stock in their branch
+      if (stock <= 0) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesName = prod.name.toLowerCase().includes(q);
@@ -1024,7 +1023,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
 
           {/* RIGHT 4-5 COLUMNS: ACTIVE SALES CART & THE 2 PRIMARY ACTIONS */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-3.5">
-            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md p-4 space-y-4 sticky top-20">
+            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md p-4 sticky top-20 flex flex-col h-[calc(100vh-100px)]">
               {/* Cart Header */}
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <div className="flex items-center gap-2">
@@ -1129,7 +1128,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
               </div>
 
               {/* Cart Line Items */}
-              <div className="max-h-60 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100">
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100 py-3">
                 {cart.length === 0 ? (
                   <div className="py-8 text-center text-slate-400">
                     <ShoppingCart className="w-8 h-8 mx-auto mb-1 opacity-40" />
@@ -1208,85 +1207,87 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
               {/* Financial Calculation Summary */}
               {cart.length > 0 && (
                 <div className="space-y-2 pt-3 border-t border-slate-200 text-xs">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Subtotal:</span>
-                    <span className="font-mono-tabular font-bold">{formatKes(cartSubtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500 text-[11px]">
-                    <span>16% VAT &amp; Excise Included:</span>
-                    <span className="font-mono-tabular">{formatKes(cartVatAndExcise)}</span>
-                  </div>
-                  <div className="flex justify-between text-base font-montserrat font-black text-[#0A006E] pt-1 border-t border-slate-200">
-                    <span>Total Order Amount:</span>
-                    <span className="font-mono-tabular text-lg">{formatKes(cartGrandTotal)}</span>
-                  </div>
+              {/* Footer Summary & Actions (Fixed at bottom) */}
+              <div className="flex-none mt-auto pt-3 border-t border-slate-100 bg-white">
+                {cart.length > 0 && (
+                  <div className="bg-slate-50 rounded-xl p-3 space-y-2 mb-3">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Subtotal:</span>
+                      <span className="font-mono-tabular font-bold">{formatKes(cartSubtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500 text-[11px]">
+                      <span>16% VAT &amp; Excise Included:</span>
+                      <span className="font-mono-tabular">{formatKes(cartVatAndExcise)}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-montserrat font-black text-[#0A006E] pt-1 border-t border-slate-200">
+                      <span>Total Order Amount:</span>
+                      <span className="font-mono-tabular text-lg">{formatKes(cartGrandTotal)}</span>
+                    </div>
 
-                  {/* Affiliate Commission Preview Card */}
-                  <div className="bg-[#34D186]/15 border border-[#34D186]/40 rounded-xl p-2.5 space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-[#0A006E]">
-                      <span className="flex items-center gap-1">
-                        <TrendingUp className="w-3.5 h-3.5 text-[#1E9E60]" />
-                        Your Commission Earnings:
-                      </span>
-                      <span className="font-mono-tabular text-sm text-[#1E9E60] font-black">
-                        +{formatKes(cartTotalEarnings)}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-600 flex justify-between">
-                      <span>Base {commPct}% Rate: +{formatKes(cartAffiliateBaseComm)}</span>
-                      {cartAffiliateMarkupTotal > 0 && (
-                        <span>Added Markup: +{formatKes(cartAffiliateMarkupTotal)}</span>
-                      )}
+                    {/* Affiliate Commission Preview Card */}
+                    <div className="bg-[#34D186]/15 border border-[#34D186]/40 rounded-xl p-2.5 space-y-1">
+                      <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-[#0A006E]">
+                        <span className="flex items-center gap-1">
+                          <TrendingUp className="w-3.5 h-3.5 text-[#1E9E60]" />
+                          Your Commission Earnings:
+                        </span>
+                        <span className="font-mono-tabular text-sm text-[#1E9E60] font-black">
+                          +{formatKes(cartTotalEarnings)}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-600 flex justify-between">
+                        <span>Base {commPct}% Rate: +{formatKes(cartAffiliateBaseComm)}</span>
+                        {cartAffiliateMarkupTotal > 0 && (
+                          <span>Added Markup: +{formatKes(cartAffiliateMarkupTotal)}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                )}
+
+                <div className="space-y-2">
+                  {/* 1. BUTTON: QUEUE TO CASHIER */}
+                  <button
+                    type="button"
+                    disabled={isProcessing || cart.length === 0}
+                    onClick={handleQueueToCashier}
+                    className="w-full py-3.5 px-4 bg-[#FFDE00] hover:bg-amber-400 active:bg-amber-500 text-[#0A006E] border-2 border-[#0A006E] rounded-2xl font-montserrat font-black text-xs cursor-pointer shadow-sm transition-all active:scale-98 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex items-center gap-2.5 text-left">
+                      <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0">
+                        <Send className="w-4 h-4 stroke-[2.5]" />
+                      </div>
+                      <div>
+                        <div className="leading-tight text-sm font-black">Queue to Cashier</div>
+                        <div className="text-[10px] text-slate-800 font-semibold">
+                          Customer pays cashier at counter &amp; collects
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-[#0A006E]" />
+                  </button>
+
+                  {/* 2. BUTTON: DIRECT CHECKOUT */}
+                  <button
+                    type="button"
+                    disabled={isProcessing || cart.length === 0}
+                    onClick={handleOpenCheckoutModal}
+                    className="w-full py-3.5 px-4 bg-[#0A006E] hover:bg-[#080055] active:bg-[#060044] text-white border-2 border-[#0A006E] rounded-2xl font-montserrat font-black text-xs cursor-pointer shadow-md transition-all active:scale-98 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex items-center gap-2.5 text-left">
+                      <div className="w-8 h-8 rounded-xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shrink-0">
+                        <CreditCard className="w-4 h-4 stroke-[2.5]" />
+                      </div>
+                      <div>
+                        <div className="leading-tight text-sm font-black text-[#FFDE00]">Direct Checkout</div>
+                        <div className="text-[10px] text-white/80 font-medium">
+                          Collect payment now · Instant eTIMS receipt
+                        </div>
+                      </div>
+                    </div>
+                    <CheckCircle2 className="w-5 h-5 text-[#34D186]" />
+                  </button>
                 </div>
-              )}
-
-              {/* --------------------------------------------------------------- */}
-              {/* THE TWO CORE PRIMARY ACTIONS: QUEUE TO CASHIER vs CHECKOUT      */}
-              {/* --------------------------------------------------------------- */}
-              <div className="space-y-2 pt-2">
-                {/* 1. BUTTON: QUEUE TO CASHIER */}
-                <button
-                  type="button"
-                  disabled={isProcessing || cart.length === 0}
-                  onClick={handleQueueToCashier}
-                  className="w-full py-3.5 px-4 bg-[#FFDE00] hover:bg-amber-400 active:bg-amber-500 text-[#0A006E] border-2 border-[#0A006E] rounded-2xl font-montserrat font-black text-xs cursor-pointer shadow-md transition-all active:scale-98 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <div className="flex items-center gap-2.5 text-left">
-                    <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0">
-                      <Send className="w-4 h-4 stroke-[2.5]" />
-                    </div>
-                    <div>
-                      <div className="leading-tight text-sm font-black">Queue to Cashier</div>
-                      <div className="text-[10px] text-slate-800 font-semibold">
-                        Customer pays cashier at counter &amp; collects
-                      </div>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-[#0A006E]" />
-                </button>
-
-                {/* 2. BUTTON: DIRECT CHECKOUT */}
-                <button
-                  type="button"
-                  disabled={isProcessing || cart.length === 0}
-                  onClick={handleOpenCheckoutModal}
-                  className="w-full py-3.5 px-4 bg-[#0A006E] hover:bg-[#080055] active:bg-[#060044] text-white border-2 border-[#0A006E] rounded-2xl font-montserrat font-black text-xs cursor-pointer shadow-md transition-all active:scale-98 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <div className="flex items-center gap-2.5 text-left">
-                    <div className="w-8 h-8 rounded-xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shrink-0">
-                      <CreditCard className="w-4 h-4 stroke-[2.5]" />
-                    </div>
-                    <div>
-                      <div className="leading-tight text-sm font-black text-[#FFDE00]">Direct Checkout</div>
-                      <div className="text-[10px] text-white/80 font-medium">
-                        Collect payment now · Instant eTIMS receipt
-                      </div>
-                    </div>
-                  </div>
-                  <CheckCircle2 className="w-5 h-5 text-[#34D186]" />
-                </button>
               </div>
             </div>
           </div>

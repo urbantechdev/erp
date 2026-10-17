@@ -36,7 +36,6 @@ export const ExternalCustomersModule: React.FC<ExternalCustomersModuleProps> = (
       paymentTerms: 'Cash / M-Pesa on Delivery',
       creditLimitKes: 0,
       status: 'Active',
-      createdAt: new Date().toISOString(),
     });
     setName('');
     setPhone('');
