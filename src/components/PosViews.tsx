@@ -201,9 +201,14 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const [keyboardActiveFieldName, setKeyboardActiveFieldName] = useState('');
   const [keyboardTargetElement, setKeyboardTargetElement] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
-  // Automatically and instantly open virtual keypad on tap/focus of any input or textarea
+  // Automatically and instantly open virtual keypad on tap/focus of any input or textarea (Desktop only)
   useEffect(() => {
     const handleInputTapOrFocus = (e: Event) => {
+      // Do not auto-open on mobile devices (< 768px width)
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        return;
+      }
+
       const target = e.target as HTMLElement | null;
       if (!target) return;
 

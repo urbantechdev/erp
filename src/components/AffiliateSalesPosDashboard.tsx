@@ -249,6 +249,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
 
   // Modals & UI States
   const [isProcessing, setIsProcessing] = useState(false);
+  const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
   const [queuedSlip, setQueuedSlip] = useState<QueuedSlipData | null>(null);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<'M-Pesa Express' | 'Cash' | 'Bank EFT / Cheque' | 'Credit'>('M-Pesa Express');
@@ -261,9 +262,14 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   const [keyboardActiveFieldName, setKeyboardActiveFieldName] = useState('');
   const [keyboardTargetElement, setKeyboardTargetElement] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
-  // Automatically and instantly open virtual keypad on tap/focus of any input or textarea
+  // Automatically and instantly open virtual keypad on tap/focus of any input or textarea (Desktop only)
   useEffect(() => {
     const handleInputTapOrFocus = (e: Event) => {
+      // Do not auto-open on mobile devices (< 768px width)
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        return;
+      }
+
       const target = e.target as HTMLElement | null;
       if (!target) return;
 
@@ -1165,9 +1171,14 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                   return (
                     <div
                       key={prod.id}
-                      className={`bg-white border-2 rounded-2xl p-3 flex flex-col justify-between transition-all hover:shadow-md ${
+                      onClick={() => {
+                        playPosBeep('click');
+                        setPreviewProduct(prod);
+                      }}
+                      className={`bg-white border-2 rounded-2xl p-3 flex flex-col justify-between transition-all hover:shadow-md cursor-pointer group ${
                         isOutOfStock ? 'border-slate-200 opacity-60' : 'border-slate-200 hover:border-[#0A006E]'
                       }`}
+                      title="Click to view full product details & preview"
                     >
                       {/* Product Visual Header */}
                       <div className="space-y-2">
@@ -2118,6 +2129,119 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 className="flex-2 py-3 bg-[#0A006E] hover:bg-[#080055] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition disabled:opacity-50"
               >
                 {isProcessing ? 'Processing Sale...' : 'Confirm & Complete Sale'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --------------------------------------------------------------------- */}
+      {/* PRODUCT PREVIEW MODAL                                                 */}
+      {/* --------------------------------------------------------------------- */}
+      {previewProduct && (
+        <div
+          onClick={() => setPreviewProduct(null)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-lg w-full overflow-hidden border-2 border-[#0A006E] shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]"
+          >
+            {/* Modal Header */}
+            <div className="p-4 bg-[#0A006E] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-white/10 text-[#FFDE00] flex items-center justify-center font-bold">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-montserrat font-black text-sm text-[#FFDE00] truncate max-w-xs">
+                    {previewProduct.name}
+                  </h3>
+                  <span className="text-[10px] text-white/80 font-mono">
+                    SKU: {previewProduct.sku} · {previewProduct.category}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewProduct(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-4 text-xs">
+              <div className="aspect-4/3 rounded-2xl overflow-hidden bg-slate-900 shadow-inner relative">
+                <ProductImage
+                  product={{
+                    ...previewProduct,
+                    category: previewProduct.category === 'LPS' ? 'LPS' : 'IPS',
+                  }}
+                  size="full"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-3 left-3">
+                  <span className="px-2.5 py-1 bg-[#34D186] text-[#0A006E] rounded-full text-[11px] font-montserrat font-black shadow">
+                    {getProductBranchStock(previewProduct)} units available in branch
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Category / Subcategory</span>
+                  <strong className="font-montserrat font-bold text-slate-900">{previewProduct.category} — {previewProduct.subCategory || 'Liquor'}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Volume &amp; ABV</span>
+                  <strong className="font-montserrat font-bold text-slate-900">{previewProduct.volumeMl}ml · {previewProduct.abv || 40}% ABV</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Unit Bottle Price</span>
+                  <strong className="font-montserrat font-black text-[#0A006E]">{formatKes(getProductPrices(previewProduct).bottlePrice)}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Case Price ({getProductPrices(previewProduct).packSize}s)</span>
+                  <strong className="font-montserrat font-black text-slate-900">{formatKes(getProductPrices(previewProduct).casePrice)}</strong>
+                </div>
+              </div>
+
+              {previewProduct.barcode && (
+                <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                  <span className="font-mono text-slate-500">Barcode:</span>
+                  <span className="font-mono font-bold text-slate-900">{previewProduct.barcode}</span>
+                </div>
+              )}
+
+              {previewProduct.exciseStampSeries && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-xs text-emerald-900">
+                  <span className="font-montserrat font-bold">KRA Excise Stamp Series:</span>
+                  <span className="font-mono font-black">{previewProduct.exciseStampSeries}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewProduct(null)}
+                className="flex-1 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+              >
+                Close Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleAddToCart(previewProduct, 'Bottle', 1);
+                  setPreviewProduct(null);
+                }}
+                className="flex-2 py-3 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-md transition flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Add 1 Bottle to Cart</span>
               </button>
             </div>
           </div>

@@ -22,6 +22,7 @@ import {
   AnimatedErrorLogo
 } from '../common/CenterScreenFeedback';
 import { scatterAndReshuffleProducts, useAutoReshuffleTimer } from '../../utils/productScattering';
+import { subscribeToProductScans } from '../../utils/productScanBroadcast';
 import {
   isPlatformFullscreen,
   requestPlatformFullscreen,
@@ -402,8 +403,10 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
           }
         },
         (error) => {
-          console.error('Geolocation error:', error);
+          console.warn('Geolocation permission denied:', error.message);
           setIsLocatingGps(false);
+          // If permission denied, ensure manual location entry is prompted
+          setPlaceSearchQuery(''); 
         },
         { enableHighAccuracy: true, timeout: 10000 }
       );
@@ -529,8 +532,37 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     if (anyBranchInv.length > 0) {
       return Math.max(0, anyBranchInv.reduce((sum, item) => Math.max(sum, item.bottlesOnHand), 0));
     }
+    const directProd = products.find((p) => p.id === productId);
+    if (directProd && typeof directProd.totalBottles === 'number' && directProd.totalBottles > 0) {
+      return directProd.totalBottles;
+    }
+    if (directProd && (directProd.hasRealBarcode || directProd.isScanned)) {
+      return 24; // Instant available shelf stock for scanned items
+    }
     return 0;
   };
+
+  // Real-time notification for products scanned live in ERP
+  const [recentScannedArrival, setRecentScannedArrival] = useState<{
+    productName: string;
+    barcode: string;
+    productId: string;
+    timestamp: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeToProductScans((evt) => {
+      setRecentScannedArrival({
+        productName: evt.name,
+        barcode: evt.barcode,
+        productId: evt.productId,
+        timestamp: Date.now(),
+      });
+      const timer = setTimeout(() => setRecentScannedArrival(null), 6000);
+      return () => clearTimeout(timer);
+    });
+    return () => unsub();
+  }, []);
 
   // Independent Website Cart State (Completely separate from ERP POS Cart; persisted so guests can add to cart before signing in)
   const [webCart, setWebCart] = useState<StorefrontCartItem[]>(() => {
@@ -597,12 +629,10 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
   const [detailQty, setDetailQty] = useState(1);
   const [isMerchantSeoModalOpen, setIsMerchantSeoModalOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isPlatformFullscreen());
-  // Automatic 20-second catalog reshuffle tick with live countdown
-  const {
-    tick: storefrontShuffleTick,
-    secondsLeft: storefrontSecondsLeft,
-    reshuffleNow: reshuffleStorefrontNow
-  } = useAutoReshuffleTimer(20000);
+  // Static shuffle tick for super lite performance (no continuous background interval)
+  const storefrontShuffleTick = 0;
+  const storefrontSecondsLeft = 20;
+  const reshuffleStorefrontNow = () => {};
 
   useEffect(() => {
     const syncFullscreenState = () => {
@@ -1225,8 +1255,13 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
 
     const matched = products.filter(p => {
-      // Move all SKU to awaiting scan until they are scanned to activate
-      if (!p.isScanned) return false;
+      // Instantly show any product that is scanned & has a barcode
+      const isScannedAndReady = Boolean(
+        (p.isScanned || p.hasRealBarcode || p.isOnboarded) &&
+        p.barcode &&
+        p.status !== ('Deleted' as any)
+      );
+      if (!isScannedAndReady) return false;
 
       if (tokens.length > 0) {
         const searchableText = `${p.name} ${p.brand} ${p.sku} ${p.subCategory || ''} ${p.category || ''} ${p.volumeMl || 750}ml`.toLowerCase();
@@ -2922,6 +2957,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                     <img
                       src={selectedProductDetail.image || getProductImageUrl(selectedProductDetail)}
                       alt={selectedProductDetail.name}
+                      loading="lazy"
                       decoding="async"
                       className={`w-full h-full object-cover object-center block ${isDetailOutOfStock ? 'opacity-50 grayscale-[35%]' : ''}`}
                     />
