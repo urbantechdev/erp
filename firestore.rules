@@ -258,6 +258,11 @@ service cloud.firestore {
       allow create, update, delete: if true;
     }
 
+    match /external_customers/{customerId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
     match /branch_product_activations/{activationId} {
       allow get, list: if true;
       allow create, update: if isValidId(activationId);

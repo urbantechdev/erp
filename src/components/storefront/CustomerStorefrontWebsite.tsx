@@ -383,6 +383,34 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     setTimeout(() => setCheckoutBanner(null), 3500);
   };
 
+  // Automatically detect user GPS location on mount
+  useEffect(() => {
+    if (!customerCoords && navigator.geolocation) {
+      setIsLocatingGps(true);
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          try {
+            const resolved = await detectUserRealWorldLocation(latitude, longitude);
+            if (resolved) {
+              applyRealLocationSelection(resolved, true);
+            }
+          } catch (e) {
+            console.error('Location resolution failed:', e);
+          } finally {
+            setIsLocatingGps(false);
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setIsLocatingGps(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, []);
+
+
   // Nearest-Branch Geo-Routing (Real GPS + OpenStreetMap Reverse Geocoding + Real Place Search)
   const [customerCoords, setCustomerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [realResolvedLocation, setRealResolvedLocation] = useState<RealResolvedLocation | null>(null);

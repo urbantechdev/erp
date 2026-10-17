@@ -60,6 +60,7 @@ import {
   GeoRegion,
   Product,
   Partner,
+  ExternalCustomer,
   StockTransfer,
   TransactionDoc,
   ComplianceRecord,
@@ -208,6 +209,14 @@ export default function App() {
   const [partners, setPartners] = useState<Partner[]>(() => {
     try {
       const saved = localStorage.getItem('erp_partners_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [externalCustomers, setExternalCustomers] = useState<ExternalCustomer[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_external_customers_backup');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -662,6 +671,16 @@ export default function App() {
       },
       'partners'
     );
+    const unsubExternalCustomers = subscribeWithFallback<ExternalCustomer>(
+      'external_customers',
+      (list) => {
+        setExternalCustomers(list);
+        try {
+          localStorage.setItem('erp_external_customers_backup', JSON.stringify(list));
+        } catch {}
+      },
+      'external_customers'
+    );
 
     const unsubTransfers = subscribeWithFallback<StockTransfer>(
       'stock_transfers',
@@ -760,6 +779,7 @@ export default function App() {
       unsubRegions();
       unsubProducts();
       unsubPartners();
+      unsubExternalCustomers();
       unsubTransfers();
       unsubTransactions();
       unsubCompliance();

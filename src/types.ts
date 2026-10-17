@@ -364,6 +364,50 @@ export interface Partner {
   createdAt: string;
 }
 
+export type ExternalCustomerCategory =
+  | 'Wholesale / B2B'
+  | 'Bar / Restaurant / Club'
+  | 'Hotel / Hospitality'
+  | 'Corporate Account'
+  | 'Event Organizer'
+  | 'Distributor / Sub-dealer'
+  | 'Retail Walk-in / Individual';
+
+export type ExternalCustomerPaymentTerms =
+  | 'Cash / M-Pesa on Delivery'
+  | 'Immediate Prepaid'
+  | 'Net 7 Days'
+  | 'Net 14 Days'
+  | 'Net 30 Days'
+  | 'Custom Credit Terms';
+
+export interface ExternalCustomer {
+  id: string;
+  customerNumber: string; // e.g. CUST-1042
+  name: string; // Contact person / Primary Name
+  companyName?: string; // Trading / Business / Venue Name
+  customerType: ExternalCustomerCategory;
+  phone: string;
+  email?: string;
+  kraPin?: string; // Kenya Revenue Authority PIN
+  liquorLicenseNo?: string; // County Liquor License if licensed commercial buyer
+  address?: string;
+  regionId?: string;
+  regionName?: string;
+  assignedBranchId?: string;
+  assignedBranchName?: string;
+  paymentTerms: ExternalCustomerPaymentTerms;
+  creditLimitKes: number;
+  currentBalanceKes?: number;
+  status: 'Active' | 'On Hold' | 'Archived';
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+  totalOrdersCount?: number;
+  totalSalesVolumeKes?: number;
+  lastSaleDate?: string;
+}
+
 export interface StockTransfer {
   id: string;
   transferNo: string;
@@ -430,7 +474,10 @@ export interface TransactionDoc {
   tableNumber?: string;
   regionId: string;
   regionName: string;
+  customerId?: string;
   customerName: string;
+  customerPhone?: string;
+  customerKraPin?: string;
   customerLicenseNo: string;
   itemsSummary: string; // JSON string of LineItem[]
   subtotal: number;
@@ -483,6 +530,7 @@ export type ERPModuleId =
   | 'branches_transfers'
   | 'geo_pricing'
   | 'partners'
+  | 'external_customers'
   | 'documents_credit'
   | 'compliance'
   | 'hr_rbac'
@@ -636,6 +684,7 @@ export interface SaleOrder {
   branchName: string;
   cashierId?: string;
   cashierName?: string;
+  customerId?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;

@@ -24,6 +24,7 @@ import {
   Maximize2,
   Minimize2,
   UtensilsCrossed,
+  UserCircle,
   Search,
   Printer,
   Smartphone,
@@ -83,6 +84,7 @@ const MODULE_NAV_DEFINITIONS: Record<
   audit_security: { label: 'Security & Audit Logs', shortLabel: 'Security', icon: Activity },
   customer_portal: { label: 'Customer Online Store', shortLabel: 'Online Store', icon: ShoppingBag },
   outlets_restaurants: { label: 'Branch Outlets & Restaurants', shortLabel: 'Outlets', icon: UtensilsCrossed },
+  external_customers: { label: 'External Customers', shortLabel: 'Customers', icon: UserCircle },
 };
 
 export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
