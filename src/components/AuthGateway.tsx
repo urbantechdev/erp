@@ -41,6 +41,7 @@ interface AuthGatewayProps {
   onEmailLogin: (email: string, password: string, targetRole: 'Admin' | 'Accountant') => Promise<void>;
   onPinLogin: (pin: string, selectedRole?: StaffRole, selectedStaffId?: string) => Promise<void>;
   onOpenCustomerPortal: () => void;
+  onOpenPhoneScanner?: () => void;
   authError: string | null;
   isSubmitting: boolean;
 }
@@ -124,6 +125,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
   onEmailLogin,
   onPinLogin,
   onOpenCustomerPortal,
+  onOpenPhoneScanner,
   authError,
   isSubmitting,
 }) => {
@@ -443,6 +445,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
         variant="gateway"
         onHomeClick={() => setScreenView('boxes')}
         onOpenCustomerPortal={onOpenCustomerPortal}
+        onOpenPhoneScanner={onOpenPhoneScanner}
         branches={branches}
         totalStaffCount={staffList.length}
       />
@@ -1500,3 +1503,6 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
     </div>
   );
 };
+
+export { AuthGateway as AuthGate };
+export default AuthGateway;

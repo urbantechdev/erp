@@ -254,9 +254,9 @@ export async function detectUserRealWorldLocation(): Promise<RealResolvedLocatio
         return;
       }
       navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 0
+        enableHighAccuracy: false,
+        timeout: 2500,
+        maximumAge: 300000
       });
     });
 

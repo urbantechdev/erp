@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, signInWithGooglePopup } from '../../firebase';
 import { useErp } from '../../context/ErpContext';
@@ -144,6 +144,38 @@ const DRINK_CATEGORIES = [
 ];
 
 const DELIVERY_ZONES = DELIVERY_ZONE_GEO_DIRECTORY.map(z => z.label);
+
+const ReshuffleCountdownBadge: React.FC<{
+  onReshuffle: () => void;
+  intervalMs?: number;
+}> = React.memo(({ onReshuffle, intervalMs = 20000 }) => {
+  const [seconds, setSeconds] = useState(Math.round(intervalMs / 1000));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSeconds(prev => (prev <= 1 ? Math.round(intervalMs / 1000) : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+
+  const handleClick = () => {
+    setSeconds(Math.round(intervalMs / 1000));
+    onReshuffle();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="text-[10px] font-mono font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 active:scale-95 px-2.5 py-1 rounded-full border border-amber-300 flex items-center gap-1.5 transition cursor-pointer"
+      title="Products of the same brand are scattered and automatically reshuffled every 20 seconds. Click to reshuffle now."
+    >
+      <RotateCcw className="w-3 h-3 text-amber-600 animate-spin" style={{ animationDuration: '20s' }} />
+      <span>Scattered Brands • Reshuffling in {seconds}s</span>
+    </button>
+  );
+});
+ReshuffleCountdownBadge.displayName = 'ReshuffleCountdownBadge';
 
 export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) => {
   const {
@@ -383,34 +415,6 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     setTimeout(() => setCheckoutBanner(null), 3500);
   };
 
-  // Automatically detect user GPS location on mount
-  useEffect(() => {
-    if (!customerCoords && navigator.geolocation) {
-      setIsLocatingGps(true);
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          try {
-            const resolved = await detectUserRealWorldLocation();
-            if (resolved) {
-              applyRealLocationSelection(resolved, true);
-            }
-          } catch (e) {
-            console.error('Location resolution failed:', e);
-          } finally {
-            setIsLocatingGps(false);
-          }
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-          setIsLocatingGps(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    }
-  }, []);
-
-
   // Nearest-Branch Geo-Routing (Real GPS + OpenStreetMap Reverse Geocoding + Real Place Search)
   const [customerCoords, setCustomerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [realResolvedLocation, setRealResolvedLocation] = useState<RealResolvedLocation | null>(null);
@@ -438,19 +442,16 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     }
   };
 
-  // Auto-detect real location on initial storefront load
+  // Auto-detect real location on initial storefront load (non-blocking background resolution)
   useEffect(() => {
     let mounted = true;
-    setIsLocatingGps(true);
     detectUserRealWorldLocation()
       .then(resolved => {
         if (!mounted) return;
         applyRealLocationSelection(resolved, false);
-        setIsLocatingGps(false);
       })
       .catch(() => {
-        if (!mounted) return;
-        setIsLocatingGps(false);
+        // Silently preserve default fulfillment branch
       });
     return () => {
       mounted = false;
@@ -597,12 +598,18 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
   const [detailQty, setDetailQty] = useState(1);
   const [isMerchantSeoModalOpen, setIsMerchantSeoModalOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isPlatformFullscreen());
-  // Automatic 20-second catalog reshuffle tick with live countdown
-  const {
-    tick: storefrontShuffleTick,
-    secondsLeft: storefrontSecondsLeft,
-    reshuffleNow: reshuffleStorefrontNow
-  } = useAutoReshuffleTimer(20000);
+  // Automatic 20-second catalog reshuffle tick (isolated from 1-second full-page re-renders)
+  const [storefrontShuffleTick, setStorefrontShuffleTick] = useState<number>(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setStorefrontShuffleTick(t => (t + 1) % 1000000);
+    }, 20000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const reshuffleStorefrontNow = useCallback(() => {
+    setStorefrontShuffleTick(t => (t + 1) % 1000000);
+  }, []);
 
   useEffect(() => {
     const syncFullscreenState = () => {
@@ -2426,15 +2433,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                   Direct Company Price
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={reshuffleStorefrontNow}
-                className="text-[10px] font-mono font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 active:scale-95 px-2.5 py-1 rounded-full border border-amber-300 flex items-center gap-1.5 transition cursor-pointer"
-                title="Products of the same brand are scattered and automatically reshuffled every 20 seconds. Click to reshuffle now."
-              >
-                <RotateCcw className="w-3 h-3 text-amber-600 animate-spin" style={{ animationDuration: '20s' }} />
-                <span>Scattered Brands • Reshuffling in {storefrontSecondsLeft}s</span>
-              </button>
+              <ReshuffleCountdownBadge onReshuffle={reshuffleStorefrontNow} />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">

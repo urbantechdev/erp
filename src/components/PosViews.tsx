@@ -856,7 +856,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
             ? '[SHISHA TOPUP]'
             : '[CLUB AMENITY]';
         return {
-          productId: entry.product?.id || entry.topupItem?.id || `topup-${Date.now()}`,
+          productId: entry.product?.id || entry.topupItem?.id || `topup-entry-${entry.topupItem?.name || 'custom'}`,
           sku: `TOP-${(entry.topupItem?.category || 'gen').slice(0, 3).toUpperCase()}`,
           name: `${topupTag} ${entry.name || entry.topupItem?.name}`,
           unitMode: entry.unitMode,

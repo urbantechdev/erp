@@ -3093,6 +3093,15 @@ export default function App() {
           onEmailLogin={handleEmailLogin}
           onPinLogin={handlePinLogin}
           onOpenCustomerPortal={() => setStandaloneCustomerPortal(true)}
+          onOpenPhoneScanner={() =>
+            setPhoneScannerSession({
+              isOpen: true,
+              staffId: 'staff_cashier',
+              staffName: 'Counter Cashier',
+              staffEmail: '',
+              staffRole: 'Counter Cashier',
+            })
+          }
           authError={authError}
           isSubmitting={isAuthenticating}
         />
