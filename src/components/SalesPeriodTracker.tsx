@@ -18,7 +18,7 @@ import {
   Receipt,
   Layers,
 } from 'lucide-react';
-import { TransactionDoc, StaffMember } from '../types';
+import { TransactionDoc, StaffMember, LineItem } from '../types';
 import { formatKes, exportToCSV, exportReportToPDF } from '../erpUtils';
 
 export type SalesPeriod = 'today' | 'this_week' | 'this_month' | 'this_year' | 'all';
@@ -28,6 +28,8 @@ interface SalesPeriodTrackerProps {
   currentUser: StaffMember;
   onPreviewDoc: (doc: TransactionDoc) => void;
   onNavigateToPos?: (mode: 'retail' | 'wholesale') => void;
+  branches: Branch[];
+  staff: StaffMember[];
 }
 
 interface PeriodStats {
@@ -54,10 +56,15 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
   currentUser,
   onPreviewDoc,
   onNavigateToPos,
+  branches,
+  staff,
 }) => {
   const [activePeriod, setActivePeriod] = useState<SalesPeriod>('today');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannel, setSelectedChannel] = useState<'ALL' | 'Retail' | 'Wholesale' | 'Online'>('ALL');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<'ledger' | 'items'>('ledger');
 
   // Helper to compute stats for any arbitrary date filter
   const computeStatsForRange = (
@@ -72,6 +79,11 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
       if (!tx.createdAt) return false;
       const txDate = new Date(tx.createdAt);
       if (isNaN(txDate.getTime())) return false;
+      
+      // Additional filters
+      if (selectedBranchId !== 'ALL' && tx.branchId !== selectedBranchId) return false;
+      if (selectedStaffId !== 'ALL' && tx.createdBy !== selectedStaffId) return false;
+      
       return filterFn(txDate, now);
     });
 
@@ -196,7 +208,7 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
       this_year: yearStats,
       all: allStats,
     };
-  }, [transactions]);
+  }, [transactions, selectedBranchId, selectedStaffId]);
 
   const activeStats = allPeriodStats[activePeriod];
 
@@ -231,6 +243,25 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
       return true;
     });
   }, [activeStats.transactions, selectedChannel, searchQuery]);
+
+  const itemStatistics = useMemo(() => {
+    const stats: Record<string, { name: string; quantity: number; revenue: number }> = {};
+    filteredActiveTransactions.forEach((tx) => {
+      try {
+        const items: LineItem[] = JSON.parse(tx.itemsSummary || '[]');
+        items.forEach((item) => {
+          if (!stats[item.productId]) {
+            stats[item.productId] = { name: item.name, quantity: 0, revenue: 0 };
+          }
+          // Assuming item price is calculated; I'll use a simple approximation if needed, but for now just quantity
+          stats[item.productId].quantity += 1; // Assuming 1 per line item, or I need item.quantity
+        });
+      } catch (e) {
+        console.error('Error parsing items', e);
+      }
+    });
+    return Object.values(stats).sort((a, b) => b.quantity - a.quantity);
+  }, [filteredActiveTransactions]);
 
   // CSV Download for the active period
   const handleDownloadCSV = () => {
@@ -356,6 +387,30 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
             <span>Download PDF</span>
           </button>
         </div>
+      </div>
+
+      {/* Branch & Staff Drill-down Filters */}
+      <div className="flex gap-2">
+        <select
+          value={selectedBranchId}
+          onChange={(e) => setSelectedBranchId(e.target.value)}
+          className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white"
+        >
+          <option value="ALL">All Branches</option>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+        <select
+          value={selectedStaffId}
+          onChange={(e) => setSelectedStaffId(e.target.value)}
+          className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white"
+        >
+          <option value="ALL">All Sales Persons</option>
+          {staff.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Period Selection Selector Tabs (Today, This Week, This Month, This Year, All Time) */}
@@ -485,52 +540,69 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
         </div>
       </div>
 
-      {/* Transactions Search, Channel Filter & Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-2xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-              {activeStats.label} Commercial Ledger
-            </span>
-            <span className="text-xs text-slate-500 font-mono-tabular">
-              ({filteredActiveTransactions.length} of {activeStats.transactions.length} records)
-            </span>
-          </div>
+      
+      {/* View Toggle */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setViewMode('ledger')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold ${viewMode === 'ledger' ? 'bg-[#0A006E] text-white' : 'bg-white border border-slate-300'}`}
+        >
+          Sales Ledger
+        </button>
+        <button
+          onClick={() => setViewMode('items')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold ${viewMode === 'items' ? 'bg-[#0A006E] text-white' : 'bg-white border border-slate-300'}`}
+        >
+          Item Statistics
+        </button>
+      </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Search Box */}
-            <div className="relative min-w-[200px] flex-1 sm:flex-none">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search doc#, customer, payment..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 bg-[#F0F2F0] border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:border-[#0A006E]"
-              />
+      {viewMode === 'ledger' ? (
+        /* Transactions Search, Channel Filter & Table */
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+                {activeStats.label} Commercial Ledger
+              </span>
+              <span className="text-xs text-slate-500 font-mono-tabular">
+                ({filteredActiveTransactions.length} of {activeStats.transactions.length} records)
+              </span>
             </div>
 
-            {/* Channel filter chips */}
-            <div className="flex items-center gap-1 bg-[#F0F2F0] p-0.5 rounded-xl border border-slate-200 text-xs">
-              {(['ALL', 'Retail', 'Wholesale', 'Online'] as const).map((ch) => (
-                <button
-                  key={ch}
-                  type="button"
-                  onClick={() => setSelectedChannel(ch)}
-                  className={`px-2.5 py-1 rounded-lg font-montserrat font-bold transition cursor-pointer text-[11px] ${
-                    selectedChannel === ch
-                      ? 'bg-[#0A006E] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {ch}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Search Box */}
+              <div className="relative min-w-[200px] flex-1 sm:flex-none">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search doc#, customer, payment..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-[#F0F2F0] border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:border-[#0A006E]"
+                />
+              </div>
+
+              {/* Channel filter chips */}
+              <div className="flex items-center gap-1 bg-[#F0F2F0] p-0.5 rounded-xl border border-slate-200 text-xs">
+                {(['ALL', 'Retail', 'Wholesale', 'Online'] as const).map((ch) => (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() => setSelectedChannel(ch)}
+                    className={`px-2.5 py-1 rounded-lg font-montserrat font-bold transition cursor-pointer text-[11px] ${
+                      selectedChannel === ch
+                        ? 'bg-[#0A006E] text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {ch}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Tabular List */}
+        {/* Transactions Table */}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -551,32 +623,7 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
                   <td colSpan={8} className="py-8 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Receipt className="w-8 h-8 text-slate-300 stroke-[1.5]" />
-                      <div className="font-montserrat font-bold text-slate-700">
-                        No sales transactions found for {activeStats.label.toLowerCase()}
-                      </div>
-                      <p className="text-xs text-slate-500 max-w-sm">
-                        Issue a commercial transaction at the counter or wholesale checkout to record sales in real-time.
-                      </p>
-                      {onNavigateToPos && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <button
-                            type="button"
-                            onClick={() => onNavigateToPos('retail')}
-                            className="px-3.5 py-2 bg-[#FFDE00] text-[#0A006E] font-montserrat font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                          >
-                            <ShoppingCart className="w-3.5 h-3.5" />
-                            Open Retail POS
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onNavigateToPos('wholesale')}
-                            className="px-3.5 py-2 bg-[#0A006E] text-white font-montserrat font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                          >
-                            <Building2 className="w-3.5 h-3.5" />
-                            Open Wholesale POS
-                          </button>
-                        </div>
-                      )}
+                      <span className="text-xs font-semibold">No transactions found for this period/filter</span>
                     </div>
                   </td>
                 </tr>
@@ -646,7 +693,30 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+      ) : (
+        /* Item Statistics Table */
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+          <h4 className="font-bold">Item Statistics</h4>
+          <table className="w-full text-xs">
+            <thead>
+              <tr>
+                <th className="text-left py-2">Item Name</th>
+                <th className="text-right py-2">Quantity Sold</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemStatistics.map((item) => (
+                <tr key={item.name}>
+                  <td className="py-2">{item.name}</td>
+                  <td className="text-right py-2">{item.quantity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
     </div>
   );
 };

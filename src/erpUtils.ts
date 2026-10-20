@@ -429,7 +429,7 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
   },
   {
     moduleName: 'Payroll',
-    moduleId: 'hr_rbac',
+    moduleId: 'payroll',
     description: 'Salary computations, statutory deductions (PAYE, NSSF, SHIF, Housing Levy), and payslips.',
     permissions: {
       Admin: 'Full',

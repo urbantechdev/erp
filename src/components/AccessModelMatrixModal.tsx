@@ -507,6 +507,10 @@ export const AccessModelMatrixModal: React.FC<AccessModelMatrixModalProps> = ({
                 {staffList.map((s) => {
                   const hasStripped = s.strippedFeatures && s.strippedFeatures.length > 0;
                   const hasGranted = s.grantedFeatures && s.grantedFeatures.length > 0;
+                  const isOnline = Boolean(s.isOnline && s.lastSeen && (Date.now() - new Date(s.lastSeen).getTime() < 45000));
+                  const lastSeenFormatted = s.lastSeen 
+                    ? new Date(s.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
+                    : 'Never';
 
                   return (
                     <div
@@ -526,6 +530,20 @@ export const AccessModelMatrixModal: React.FC<AccessModelMatrixModalProps> = ({
                         </div>
                         <div className="text-[11px] text-slate-500 truncate mt-0.5">{s.email}</div>
                         <div className="text-[10px] text-slate-400 mt-0.5">{s.branchName}</div>
+
+                        <div className="flex items-center gap-1.5 text-[10px] mt-1.5">
+                          {isOnline ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                              Online Now
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium border border-slate-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                              Offline · Last seen: {lastSeenFormatted}
+                            </span>
+                          )}
+                        </div>
 
                         <div className="flex items-center gap-1.5 flex-wrap mt-2">
                           {hasStripped ? (

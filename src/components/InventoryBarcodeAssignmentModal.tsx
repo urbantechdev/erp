@@ -44,6 +44,8 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
   currentUser,
   onUpdateProduct,
 }) => {
+  if (!isOpen) return null;
+
   // Selected product to link barcode to
   const [selectedProductId, setSelectedProductId] = useState<string>(() => {
     if (initialProductId) return initialProductId;
@@ -352,10 +354,6 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
 
   // Effect to manage camera lifecycle per tab
   useEffect(() => {
-    if (!isOpen) {
-      stopCameraScanner();
-      return;
-    }
     isMountedRef.current = true;
     if (activeTab === 'camera') {
       const timer = setTimeout(() => {
@@ -373,7 +371,7 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
       isMountedRef.current = false;
       stopCameraScanner();
     };
-  }, [isOpen, activeTab, startCameraScanner, stopCameraScanner]);
+  }, [activeTab, startCameraScanner, stopCameraScanner]);
 
   // Photo file upload decoding
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -412,8 +410,6 @@ export const InventoryBarcodeAssignmentModal: React.FC<InventoryBarcodeAssignmen
 
     await commitBarcodeForProduct(selectedProduct, clean);
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/85 backdrop-blur-xs overflow-y-auto">

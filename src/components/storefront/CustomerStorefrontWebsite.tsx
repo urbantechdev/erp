@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, signInWithGooglePopup } from '../../firebase';
 import { useErp } from '../../context/ErpContext';
@@ -22,6 +22,7 @@ import {
   AnimatedErrorLogo
 } from '../common/CenterScreenFeedback';
 import { scatterAndReshuffleProducts, useAutoReshuffleTimer } from '../../utils/productScattering';
+import { subscribeToProductScans } from '../../utils/productScanBroadcast';
 import {
   isPlatformFullscreen,
   requestPlatformFullscreen,
@@ -144,38 +145,6 @@ const DRINK_CATEGORIES = [
 ];
 
 const DELIVERY_ZONES = DELIVERY_ZONE_GEO_DIRECTORY.map(z => z.label);
-
-const ReshuffleCountdownBadge: React.FC<{
-  onReshuffle: () => void;
-  intervalMs?: number;
-}> = React.memo(({ onReshuffle, intervalMs = 20000 }) => {
-  const [seconds, setSeconds] = useState(Math.round(intervalMs / 1000));
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSeconds(prev => (prev <= 1 ? Math.round(intervalMs / 1000) : prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-
-  const handleClick = () => {
-    setSeconds(Math.round(intervalMs / 1000));
-    onReshuffle();
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="text-[10px] font-mono font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 active:scale-95 px-2.5 py-1 rounded-full border border-amber-300 flex items-center gap-1.5 transition cursor-pointer"
-      title="Products of the same brand are scattered and automatically reshuffled every 20 seconds. Click to reshuffle now."
-    >
-      <RotateCcw className="w-3 h-3 text-amber-600 animate-spin" style={{ animationDuration: '20s' }} />
-      <span>Scattered Brands • Reshuffling in {seconds}s</span>
-    </button>
-  );
-});
-ReshuffleCountdownBadge.displayName = 'ReshuffleCountdownBadge';
 
 export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) => {
   const {
@@ -415,6 +384,36 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     setTimeout(() => setCheckoutBanner(null), 3500);
   };
 
+  // Automatically detect user GPS location on mount
+  useEffect(() => {
+    if (!customerCoords && navigator.geolocation) {
+      setIsLocatingGps(true);
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          try {
+            const resolved = await detectUserRealWorldLocation();
+            if (resolved) {
+              applyRealLocationSelection(resolved, true);
+            }
+          } catch (e) {
+            console.error('Location resolution failed:', e);
+          } finally {
+            setIsLocatingGps(false);
+          }
+        },
+        (error) => {
+          console.warn('Geolocation permission denied:', error.message);
+          setIsLocatingGps(false);
+          // If permission denied, ensure manual location entry is prompted
+          setPlaceSearchQuery(''); 
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, []);
+
+
   // Nearest-Branch Geo-Routing (Real GPS + OpenStreetMap Reverse Geocoding + Real Place Search)
   const [customerCoords, setCustomerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [realResolvedLocation, setRealResolvedLocation] = useState<RealResolvedLocation | null>(null);
@@ -442,16 +441,19 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     }
   };
 
-  // Auto-detect real location on initial storefront load (non-blocking background resolution)
+  // Auto-detect real location on initial storefront load
   useEffect(() => {
     let mounted = true;
+    setIsLocatingGps(true);
     detectUserRealWorldLocation()
       .then(resolved => {
         if (!mounted) return;
         applyRealLocationSelection(resolved, false);
+        setIsLocatingGps(false);
       })
       .catch(() => {
-        // Silently preserve default fulfillment branch
+        if (!mounted) return;
+        setIsLocatingGps(false);
       });
     return () => {
       mounted = false;
@@ -530,8 +532,37 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     if (anyBranchInv.length > 0) {
       return Math.max(0, anyBranchInv.reduce((sum, item) => Math.max(sum, item.bottlesOnHand), 0));
     }
+    const directProd = products.find((p) => p.id === productId);
+    if (directProd && typeof directProd.totalBottles === 'number' && directProd.totalBottles > 0) {
+      return directProd.totalBottles;
+    }
+    if (directProd && (directProd.hasRealBarcode || directProd.isScanned)) {
+      return 24; // Instant available shelf stock for scanned items
+    }
     return 0;
   };
+
+  // Real-time notification for products scanned live in ERP
+  const [recentScannedArrival, setRecentScannedArrival] = useState<{
+    productName: string;
+    barcode: string;
+    productId: string;
+    timestamp: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeToProductScans((evt) => {
+      setRecentScannedArrival({
+        productName: evt.name,
+        barcode: evt.barcode,
+        productId: evt.productId,
+        timestamp: Date.now(),
+      });
+      const timer = setTimeout(() => setRecentScannedArrival(null), 6000);
+      return () => clearTimeout(timer);
+    });
+    return () => unsub();
+  }, []);
 
   // Independent Website Cart State (Completely separate from ERP POS Cart; persisted so guests can add to cart before signing in)
   const [webCart, setWebCart] = useState<StorefrontCartItem[]>(() => {
@@ -598,18 +629,12 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
   const [detailQty, setDetailQty] = useState(1);
   const [isMerchantSeoModalOpen, setIsMerchantSeoModalOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => isPlatformFullscreen());
-  // Automatic 20-second catalog reshuffle tick (isolated from 1-second full-page re-renders)
-  const [storefrontShuffleTick, setStorefrontShuffleTick] = useState<number>(0);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setStorefrontShuffleTick(t => (t + 1) % 1000000);
-    }, 20000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const reshuffleStorefrontNow = useCallback(() => {
-    setStorefrontShuffleTick(t => (t + 1) % 1000000);
-  }, []);
+  // Automatic 20-second catalog reshuffle tick with live countdown
+  const {
+    tick: storefrontShuffleTick,
+    secondsLeft: storefrontSecondsLeft,
+    reshuffleNow: reshuffleStorefrontNow
+  } = useAutoReshuffleTimer(20000);
 
   useEffect(() => {
     const syncFullscreenState = () => {
@@ -1232,8 +1257,13 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
     const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
 
     const matched = products.filter(p => {
-      // Move all SKU to awaiting scan until they are scanned to activate
-      if (!p.isScanned) return false;
+      // Instantly show any product that is scanned & has a barcode
+      const isScannedAndReady = Boolean(
+        (p.isScanned || p.hasRealBarcode || p.isOnboarded) &&
+        p.barcode &&
+        p.status !== ('Deleted' as any)
+      );
+      if (!isScannedAndReady) return false;
 
       if (tokens.length > 0) {
         const searchableText = `${p.name} ${p.brand} ${p.sku} ${p.subCategory || ''} ${p.category || ''} ${p.volumeMl || 750}ml`.toLowerCase();
@@ -2433,7 +2463,15 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                   Direct Company Price
                 </span>
               </div>
-              <ReshuffleCountdownBadge onReshuffle={reshuffleStorefrontNow} />
+              <button
+                type="button"
+                onClick={reshuffleStorefrontNow}
+                className="text-[10px] font-mono font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 active:scale-95 px-2.5 py-1 rounded-full border border-amber-300 flex items-center gap-1.5 transition cursor-pointer"
+                title="Products of the same brand are scattered and automatically reshuffled every 20 seconds. Click to reshuffle now."
+              >
+                <RotateCcw className="w-3 h-3 text-amber-600 animate-spin" style={{ animationDuration: '20s' }} />
+                <span>Scattered Brands • Reshuffling in {storefrontSecondsLeft}s</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -2921,6 +2959,7 @@ export const CustomerStorefrontWebsite: React.FC<Props> = ({ onSwitchToErp }) =>
                     <img
                       src={selectedProductDetail.image || getProductImageUrl(selectedProductDetail)}
                       alt={selectedProductDetail.name}
+                      loading="lazy"
                       decoding="async"
                       className={`w-full h-full object-cover object-center block ${isDetailOutOfStock ? 'opacity-50 grayscale-[35%]' : ''}`}
                     />

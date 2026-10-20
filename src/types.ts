@@ -45,6 +45,8 @@ export interface StaffMember {
   createdByRole: string;
   lastLoginAt?: string;
   lastDevice?: string;
+  isOnline?: boolean;
+  lastSeen?: string;
   createdAt: string;
 
   // Compensation & Payroll attributes set by HR/Admin
@@ -347,7 +349,7 @@ export interface InventoryItem {
 
 export interface Partner {
   id: string;
-  partnerType: 'Supplier' | 'Retailer' | 'Logistics';
+  partnerType: 'Supplier' | 'Retailer' | 'Logistics' | 'Direct Clients' | 'Individual' | 'Business';
   code: string;
   companyName: string;
   contactPerson: string;
@@ -538,6 +540,7 @@ export type ERPModuleId =
   | 'documents_credit'
   | 'compliance'
   | 'hr_rbac'
+  | 'payroll'
   | 'audit_security'
   | 'customer_portal'
   | 'outlets_restaurants';

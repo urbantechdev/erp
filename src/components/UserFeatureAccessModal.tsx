@@ -41,23 +41,15 @@ export const UserFeatureAccessModal: React.FC<UserFeatureAccessModalProps> = ({
   customRoleMatrix,
   onSavePermissions,
 }) => {
-  const [stripped, setStripped] = useState<string[]>(() => staff?.strippedFeatures || []);
-  const [granted, setGranted] = useState<string[]>(() => staff?.grantedFeatures || []);
-  const [note, setNote] = useState<string>(() => staff?.customPermissionsNote || '');
+  if (!isOpen || !staff) return null;
+
+  const [stripped, setStripped] = useState<string[]>(() => staff.strippedFeatures || []);
+  const [granted, setGranted] = useState<string[]>(() => staff.grantedFeatures || []);
+  const [note, setNote] = useState<string>(() => staff.customPermissionsNote || '');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  React.useEffect(() => {
-    if (staff) {
-      setStripped(staff.strippedFeatures || []);
-      setGranted(staff.grantedFeatures || []);
-      setNote(staff.customPermissionsNote || '');
-    }
-  }, [staff]);
-
-  if (!isOpen || !staff) return null;
 
   // Baseline modules from user's role
   const roleBaseModules =

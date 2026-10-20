@@ -233,7 +233,10 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
       if (outletTypeFilter === 'store') return u.unitType === 'store' || u.unitType === 'retail_store';
       if (outletTypeFilter === 'shop') return u.unitType === 'shop' || u.unitType === 'merchant_shop';
       if (outletTypeFilter === 'warehouse') return u.unitType === 'warehouse';
-      if (outletTypeFilter === 'hospitality') return u.unitType === 'restaurant_club' || u.unitType === 'bar_lounge';
+      if (outletTypeFilter === 'hospitality') {
+        return (u.unitType === 'restaurant_club' || u.unitType === 'bar_lounge') &&
+               !(u.unitType === 'shop' || u.unitType === 'merchant_shop' || u.name?.toLowerCase().includes('retail shop'));
+      }
       return true;
     });
   }, [businessUnits, selectedBranchFilter, outletTypeFilter]);

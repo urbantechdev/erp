@@ -153,6 +153,11 @@ export const INITIAL_BUSINESS_UNITS: BusinessUnit[] = [];
 export const INITIAL_RESTAURANT_INVENTORY: RestaurantInventoryItem[] = [];
 
 export async function ensureOperationalFoundationSeeded(): Promise<void> {
+  if (typeof window !== 'undefined') {
+    const alreadySeeded = sessionStorage.getItem('erp_foundation_seeded_session');
+    if (alreadySeeded) return;
+    sessionStorage.setItem('erp_foundation_seeded_session', 'true');
+  }
   try {
     // 1. Purge known legacy mock partner IDs
     for (const pid of LEGACY_MOCK_PARTNER_IDS) {
@@ -164,7 +169,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // 3. Scan partners collection for any records with legacy mock placeholder data
-    const partnersSnapshot = await getDocs(query(collection(db, 'partners'), where('createdAt', '>=', ''))).catch(() => null);
+    const partnersSnapshot = await getDocs(collection(db, 'partners')).catch(() => null);
     if (partnersSnapshot && !partnersSnapshot.empty) {
       for (const partnerDoc of partnersSnapshot.docs) {
         const data = partnerDoc.data();
@@ -181,7 +186,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // 4. Purge dummy branches and retain only genuine branches, with HQ as MAIN branch
-    const branchesSnapshot = await getDocs(query(collection(db, 'branches'), where('createdAt', '>=', ''))).catch(() => null);
+    const branchesSnapshot = await getDocs(collection(db, 'branches')).catch(() => null);
     let hqFoundDocId: string | null = null;
     const deletedBranchIds: string[] = [];
 
@@ -220,7 +225,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // Ensure authentic Nairobi GEO location zones are seeded for branch creation and price control
-    const regionsSnapshot = await getDocs(query(collection(db, 'geo_regions'), where('createdAt', '>=', ''))).catch(() => null);
+    const regionsSnapshot = await getDocs(collection(db, 'geo_regions')).catch(() => null);
     const existingRegionIds = new Set(regionsSnapshot?.docs.map((d) => d.id) || []);
     for (const nrbReg of NAIROBI_GEO_REGIONS) {
       if (!existingRegionIds.has(nrbReg.id)) {
@@ -251,7 +256,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
 
     // 5. Reassign any staff whose branch was deleted to HQ - Main Branch
     if (deletedBranchIds.length > 0) {
-      const staffSnapshot = await getDocs(query(collection(db, 'staff'), where('createdAt', '>=', ''))).catch(() => null);
+      const staffSnapshot = await getDocs(collection(db, 'staff')).catch(() => null);
       if (staffSnapshot && !staffSnapshot.empty) {
         for (const staffDoc of staffSnapshot.docs) {
           const sdata = staffDoc.data();
@@ -266,7 +271,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // 6. Ensure authorized Admin records exist (zamodasports@gmail.com, feminiholdings@gmail.com, and veronicanjus@gmail.com)
-    const allStaffSnap = await getDocs(query(collection(db, 'staff'), where('createdAt', '>=', ''))).catch(() => null);
+    const allStaffSnap = await getDocs(collection(db, 'staff')).catch(() => null);
     const authorizedAdminEmails = ['zamodasports@gmail.com', 'feminiholdings@gmail.com', 'veronicanjus@gmail.com'];
     const foundAdminEmails = new Set<string>();
 
@@ -334,7 +339,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // 7. Transparently encrypt all legacy plaintext staff PINs in Firestore
-    const allStaffForPinMigration = await getDocs(query(collection(db, 'staff'), where('createdAt', '>=', ''))).catch(() => null);
+    const allStaffForPinMigration = await getDocs(collection(db, 'staff')).catch(() => null);
     if (allStaffForPinMigration && !allStaffForPinMigration.empty) {
       for (const sDoc of allStaffForPinMigration.docs) {
         const sdata = sDoc.data();
@@ -346,7 +351,7 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
     }
 
     // 8. Ensure initial authentic sales transactions exist for Today, This Week, This Month, and This Year
-    const txSnapshot = await getDocs(query(collection(db, 'transactions'), where('createdAt', '>=', ''))).catch(() => null);
+    const txSnapshot = await getDocs(collection(db, 'transactions')).catch(() => null);
     if (!txSnapshot || txSnapshot.empty) {
       const now = new Date();
       // Today (2h ago & 5h ago)
@@ -568,14 +573,16 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
         }
       }
 
-      // Scan and clean any mock hospitality units
+      // Scan and clean any mock hospitality units and OUT-CEL-002
       const buSnap = await getDocs(collection(db, 'business_units')).catch(() => null);
       if (buSnap && !buSnap.empty) {
         for (const d of buSnap.docs) {
           const data = d.data();
           if (
             d.id === 'out-hq-rest-01' ||
-            data.name?.includes('Sovereign')
+            d.id === 'OUT-CEL-002' ||
+            data.name?.includes('Sovereign') ||
+            data.name?.includes('Westlands Cellar')
           ) {
             await deleteDoc(doc(db, 'business_units', d.id)).catch(() => {});
           }

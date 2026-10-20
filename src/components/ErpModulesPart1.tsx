@@ -562,6 +562,8 @@ export const OverviewModule: React.FC<{
             currentUser={currentUser}
             onPreviewDoc={onPreviewDoc}
             onNavigateToPos={(mode) => onNavigateModule?.(mode === 'retail' ? 'retail_pos' : 'sales_pos')}
+            branches={branches}
+            staff={staffList}
           />
         </div>
       </div>
@@ -2623,6 +2625,21 @@ export const InventoryModule: React.FC<{
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
+              {filteredProducts.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="py-16 text-center text-slate-500 font-montserrat">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="p-4 bg-amber-50 text-amber-700 rounded-2xl border border-amber-200 shadow-xs">
+                        <Package className="w-8 h-8 text-amber-600" />
+                      </div>
+                      <div className="text-base font-bold text-slate-800">Inventory Database is Wiped & Empty</div>
+                      <div className="text-xs text-slate-500 max-w-md text-center">
+                        Awaiting new inventory to be uploaded. Click "Bulk Import CSV" or "Onboard Products" to upload your new catalog.
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
               {filteredProducts.slice(0, tableLimit).map((p) => {
                 const packSize = p.packSize || p.bottlesPerCase || 12;
                 const abv = p.alcoholPercentage ?? p.abv ?? 40;

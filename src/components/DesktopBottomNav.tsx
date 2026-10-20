@@ -41,7 +41,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Key,
-  Keyboard,
 } from 'lucide-react';
 import { ERPModuleId, StaffMember, Branch, Product, TransactionDoc } from '../types';
 import { formatKes, exportToCSV } from '../erpUtils';
@@ -62,8 +61,6 @@ interface DesktopBottomNavProps {
   onQuickPrintLastDoc?: () => void;
   onOpenPayslip?: () => void;
   onTriggerToast?: (type: 'success' | 'error', title: string, message: string) => void;
-  onToggleKeyboard?: () => void;
-  isKeyboardOpen?: boolean;
 }
 
 const MODULE_NAV_DEFINITIONS: Record<
@@ -105,8 +102,6 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
   onQuickPrintLastDoc,
   onOpenPayslip,
   onTriggerToast,
-  onToggleKeyboard,
-  isKeyboardOpen,
 }) => {
   const [isMobileModulesSheetOpen, setIsMobileModulesSheetOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -114,15 +109,6 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
   const [isQuickSkuSearchOpen, setIsQuickSkuSearchOpen] = useState(false);
   const [skuSearchQuery, setSkuSearchQuery] = useState('');
   const [isDrawerFloatOpen, setIsDrawerFloatOpen] = useState(false);
-
-  const handleToggleKeyboard = () => {
-    playPosBeep('click');
-    if (onToggleKeyboard) {
-      onToggleKeyboard();
-    } else {
-      window.dispatchEvent(new CustomEvent('toggle-virtual-keyboard'));
-    }
-  };
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -193,6 +179,39 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
 
     return { gross, cash, mpesa, card, orders };
   }, [todayTransactions]);
+
+  // Filter today's transactions specifically for this logged-in user
+  const userTodayTransactions = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const userName = (currentUser.name || '').toLowerCase().trim();
+    const userEmail = (currentUser.email || '').toLowerCase().trim();
+    const userId = (currentUser.id || '').toLowerCase().trim();
+
+    return transactions.filter((tx) => {
+      if (!tx.createdAt?.startsWith(todayStr)) return false;
+      const createdBy = (tx.createdBy || '').toLowerCase().trim();
+      const affCode = (tx.affiliateCode || '').toLowerCase().trim();
+      return (
+        (userName && createdBy === userName) ||
+        (userEmail && createdBy === userEmail) ||
+        (userId && (createdBy === userId || affCode === userId || affCode.includes(userId)))
+      );
+    });
+  }, [transactions, currentUser]);
+
+  const userTodayMetrics = useMemo(() => {
+    let gross = 0;
+    let orders = 0;
+
+    userTodayTransactions.forEach((tx) => {
+      if (tx.docType === 'Receipt' || tx.docType === 'Invoice' || tx.docType === 'Online Order') {
+        gross += tx.totalAmount || 0;
+        orders++;
+      }
+    });
+
+    return { gross, orders };
+  }, [userTodayTransactions]);
 
   // Quick SKU search results
   const filteredSkus = useMemo(() => {
@@ -401,31 +420,33 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
         <div className="w-full max-w-[100rem] mx-auto flex items-center justify-between gap-4 relative z-20">
           {/* Left: Role Operational Badge & Live Branch Status */}
           <div className="flex items-center gap-3 shrink-0">
-            <div className="px-3.5 py-2 rounded-2xl bg-[#0A006E] text-white border-2 border-[#FFDE00] shadow-sm flex items-center gap-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+            {/* Logged-In User Total Sale Today */}
+            <div
+              title={`Total sales entered today by ${currentUser.name}`}
+              className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0A006E] text-white border-2 border-[#FFDE00] text-xs font-montserrat shadow-xs"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-[#FFDE00] shrink-0" />
+              <span>
+                My Sales Today:{' '}
+                <strong className="font-mono-tabular font-black text-[#FFDE00]">
+                  {formatKes(userTodayMetrics.gross)}
+                </strong>{' '}
+                <span className="text-[10px] text-white/80 font-mono">
+                  ({userTodayMetrics.orders})
+                </span>
               </span>
-              <div>
-                <div className="text-[10px] font-montserrat font-black uppercase tracking-wider text-[#FFDE00] leading-none">
-                  {userRole} Command Dock
-                </div>
-                <div className="text-xs font-montserrat font-bold text-white leading-tight truncate max-w-[160px] lg:max-w-[200px]">
-                  {activeBranch?.name || currentUser.branchName || 'Headquarters'}
-                </div>
-              </div>
             </div>
 
-            {/* Quick Live Figures Chip */}
+            {/* Quick Live Figures Chip (Total Branch / Daily Register) */}
             <button
               type="button"
               onClick={() => setIsDrawerFloatOpen(true)}
-              title="Click to view daily register totals"
-              className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-montserrat transition cursor-pointer shadow-2xs"
+              title="Click to view total daily register totals"
+              className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-montserrat transition cursor-pointer shadow-2xs"
             >
               <Coins className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span>
-                Today: <strong className="font-mono-tabular font-bold text-slate-900">{formatKes(todayMetrics.gross)}</strong> ({todayMetrics.orders} orders)
+                Branch Today: <strong className="font-mono-tabular font-bold text-slate-900">{formatKes(todayMetrics.gross)}</strong> ({todayMetrics.orders})
               </span>
             </button>
           </div>
@@ -652,41 +673,10 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
               <Search className="w-4 h-4 text-blue-700 shrink-0" />
               <span className="whitespace-nowrap">Price Check</span>
             </button>
-
-            {/* Universal Keyboard Button on Desktop Bottom Nav */}
-            <button
-              type="button"
-              onClick={handleToggleKeyboard}
-              title="Open Virtual POS Keypad with Product Autofill"
-              aria-label="Virtual Keypad"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-montserrat font-black transition cursor-pointer shadow-2xs ${
-                isKeyboardOpen
-                  ? 'bg-[#0A006E] text-[#FFDE00] border-[#0A006E] ring-2 ring-[#FFDE00]'
-                  : 'bg-amber-50 hover:bg-amber-100 text-[#0A006E] border-amber-300'
-              }`}
-            >
-              <Keyboard className="w-4 h-4 text-[#0A006E] shrink-0" />
-              <span className="whitespace-nowrap">Keypad</span>
-            </button>
           </div>
 
           {/* Right: Pinned System Utilities */}
           <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-slate-200">
-            {/* Pinned Keyboard Icon Button on Desktop Bottom Nav */}
-            <button
-              type="button"
-              onClick={handleToggleKeyboard}
-              title="Tap to toggle Virtual Keypad"
-              aria-label="Toggle Virtual Keyboard"
-              className={`w-9 h-9 flex items-center justify-center rounded-xl transition cursor-pointer border shadow-2xs group ${
-                isKeyboardOpen
-                  ? 'bg-[#0A006E] border-[#0A006E] text-[#FFDE00] ring-2 ring-[#FFDE00]'
-                  : 'bg-amber-50 hover:bg-amber-100 text-[#0A006E] border-amber-300'
-              }`}
-            >
-              <Keyboard className="w-4 h-4 text-[#0A006E] group-hover:scale-110 transition-transform" />
-            </button>
-
             {/* Customer Online Store Portal Launcher */}
             {onOpenCustomerPortal && (
               <button

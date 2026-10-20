@@ -196,7 +196,7 @@ service cloud.firestore {
     match /products/{productId} {
       allow get, list: if true;
       allow create, update: if isValidId(productId) && isValidProduct(incoming());
-      allow delete: if request.auth != null;
+      allow delete: if isValidId(productId);
     }
 
     match /partners/{partnerId} {
@@ -244,6 +244,11 @@ service cloud.firestore {
     }
 
     match /active_pos_carts/{staffId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    match /branch_product_activations/{activationId} {
       allow get, list: if true;
       allow create, update, delete: if true;
     }

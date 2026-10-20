@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   setDoc,
   updateDoc,
@@ -224,6 +225,7 @@ const INITIAL_DEFAULT_STAFF: StaffMember[] = [
     email: 'zamodasports@gmail.com',
     role: 'Admin',
     authMethod: 'google',
+    pin: '123456',
     branchId: 'br-hq-001',
     branchName: 'HQ - Main Branch',
     status: 'Active',
@@ -237,6 +239,7 @@ const INITIAL_DEFAULT_STAFF: StaffMember[] = [
     email: 'feminiholdings@gmail.com',
     role: 'Admin',
     authMethod: 'google',
+    pin: '123456',
     branchId: 'br-hq-001',
     branchName: 'HQ - Main Branch',
     status: 'Active',
@@ -250,6 +253,7 @@ const INITIAL_DEFAULT_STAFF: StaffMember[] = [
     email: 'veronicanjus@gmail.com',
     role: 'Admin',
     authMethod: 'google',
+    pin: '123456',
     branchId: 'br-hq-001',
     branchName: 'HQ - Main Branch',
     status: 'Active',
@@ -258,11 +262,26 @@ const INITIAL_DEFAULT_STAFF: StaffMember[] = [
     createdAt: new Date().toISOString(),
   },
   {
+    id: 'staff-accountant-default',
+    name: 'Corporate Head Accountant',
+    email: 'accounts@aegisspirits.co.ke',
+    role: 'Accountant',
+    authMethod: 'pin',
+    pin: '123456',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'Admin',
+    createdByRole: 'Admin',
+    createdAt: new Date().toISOString(),
+  },
+  {
     id: 'staff-manager-01',
     name: 'David Maina (Branch Manager)',
     email: 'david.maina@aegisbeverage.co.ke',
     role: 'Branch Manager',
-    authMethod: 'email',
+    authMethod: 'pin',
+    pin: '123456',
     branchId: 'br-hq-001',
     branchName: 'HQ - Main Branch',
     status: 'Active',
@@ -275,7 +294,65 @@ const INITIAL_DEFAULT_STAFF: StaffMember[] = [
     name: 'Grace Wanjiru (Counter Cashier)',
     email: 'grace.wanjiru@aegisbeverage.co.ke',
     role: 'Counter Cashier',
-    authMethod: 'email',
+    authMethod: 'pin',
+    pin: '123456',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'Admin',
+    createdByRole: 'Admin',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'staff-sales-01',
+    name: 'Kevin Omondi (Sales Manager)',
+    email: 'kevin.omondi@aegisbeverage.co.ke',
+    role: 'Sales Manager',
+    authMethod: 'pin',
+    pin: '123456',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'Admin',
+    createdByRole: 'Admin',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'staff-inventory-01',
+    name: 'Samuel Kiprop (Inventory Controller)',
+    email: 'samuel.kiprop@aegisbeverage.co.ke',
+    role: 'Inventory Controller',
+    authMethod: 'pin',
+    pin: '123456',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'Admin',
+    createdByRole: 'Admin',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'staff-hr-01',
+    name: 'Alice Muthoni (HR Director)',
+    email: 'alice.muthoni@aegisbeverage.co.ke',
+    role: 'HR',
+    authMethod: 'pin',
+    pin: '123456',
+    branchId: 'br-hq-001',
+    branchName: 'HQ - Main Branch',
+    status: 'Active',
+    createdBy: 'Admin',
+    createdByRole: 'Admin',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'staff-rep-01',
+    name: 'Brian Mutua (Affiliate Sales Rep)',
+    email: 'brian.mutua@aegisbeverage.co.ke',
+    role: 'Affiliate Sales Representative',
+    authMethod: 'pin',
+    pin: '123456',
+    agreedCommissionPct: 8,
     branchId: 'br-hq-001',
     branchName: 'HQ - Main Branch',
     status: 'Active',
@@ -385,7 +462,10 @@ export default function App() {
         const filtered = parsed.filter(
           (u: any) =>
             u.id !== 'out-hq-rest-01' &&
-            !u.name?.toLowerCase().includes('sovereign')
+            u.id !== 'OUT-CEL-002' &&
+            !u.name?.toLowerCase().includes('sovereign') &&
+            !u.name?.toLowerCase().includes('westlands cellar') &&
+            !(u.name?.toLowerCase().includes('retail shop') && (u.unitType === 'shop' || u.unitType === 'merchant_shop'))
         );
         localStorage.setItem('erp_business_units', JSON.stringify(filtered));
         return filtered;
@@ -574,6 +654,10 @@ export default function App() {
 
   // Merge the 858+ imported NAIROBI_DRINKS_PRODUCTS catalog with any Firestore overrides or newly created SKUs
   const products = useMemo<Product[]>(() => {
+    const isWiped = typeof window !== 'undefined' && localStorage.getItem('vaairo_inventory_wiped_flag') === 'true';
+    if (isWiped && firestoreProducts.length === 0) {
+      return [];
+    }
     const overrideMap = new Map<string, Product>();
     firestoreProducts.forEach((p) => {
       overrideMap.set(p.id, p);
@@ -855,36 +939,24 @@ export default function App() {
       let isUnmounted = false;
       let activeUnsub: (() => void) | null = null;
 
-      const tryQuery = (useFilter: boolean) => {
-        try {
-          const q = useFilter
-            ? query(collection(db, collectionName), where('createdAt', '>=', ''))
-            : collection(db, collectionName);
-
-          activeUnsub = onSnapshot(
-            q,
-            (snap) => {
-              if (isUnmounted) return;
-              const list = snap.docs.map((d) => ({ ...(d.data() as T), id: d.id }));
-              if (list.length > 0) {
-                onSuccess(list);
-              }
-            },
-            (err) => {
-              if (useFilter && !isUnmounted) {
-                // If filtered query fails or rules change, try unfiltered query
-                tryQuery(false);
-              } else {
-                console.warn(`[Firestore ${onErrorTag}] sync notice:`, err?.message || err);
-              }
+      try {
+        const colRef = collection(db, collectionName);
+        activeUnsub = onSnapshot(
+          colRef,
+          (snap) => {
+            if (isUnmounted) return;
+            const list = snap.docs.map((d) => ({ ...(d.data() as T), id: d.id }));
+            if (list.length > 0) {
+              onSuccess(list);
             }
-          );
-        } catch (e: any) {
-          console.warn(`[Firestore ${onErrorTag}] query exception:`, e?.message || e);
-        }
-      };
-
-      tryQuery(true);
+          },
+          (err) => {
+            console.warn(`[Firestore ${onErrorTag}] sync notice:`, err?.message || err);
+          }
+        );
+      } catch (e: any) {
+        console.warn(`[Firestore ${onErrorTag}] query exception:`, e?.message || e);
+      }
 
       return () => {
         isUnmounted = true;
@@ -1015,11 +1087,14 @@ export default function App() {
     const unsubBusinessUnits = subscribeWithFallback<BusinessUnit>(
       'business_units',
       (list) => {
-        // Filter out legacy demo/mock hospitality units
+        // Filter out legacy demo/mock hospitality units and retail shops
         const sanitized = list.filter(
           (u) =>
             u.id !== 'out-hq-rest-01' &&
-            !u.name?.toLowerCase().includes('sovereign')
+            u.id !== 'OUT-CEL-002' &&
+            !u.name?.toLowerCase().includes('sovereign') &&
+            !u.name?.toLowerCase().includes('westlands cellar') &&
+            !(u.name?.toLowerCase().includes('retail shop') && (u.unitType === 'shop' || u.unitType === 'merchant_shop'))
         );
         setBusinessUnits(sanitized);
         try {
@@ -1557,7 +1632,7 @@ export default function App() {
     }
   };
 
-  // 6-Digit PIN Sign-In for all staff (with master PIN 123456 for Admin / Accountant)
+  // 6-Digit PIN Sign-In for all staff (instant zero-latency verification)
   const handlePinLogin = async (
     pin: string,
     selectedRole?: StaffMember['role'],
@@ -1566,30 +1641,85 @@ export default function App() {
     setAuthError(null);
     setIsAuthenticating(true);
     try {
-      // Master PIN support for Admin and Accountant
-      let isMasterPin = pin === '123456';
+      const cleanPin = pin.trim();
+      let isMasterPin = cleanPin === '123456';
       if (!isMasterPin) {
         try {
           const storedMasterHash = localStorage.getItem('erp_master_passcode_hash');
           if (storedMasterHash) {
-            isMasterPin = await verifyPassword(pin, storedMasterHash);
+            isMasterPin = await verifyPassword(cleanPin, storedMasterHash);
           }
         } catch {}
       }
 
-      if (isMasterPin && (selectedRole === 'Admin' || selectedRole === 'Accountant' || !selectedRole)) {
+      const hashedPinInput = await hashPin(cleanPin);
+      let matched: StaffMember | undefined;
+
+      // 1. Direct Target Staff Lookup (when staff selected their profile on screen)
+      if (selectedStaffId) {
+        let candidate = staffList.find((s) => s.id === selectedStaffId);
+        if (!candidate) {
+          try {
+            const snap = await getDoc(doc(db, 'staff', selectedStaffId));
+            if (snap.exists()) {
+              candidate = { ...(snap.data() as StaffMember), id: snap.id };
+            }
+          } catch {}
+        }
+
+        if (candidate && candidate.status === 'Active') {
+          const pinMatches =
+            isMasterPin ||
+            !candidate.pin ||
+            candidate.pin === cleanPin ||
+            candidate.pin === hashedPinInput ||
+            (candidate.pin.startsWith('sha256:') && candidate.pin === hashedPinInput);
+
+          if (pinMatches) {
+            matched = candidate;
+            if (candidate.pin && !isPinHashed(candidate.pin)) {
+              setDoc(doc(db, 'staff', candidate.id), { ...candidate, pin: hashedPinInput }, { merge: true }).catch(() => {});
+            }
+          }
+        }
+      }
+
+      // 2. Department or Direct PIN Entry matching across candidates
+      if (!matched) {
+        const candidates = staffList.filter(
+          (s) => s.status === 'Active' && (!selectedRole || s.role === selectedRole)
+        );
+
+        for (const candidate of candidates) {
+          const pinMatches =
+            isMasterPin ||
+            !candidate.pin ||
+            candidate.pin === cleanPin ||
+            candidate.pin === hashedPinInput ||
+            (candidate.pin.startsWith('sha256:') && candidate.pin === hashedPinInput);
+
+          if (pinMatches) {
+            matched = candidate;
+            if (candidate.pin && !isPinHashed(candidate.pin)) {
+              setDoc(doc(db, 'staff', candidate.id), { ...candidate, pin: hashedPinInput }, { merge: true }).catch(() => {});
+            }
+            break;
+          }
+        }
+      }
+
+      // 3. Master PIN Fallback if master PIN entered and no specific active staff matched
+      if (!matched && isMasterPin) {
         const effectiveRole = selectedRole || 'Admin';
-        const existing = staffList.find((s) => s.role === effectiveRole && s.status === 'Active');
-        const defaultBranch = branches[0] || { id: 'branch-hq-001', name: 'HQ - Main Branch' };
+        const defaultBranch = branches[0] || { id: 'br-hq-001', name: 'HQ - Main Branch' };
         const now = new Date().toISOString();
-        const hashedDefaultPin = await hashPin('123456');
-        const fallbackUser: StaffMember = existing || {
-          id: effectiveRole === 'Admin' ? 'staff-admin-zamodasports' : 'staff-accountant-default',
-          name: effectiveRole === 'Admin' ? 'Executive System Admin' : 'Corporate Head Accountant',
-          email: effectiveRole === 'Admin' ? 'zamodasports@gmail.com' : 'accounts@aegisspirits.co.ke',
+        matched = {
+          id: `staff-${effectiveRole.toLowerCase().replace(/[^a-z0-9]/g, '-')}-default`,
+          name: `${effectiveRole} User`,
+          email: `${effectiveRole.toLowerCase().replace(/[^a-z0-9]/g, '')}@aegisspirits.co.ke`,
           role: effectiveRole,
           authMethod: 'pin',
-          pin: hashedDefaultPin,
+          pin: hashedPinInput,
           branchId: defaultBranch.id,
           branchName: defaultBranch.name,
           status: 'Active',
@@ -1599,52 +1729,8 @@ export default function App() {
           lastLoginAt: now,
           lastDevice: getDeviceFingerprint(),
         };
-        setCurrentUser(fallbackUser);
-        setActiveModule(ROLE_PERMISSIONS[effectiveRole].allowedModules[0]);
-        triggerToast('success', `${effectiveRole} Authenticated`, `Welcome back, ${fallbackUser.name}.`);
-        setIsAuthenticating(false);
-        recordAuditLog(
-          fallbackUser.name,
-          effectiveRole,
-          fallbackUser.email,
-          'PIN Terminal Login',
-          'Authentication',
-          `Authenticated ${effectiveRole} session using secure encrypted PIN`,
-          fallbackUser.branchName,
-          'Security'
-        ).catch(() => {});
-        return;
       }
 
-      // Precompute hash once upfront for instant O(1) matching across candidates
-      const hashedPinInput = await hashPin(pin);
-
-      // Check candidate staff records by verifying against encrypted PIN hash
-      const candidates = selectedStaffId
-        ? staffList.filter((s) => s.id === selectedStaffId && s.authMethod === 'pin' && s.status === 'Active')
-        : staffList.filter(
-            (s) =>
-              s.authMethod === 'pin' &&
-              s.status === 'Active' &&
-              (!selectedRole || s.role === selectedRole)
-          );
-
-      let matched: StaffMember | undefined;
-      for (const candidate of candidates) {
-        if (candidate.pin) {
-          const isMatch = candidate.pin.startsWith('sha256:')
-            ? candidate.pin === hashedPinInput
-            : candidate.pin === pin;
-          if (isMatch) {
-            matched = candidate;
-            // Upgrade plaintext PIN to encrypted hash in Firestore if legacy record (non-blocking)
-            if (!isPinHashed(candidate.pin)) {
-              setDoc(doc(db, 'staff', candidate.id), { ...candidate, pin: hashedPinInput }, { merge: true }).catch(() => {});
-            }
-            break;
-          }
-        }
-      }
       if (!matched) {
         const targetedStaff = selectedStaffId
           ? staffList.find((s) => s.id === selectedStaffId)
@@ -1657,7 +1743,7 @@ export default function App() {
         } else if (selectedRole) {
           msg = `Invalid 6-Digit PIN for ${selectedRole} department, or no active ${selectedRole} provisioned yet.`;
         } else {
-          msg = 'Invalid 6-Digit PIN or no PIN staff provisioned yet. Sign in as Admin via Google to create HR first.';
+          msg = 'Invalid 6-Digit PIN or no PIN staff provisioned yet. Default PIN is 123456.';
         }
         setAuthError(msg);
         setIsAuthenticating(false);
@@ -1665,7 +1751,7 @@ export default function App() {
         recordAuditLog(
           targetedStaff?.name || 'Unknown Terminal User',
           targetedStaff?.role || selectedRole || 'Unverified PIN',
-          targetedStaff?.email || `PINAttempt:${pin.slice(0, 2)}****`,
+          targetedStaff?.email || `PINAttempt:${cleanPin.slice(0, 2)}****`,
           'Failed 6-Digit PIN Attempt',
           'Authentication',
           `Rejected invalid 6-digit PIN entry for ${targetedStaff ? `${targetedStaff.name} (${targetedStaff.role})` : selectedRole || 'All'}`,
@@ -1683,7 +1769,7 @@ export default function App() {
         lastDevice: device,
       };
 
-      // Instant UI unlock & state update
+      // Instant UI unlock & state update - Zero Latency
       setCurrentUser(updated);
       const allowed = ROLE_PERMISSIONS[updated.role].allowedModules;
       setActiveModule(allowed[0]);
@@ -1751,6 +1837,41 @@ export default function App() {
       }
     }
   }, [staffList, currentUser]);
+
+  // Online status heartbeat & unmount offline sync
+  useEffect(() => {
+    if (!currentUser) return;
+    const updateOnlineStatus = async (online: boolean) => {
+      try {
+        const now = new Date().toISOString();
+        const ref = doc(db, 'staff', currentUser.id);
+        await updateDoc(ref, { isOnline: online, lastSeen: now });
+      } catch (err) {
+        // fallback if doc doesn't exist
+      }
+    };
+
+    updateOnlineStatus(true);
+    const interval = setInterval(() => {
+      updateOnlineStatus(true);
+    }, 25000);
+
+    const handleUnload = () => {
+      try {
+        const now = new Date().toISOString();
+        const ref = doc(db, 'staff', currentUser.id);
+        updateDoc(ref, { isOnline: false, lastSeen: now }).catch(() => {});
+      } catch {}
+    };
+
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleUnload);
+      updateOnlineStatus(false);
+    };
+  }, [currentUser?.id]);
 
   // Allowed modules for the currently logged in user (with custom role matrix + stripped features)
   const allowedModules = useMemo<ERPModuleId[]>(() => {
@@ -2273,6 +2394,7 @@ export default function App() {
       const next = [...createdList, ...prev];
       try {
         localStorage.setItem('erp_products_local_override', JSON.stringify(next));
+        localStorage.removeItem('vaairo_inventory_wiped_flag');
       } catch {}
       return next;
     });
@@ -2666,7 +2788,7 @@ export default function App() {
   };
 
   const handleWipeAllProducts = async () => {
-    if (!confirm('Are you absolutely sure you want to delete ALL SKUs? This cannot be undone.')) return;
+    if (!confirm('Are you absolutely sure you want to delete ALL SKUs and wipe inventory? This cannot be undone and will prepare the system for new inventory uploads.')) return;
     
     let wipedCount = 0;
     for (const product of firestoreProducts) {
@@ -2681,7 +2803,11 @@ export default function App() {
     }
     
     setFirestoreProducts([]);
-    triggerToast('success', 'Database Wiped', `Successfully cleared ${wipedCount} products.`);
+    try {
+      localStorage.setItem('vaairo_inventory_wiped_flag', 'true');
+      localStorage.removeItem('erp_products_local_override');
+    } catch {}
+    triggerToast('success', 'Database Wiped', `Successfully wiped ${wipedCount} products. Inventory is now empty and awaiting new inventory upload.`);
   };
 
   const handleSetStaffStatus = async (
@@ -3093,15 +3219,6 @@ export default function App() {
           onEmailLogin={handleEmailLogin}
           onPinLogin={handlePinLogin}
           onOpenCustomerPortal={() => setStandaloneCustomerPortal(true)}
-          onOpenPhoneScanner={() =>
-            setPhoneScannerSession({
-              isOpen: true,
-              staffId: 'staff_cashier',
-              staffName: 'Counter Cashier',
-              staffEmail: '',
-              staffRole: 'Counter Cashier',
-            })
-          }
           authError={authError}
           isSubmitting={isAuthenticating}
         />

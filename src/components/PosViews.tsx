@@ -54,7 +54,6 @@ import {
 import { ProductImage } from './ProductImage';
 import { AnimatedSuccessTickIcon } from './AnimatedFeedback';
 import { PhoneBarcodeScannerModal } from './PhoneBarcodeScannerModal';
-import { FloatingSalesKeyboardModal } from './FloatingSalesKeyboardModal';
 import { playPosBeep, triggerScanHaptic, isAudioMuted, toggleAudioMuted } from '../utils/audioBeep';
 import QRCode from 'qrcode';
 import {
@@ -194,66 +193,6 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const [docTypeToIssue, setDocTypeToIssue] = useState<DocType>(
     mode === 'retail' ? 'Receipt' : 'Invoice'
   );
-
-  // Virtual Keypad State for Wholesale & Retail POS
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-  const [keyboardInitialMode, setKeyboardInitialMode] = useState<'qwerty' | 'numeric'>('qwerty');
-  const [keyboardActiveFieldName, setKeyboardActiveFieldName] = useState('');
-  const [keyboardTargetElement, setKeyboardTargetElement] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
-
-  // Automatically and instantly open virtual keypad on tap/focus of any input or textarea
-  useEffect(() => {
-    const handleInputTapOrFocus = (e: Event) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        const inputEl = target as HTMLInputElement | HTMLTextAreaElement;
-
-        if (
-          inputEl.type === 'checkbox' ||
-          inputEl.type === 'radio' ||
-          inputEl.type === 'file' ||
-          inputEl.type === 'submit' ||
-          inputEl.type === 'button'
-        ) {
-          return;
-        }
-
-        if (target.closest('.floating-sales-keyboard-container')) {
-          return;
-        }
-
-        const isNum =
-          inputEl.type === 'number' ||
-          inputEl.type === 'tel' ||
-          inputEl.inputMode === 'numeric' ||
-          inputEl.inputMode === 'decimal' ||
-          inputEl.inputMode === 'tel' ||
-          /phone|kes|amount|cash|tender|price|qty|quantity|markup|pin/i.test(
-            inputEl.name || inputEl.placeholder || inputEl.id || ''
-          );
-
-        setKeyboardInitialMode(isNum ? 'numeric' : 'qwerty');
-        const fieldLabel =
-          inputEl.placeholder ||
-          inputEl.getAttribute('aria-label') ||
-          inputEl.name ||
-          (isNum ? 'Numeric / Amount' : 'Text Input');
-        setKeyboardActiveFieldName(fieldLabel);
-        setKeyboardTargetElement(inputEl);
-        setIsKeyboardOpen(true);
-      }
-    };
-
-    document.addEventListener('pointerdown', handleInputTapOrFocus, true);
-    document.addEventListener('focusin', handleInputTapOrFocus, true);
-
-    return () => {
-      document.removeEventListener('pointerdown', handleInputTapOrFocus, true);
-      document.removeEventListener('focusin', handleInputTapOrFocus, true);
-    };
-  }, []);
   const [affiliateCode, setAffiliateCode] = useState<string>(
     currentUser.role === 'Affiliate Sales Representative'
       ? `AFF-${currentUser.name.slice(0, 3).toUpperCase()}-01`
@@ -267,6 +206,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const [activatedProductIds, setActivatedProductIds] = useState<string[]>([]);
   const [scanQueue, setScanQueue] = useState<{ id: string; name: string; barcode: string; timestamp: number }[]>([]);
   const [isPhoneScannerOpen, setIsPhoneScannerOpen] = useState(false);
+  const [showAllCartItems, setShowAllCartItems] = useState(false);
 
   // Real-time listener for product activations
   useEffect(() => {
@@ -628,12 +568,11 @@ export const PosViews: React.FC<PosViewsProps> = ({
       }));
   }, [products]);
 
-  // Products displayed on Cashier POS: all products that are scanned and have a barcode
+  // Products displayed on Cashier POS: ONLY items explicitly scanned in this transaction session
   const activatedProducts = useMemo(() => {
     return products.filter((p) =>
       Boolean(
-        (p.hasRealBarcode || p.isScanned || p.isOnboarded || activatedProductIds.includes(p.id)) &&
-        p.barcode &&
+        activatedProductIds.includes(p.id) &&
         p.status !== ('Deleted' as any)
       )
     );
@@ -856,7 +795,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
             ? '[SHISHA TOPUP]'
             : '[CLUB AMENITY]';
         return {
-          productId: entry.product?.id || entry.topupItem?.id || `topup-entry-${entry.topupItem?.name || 'custom'}`,
+          productId: entry.product?.id || entry.topupItem?.id || `topup-${Date.now()}`,
           sku: `TOP-${(entry.topupItem?.category || 'gen').slice(0, 3).toUpperCase()}`,
           name: `${topupTag} ${entry.name || entry.topupItem?.name}`,
           unitMode: entry.unitMode,
@@ -1280,239 +1219,207 @@ export const PosViews: React.FC<PosViewsProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left 7 Columns: SKU Catalog & Geo-Tariff Cards */}
         <div className="lg:col-span-7 space-y-4">
-          {activatedProducts.length === 0 ? (
-            /* ZERO-STATE: POS DOES NOT SHOW ANY PRODUCTS UNTIL BARCODE IS SCANNED */
-            <div className="bg-white border-2 border-dashed border-[#0A006E]/30 rounded-3xl p-8 sm:p-10 text-center space-y-6 shadow-sm">
-              <div className="relative inline-block mx-auto">
-                <div className="w-20 h-20 rounded-3xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-lg">
-                  <Barcode className="w-10 h-10 stroke-[2.2]" />
-                </div>
-                <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
-                </span>
+          {/* Persistent Scan-to-Activate Box & Guidance with Scanned Items inside */}
+          <div className="bg-white border-2 border-dashed border-[#0A006E]/30 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-sm">
+            <div className="relative inline-block mx-auto">
+              <div className="w-16 h-16 rounded-3xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-lg">
+                <Barcode className="w-8 h-8 stroke-[2.2]" />
               </div>
-
-              <div className="max-w-md mx-auto space-y-2">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-montserrat font-black bg-[#FFDE00] text-[#0A006E]">
-                  <ScanLine className="w-3.5 h-3.5" />
-                  Barcode Scan-To-Activate POS Mode
-                </div>
-                <h3 className="font-montserrat font-black text-xl text-[#0A006E]">
-                  No Products Displayed Yet
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                  To eliminate mistakes and ensure 100% stock fidelity, products remain hidden until a real physical bottle barcode is scanned to activate them.
-                </p>
-              </div>
-
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl max-w-lg mx-auto text-left space-y-2.5">
-                <div className="text-xs font-montserrat font-bold text-slate-800 flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-[#0A006E]" />
-                  Retail Checkout Workflow:
-                </div>
-                <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
-                  <li>Scan a bottle's real barcode using your desktop laser gun, Bluetooth scanner, or phone camera.</li>
-                  <li>Once scanned, the matching item is immediately activated and displayed on this shelf and added to cart.</li>
-                  <li>All fake mock barcodes have been removed. Real barcodes are registered by the Inventory Manager.</li>
-                </ul>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPhonePairModalOpen(true)}
-                  className="px-5 py-3 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] border-2 border-[#FFDE00] rounded-2xl font-montserrat font-black text-xs flex items-center gap-2 cursor-pointer shadow-md transition hover:scale-105"
-                >
-                  <Smartphone className="w-4 h-4 text-[#FFDE00]" />
-                  Scan with Phone (Instant Desktop Link)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsPhoneScannerOpen(true)}
-                  className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-montserrat font-black text-xs flex items-center gap-2 cursor-pointer shadow-md transition hover:scale-105"
-                >
-                  <Camera className="w-4 h-4 text-[#FFDE00]" />
-                  Open Camera Scanner
-                </button>
-                <button
-                  type="button"
-                  onClick={() => barcodeInputRef.current?.focus()}
-                  className="px-5 py-3 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-montserrat font-black text-xs flex items-center gap-2 cursor-pointer shadow-md transition hover:scale-105"
-                >
-                  <Barcode className="w-4 h-4 text-[#0A006E]" />
-                  Focus Desktop Laser Gun
-                </button>
-              </div>
+              <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
+              </span>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Active Items Header Bar */}
-              <div className="bg-[#0A006E] text-white p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-md">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="font-montserrat font-black text-xs text-[#FFDE00]">
-                    Activated Shelf ({activatedProducts.length} Item{activatedProducts.length === 1 ? '' : 's'} Active in this Checkout)
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
+
+            <div className="max-w-md mx-auto space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-montserrat font-black bg-[#FFDE00] text-[#0A006E]">
+                <ScanLine className="w-3.5 h-3.5" />
+                Barcode Scan-To-Activate POS Mode
+              </div>
+              <h3 className="font-montserrat font-black text-lg text-[#0A006E]">
+                {activatedProducts.length === 0 ? 'No Products Displayed Yet' : `Active Shelf (${activatedProducts.length} Scanned Item${activatedProducts.length === 1 ? '' : 's'})`}
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                To eliminate mistakes and ensure 100% stock fidelity, products remain hidden until a real physical bottle barcode is scanned to activate them.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsPhonePairModalOpen(true)}
+                className="px-4 py-2.5 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] border-2 border-[#FFDE00] rounded-2xl font-montserrat font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition hover:scale-105"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-[#FFDE00]" />
+                Scan with Phone
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPhoneScannerOpen(true)}
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-montserrat font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition hover:scale-105"
+              >
+                <Camera className="w-3.5 h-3.5 text-[#FFDE00]" />
+                Camera Scanner
+              </button>
+              <button
+                type="button"
+                onClick={() => barcodeInputRef.current?.focus()}
+                className="px-4 py-2.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-montserrat font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition hover:scale-105"
+              >
+                <Barcode className="w-3.5 h-3.5 text-[#0A006E]" />
+                Focus Laser Gun
+              </button>
+              {activatedProducts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivatedProductIds([]);
+                    setCart([]);
+                  }}
+                  className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-montserrat font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition"
+                >
+                  Reset Shelf
+                </button>
+              )}
+            </div>
+
+            {/* Scanned/Activated Products Displayed INSIDE the same box */}
+            {activatedProducts.length > 0 && (
+              <div className="pt-5 border-t border-slate-200 text-left space-y-4">
+                <div className="flex items-center justify-between text-xs font-montserrat font-bold text-[#0A006E]">
+                  <span>Scanned &amp; Activated Items ({activatedProducts.length})</span>
                   <button
                     type="button"
                     onClick={() => setIsPhoneScannerOpen(true)}
-                    className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-bold flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-[#0A006E] hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    <Camera className="w-3 h-3" />
-                    Scan Next Bottle
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActivatedProductIds([]);
-                      setCart([]);
-                    }}
-                    className="px-2.5 py-1 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-[11px] font-montserrat font-bold cursor-pointer"
-                  >
-                    Reset Shelf
+                    <Camera className="w-3.5 h-3.5" /> Scan Next Bottle
                   </button>
                 </div>
-              </div>
 
-              {/* Search & Categories within Activated Items */}
-              <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row gap-2.5">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setVisibleLimit(36);
-                      }}
-                      placeholder={`Filter among ${activatedProducts.length} activated items by name, SKU, or barcode...`}
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0A006E]"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shrink-0">
-                    {(['ALL', 'IPS', 'LPS'] as const).map((sc) => (
-                      <button
-                        key={sc}
-                        type="button"
-                        onClick={() => {
-                          setStockCategoryFilter(sc);
+                {/* Search & Categories within Activated Items */}
+                <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
                           setVisibleLimit(36);
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-montserrat font-black transition-colors cursor-pointer ${
-                          stockCategoryFilter === sc
-                            ? 'bg-[#0A006E] text-[#FFDE00]'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        {sc === 'ALL' ? `All (${activatedProducts.length})` : sc}
-                      </button>
-                    ))}
+                        placeholder={`Filter among ${activatedProducts.length} activated items...`}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0A006E]"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shrink-0">
+                      {(['ALL', 'IPS', 'LPS'] as const).map((sc) => (
+                        <button
+                          key={sc}
+                          type="button"
+                          onClick={() => {
+                            setStockCategoryFilter(sc);
+                            setVisibleLimit(36);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-montserrat font-black transition-colors cursor-pointer ${
+                            stockCategoryFilter === sc
+                              ? 'bg-[#0A006E] text-[#FFDE00]'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {sc === 'ALL' ? `All (${activatedProducts.length})` : sc}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {displayedProducts.map((product) => {
+                    const packSize = product.packSize || product.bottlesPerCase || 12;
+                    const abv = product.alcoholPercentage ?? product.abv ?? 40;
+                    const geoPrice = calculateGeoPrice(
+                      product,
+                      activeRegion,
+                      mode === 'wholesale' ? 'wholesale' : 'retail'
+                    );
+                    const branchStock = activeBranch
+                      ? getBranchBottleStock(product, activeBranch.id)
+                      : product.totalBottles ?? 0;
+
+                    return (
+                      <div
+                        key={product.id}
+                        className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-3.5 flex flex-col justify-between hover:border-[#0A006E] transition-all"
+                      >
+                        <div className="flex items-start gap-3">
+                          <ProductImage
+                            product={{
+                              ...product,
+                              category: product.category === 'LPS' ? 'LPS' : 'IPS',
+                            }}
+                            size="sm"
+                            showVolumeBadge={true}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono-tabular">
+                              <span className="font-bold text-[#0A006E] truncate">{product.sku}</span>
+                              <span className="font-bold text-[#1E9E60] shrink-0">
+                                {product.category} · {product.subCategory || 'Spirit'}
+                              </span>
+                            </div>
+                            <h3 className="text-xs font-montserrat font-bold text-[#0A006E] mt-0.5 leading-snug">
+                              {product.name}
+                            </h3>
+                            <div className="text-[10px] text-slate-600 mt-0.5">
+                              {product.countryOfOrigin || product.originCountry} · {abv}% ABV · {packSize}/cs
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded text-[9px] font-montserrat font-black uppercase flex items-center gap-0.5">
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                                Scanned
+                              </span>
+                              {product.barcode && (
+                                <span className="px-1.5 py-0.5 bg-slate-200/80 text-slate-800 border border-slate-300 rounded text-[9px] font-mono-tabular font-bold">
+                                  {product.barcode}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex items-center justify-between gap-2">
+                          <div className="font-mono-tabular">
+                            <div className="text-[9px] text-slate-500">
+                              {mode === 'wholesale' ? 'Case / Btl' : 'Bottle Price'}
+                            </div>
+                            <div className="text-xs font-montserrat font-black text-[#0A006E]">
+                              {mode === 'wholesale'
+                                ? `${formatKes(geoPrice.casePrice)}`
+                                : `${formatKes(geoPrice.unitBottlePrice)}`}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAddToCart(product)}
+                            className="min-h-[36px] px-3 py-1.5 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-xs"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-[#FFDE00]" />
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-
-              {/* Product Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {displayedProducts.map((product) => {
-              const packSize = product.packSize || product.bottlesPerCase || 12;
-              const abv = product.alcoholPercentage ?? product.abv ?? 40;
-              const geoPrice = calculateGeoPrice(
-                product,
-                activeRegion,
-                mode === 'wholesale' ? 'wholesale' : 'retail'
-              );
-              const branchStock = activeBranch
-                ? getBranchBottleStock(product, activeBranch.id)
-                : product.totalBottles ?? 0;
-
-              return (
-                <div
-                  key={product.id}
-                  className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4 flex flex-col justify-between hover:border-[#0A006E] transition-all"
-                >
-                  <div className="flex items-start gap-3.5">
-                    <ProductImage
-                      product={{
-                        ...product,
-                        category: product.category === 'LPS' ? 'LPS' : 'IPS',
-                      }}
-                      size="md"
-                      showVolumeBadge={true}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono-tabular">
-                        <span className="font-bold text-[#0A006E] truncate">{product.sku}</span>
-                        <span className="font-bold text-[#1E9E60] shrink-0">
-                          {product.category} · {product.subCategory || 'Spirit'}
-                        </span>
-                      </div>
-                      <h3 className="text-sm font-montserrat font-bold text-[#0A006E] mt-1 leading-snug">
-                        {product.name}
-                      </h3>
-                      <div className="text-[11px] text-slate-600 mt-1">
-                        {product.countryOfOrigin || product.originCountry} · {abv}% ABV · {packSize}/cs
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded text-[9px] font-montserrat font-black uppercase flex items-center gap-1">
-                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                          Activated Item
-                        </span>
-                        {product.barcode && (
-                          <span className="px-1.5 py-0.5 bg-slate-200/80 text-slate-800 border border-slate-300 rounded text-[9px] font-mono-tabular font-bold">
-                            EAN: {product.barcode}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5 font-mono-tabular">
-                        Stock: <strong className="text-slate-900">{branchStock} btls</strong> ({Math.floor(branchStock / packSize)} cs)
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3.5 pt-3 border-t border-slate-200/80 flex items-center justify-between gap-2">
-                    <div className="font-mono-tabular">
-                      <div className="text-[10px] text-slate-500">
-                        {mode === 'wholesale' ? 'Geo Case / Btl' : 'Geo Retail Bottle'}
-                      </div>
-                      <div className="text-sm font-montserrat font-black text-[#0A006E]">
-                        {mode === 'wholesale'
-                          ? `${formatKes(geoPrice.casePrice)}/cs (${formatKes(geoPrice.unitBottlePrice)}/btl)`
-                          : `${formatKes(geoPrice.unitBottlePrice)} / btl`}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleAddToCart(product)}
-                      className="min-h-[40px] px-3.5 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-[#FFDE00]" />
-                      Add {mode === 'wholesale' ? 'Case' : 'Bottle'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            )}
           </div>
 
-          {filteredProducts.length > visibleLimit && (
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => setVisibleLimit((prev) => prev + 48)}
-                className="px-5 py-2.5 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black cursor-pointer"
-              >
-                Load More Products ({filteredProducts.length - visibleLimit} remaining)
-              </button>
-            </div>
-          )}
-            </div>
-          )}
+
         </div>
 
         {/* Right 5 Columns: Active Order Register & Document Generator with Permanently Floating Total */}
@@ -1739,52 +1646,63 @@ export const PosViews: React.FC<PosViewsProps> = ({
                   Select IPS/LPS liquor products on the left or scan with your phone to populate this register.
                 </div>
               ) : (
-                computedLineItems.map((item, idx) => (
-                  <div
-                    key={`${item.productId}-${item.unitMode}`}
-                    className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-2 shadow-2xs hover:border-[#0A006E] transition"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-mono-tabular text-[#0A006E] font-bold">
-                        {item.sku}
+                <>
+                  {(showAllCartItems ? computedLineItems : computedLineItems.slice(0, 2)).map((item, idx) => (
+                    <div
+                      key={`${item.productId}-${item.unitMode}`}
+                      className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-2 shadow-2xs hover:border-[#0A006E] transition"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-mono-tabular text-[#0A006E] font-bold">
+                          {item.sku}
+                        </div>
+                        <div className="text-xs font-montserrat font-bold text-slate-900 truncate">
+                          {item.name}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono-tabular mt-0.5">
+                          {formatKes(item.unitPrice)} / {item.unitMode} ({item.totalBottles} btls)
+                        </div>
                       </div>
-                      <div className="text-xs font-montserrat font-bold text-slate-900 truncate">
-                        {item.name}
-                      </div>
-                      <div className="text-[11px] text-slate-500 font-mono-tabular mt-0.5">
-                        {formatKes(item.unitPrice)} / {item.unitMode} ({item.totalBottles} btls)
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleUnitMode(idx)}
-                        className="px-2 py-1 rounded bg-[#F0F2F0] hover:bg-[#FFDE00] border border-slate-200 text-[10px] font-montserrat font-black text-[#0A006E] cursor-pointer"
-                        title="Switch between Bottle and Case"
-                      >
-                        {item.unitMode}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQty(idx, -1)}
-                        className="w-7 h-7 rounded bg-[#F0F2F0] hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="w-6 text-center font-mono-tabular text-xs font-bold">
-                        {item.quantityUnits}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQty(idx, 1)}
-                        className="w-7 h-7 rounded bg-[#F0F2F0] hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUnitMode(idx)}
+                          className="px-2 py-1 rounded bg-[#F0F2F0] hover:bg-[#FFDE00] border border-slate-200 text-[10px] font-montserrat font-black text-[#0A006E] cursor-pointer"
+                          title="Switch between Bottle and Case"
+                        >
+                          {item.unitMode}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(idx, -1)}
+                          className="w-7 h-7 rounded bg-[#F0F2F0] hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="w-6 text-center font-mono-tabular text-xs font-bold">
+                          {item.quantityUnits}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(idx, 1)}
+                          className="w-7 h-7 rounded bg-[#F0F2F0] hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                  {computedLineItems.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllCartItems(!showAllCartItems)}
+                      className="w-full text-center text-xs text-[#0A006E] font-montserrat font-bold py-2 underline cursor-pointer"
+                    >
+                      {showAllCartItems ? 'Collapse items' : `Show all ${computedLineItems.length} items`}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1991,22 +1909,6 @@ export const PosViews: React.FC<PosViewsProps> = ({
           onClose={() => setIsPhoneCompanionModalOpen(false)}
         />
       )}
-
-      {/* Floating Wide Virtual Keypad Modal with Product Autofill & Bold Letters */}
-      <FloatingSalesKeyboardModal
-        isOpen={isKeyboardOpen}
-        onClose={() => setIsKeyboardOpen(false)}
-        initialMode={keyboardInitialMode}
-        activeFieldName={keyboardActiveFieldName}
-        targetElement={keyboardTargetElement}
-        products={products}
-        onSelectProduct={(product) => {
-          handleAddToCart(product);
-        }}
-        onAutofillText={(text) => {
-          setSearchQuery(text);
-        }}
-      />
     </div>
   );
 };

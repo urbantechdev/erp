@@ -43,8 +43,6 @@ import {
   Camera,
   ScanLine,
   Keyboard,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 import {
   Product,
@@ -61,6 +59,7 @@ import { EtimsReceiptModal, EtimsReceiptData } from './EtimsReceiptModal';
 import { PhoneBarcodeScannerModal } from './PhoneBarcodeScannerModal';
 import { subscribeToProductScans } from '../utils/productScanBroadcast';
 import { FloatingSalesKeyboardModal } from './FloatingSalesKeyboardModal';
+import { ProductPreviewModal } from './ProductPreviewModal';
 
 interface CartItem {
   productId: string;
@@ -241,7 +240,6 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
 
   // Active POS Cart
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [isCartExpanded, setIsCartExpanded] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
@@ -257,72 +255,13 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   const [etimsReceipt, setEtimsReceipt] = useState<EtimsReceiptData | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-  const [keyboardInitialMode, setKeyboardInitialMode] = useState<'qwerty' | 'numeric'>('qwerty');
-  const [keyboardActiveFieldName, setKeyboardActiveFieldName] = useState('');
-  const [keyboardTargetElement, setKeyboardTargetElement] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewProduct, setPreviewProduct] = useState<any>(null);
 
-  // Automatically and instantly open virtual keypad on tap/focus of any input or textarea
-  useEffect(() => {
-    const handleInputTapOrFocus = (e: Event) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        const inputEl = target as HTMLInputElement | HTMLTextAreaElement;
-
-        // Skip non-typing input types
-        if (
-          inputEl.type === 'checkbox' ||
-          inputEl.type === 'radio' ||
-          inputEl.type === 'file' ||
-          inputEl.type === 'submit' ||
-          inputEl.type === 'button'
-        ) {
-          return;
-        }
-
-        // If tap is inside keyboard itself, do not reopen/reconfigure
-        if (target.closest('.floating-sales-keyboard-container')) {
-          return;
-        }
-
-        const isNum =
-          inputEl.type === 'number' ||
-          inputEl.type === 'tel' ||
-          inputEl.inputMode === 'numeric' ||
-          inputEl.inputMode === 'decimal' ||
-          inputEl.inputMode === 'tel' ||
-          /phone|kes|amount|cash|tender|price|qty|quantity|markup|pin/i.test(
-            inputEl.name || inputEl.placeholder || inputEl.id || ''
-          );
-
-        setKeyboardInitialMode(isNum ? 'numeric' : 'qwerty');
-        const fieldLabel =
-          inputEl.placeholder ||
-          inputEl.getAttribute('aria-label') ||
-          inputEl.name ||
-          (isNum ? 'Numeric / Amount' : 'Text Input');
-        setKeyboardActiveFieldName(fieldLabel);
-        setKeyboardTargetElement(inputEl);
-        setIsKeyboardOpen(true);
-      }
-    };
-
-    // Attach to pointerdown & focusin for instant tap response on touchscreens and desktop
-    document.addEventListener('pointerdown', handleInputTapOrFocus, true);
-    document.addEventListener('focusin', handleInputTapOrFocus, true);
-
-    const handleToggleFromDesktopNav = () => {
-      setIsKeyboardOpen((prev) => !prev);
-    };
-    window.addEventListener('toggle-virtual-keyboard', handleToggleFromDesktopNav);
-
-    return () => {
-      document.removeEventListener('pointerdown', handleInputTapOrFocus, true);
-      document.removeEventListener('focusin', handleInputTapOrFocus, true);
-      window.removeEventListener('toggle-virtual-keyboard', handleToggleFromDesktopNav);
-    };
-  }, []);
+  const handleOpenPreview = (prod: any) => {
+    setPreviewProduct(prod);
+    setIsPreviewOpen(true);
+  };
 
   // Orders Filter State (for Tab 2)
   const [ordersFilterStatus, setOrdersFilterStatus] = useState<'ALL' | 'QUEUED' | 'PAID'>('ALL');
@@ -361,6 +300,32 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   const totalEarnedCommission = useMemo(() => {
     return Math.round((totalSalesVolume * commPct) / 100);
   }, [totalSalesVolume, commPct]);
+
+  // Today's Performance Metrics for this specific logged in user
+  const todayDateStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const userTodayTransactions = useMemo(() => {
+    return ownTransactions.filter((t) => t.createdAt?.startsWith(todayDateStr));
+  }, [ownTransactions, todayDateStr]);
+
+  const userTodayPaidTransactions = useMemo(() => {
+    return userTodayTransactions.filter(
+      (t) => t.status === 'Paid' || t.status === 'Approved' || t.status === 'Fulfilled'
+    );
+  }, [userTodayTransactions]);
+
+  const userTodaySalesVolume = useMemo(() => {
+    return userTodayPaidTransactions.reduce((acc, t) => acc + (t.totalAmount || 0), 0);
+  }, [userTodayPaidTransactions]);
+
+  const userTodayTotalAllOrdersVolume = useMemo(() => {
+    return userTodayTransactions.reduce((acc, t) => acc + (t.totalAmount || 0), 0);
+  }, [userTodayTransactions]);
+
+  const userTodayCommission = useMemo(() => {
+    const baseVolume = userTodaySalesVolume > 0 ? userTodaySalesVolume : userTodayTotalAllOrdersVolume;
+    return Math.round((baseVolume * commPct) / 100);
+  }, [userTodaySalesVolume, userTodayTotalAllOrdersVolume, commPct]);
 
   // Barcode Scanner & Real-Time Sync States
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
@@ -451,20 +416,6 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
       return true;
     });
   }, [products, categoryFilter, inStockOnly, searchQuery, activeBranch]);
-
-  // Sellable products available in sales rep's branch for instant keyboard autofill
-  const branchScopedProducts = useMemo(() => {
-    return products.filter((prod) => {
-      const isScannedAndReady = Boolean(
-        (prod.isScanned || prod.hasRealBarcode || prod.isOnboarded) &&
-        prod.barcode &&
-        prod.status !== ('Deleted' as any)
-      );
-      if (!isScannedAndReady) return false;
-      const stock = getProductBranchStock(prod);
-      return stock > 0;
-    });
-  }, [products, activeBranch, branches]);
 
   // Pricing helper
   const getProductPrices = (product: Product) => {
@@ -982,6 +933,15 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>Sales Statement</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setIsKeyboardOpen(true)}
+                className="px-3 py-1.5 rounded-lg font-montserrat font-black text-xs cursor-pointer transition-all flex items-center gap-1.5 bg-[#FFDE00]/20 hover:bg-[#FFDE00] text-[#FFDE00] hover:text-[#0A006E] border border-[#FFDE00]/40 shadow-xs"
+              >
+                <Keyboard className="w-3.5 h-3.5" />
+                <span>Keyboard</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1165,10 +1125,26 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                   return (
                     <div
                       key={prod.id}
-                      className={`bg-white border-2 rounded-2xl p-3 flex flex-col justify-between transition-all hover:shadow-md ${
+                      onClick={() => handleOpenPreview(prod)}
+                      className={`cursor-pointer bg-white border-2 rounded-2xl p-3 flex flex-col justify-between transition-all hover:shadow-md ${
                         isOutOfStock ? 'border-slate-200 opacity-60' : 'border-slate-200 hover:border-[#0A006E]'
                       }`}
                     >
+// ...
+              {isPreviewOpen && previewProduct && (
+                <ProductPreviewModal
+                  product={previewProduct}
+                  onClose={() => setIsPreviewOpen(false)}
+                  onAddToCart={(prod, mode) => {
+                    // Logic to add to cart based on mode
+                    // You might need to call the existing add to cart logic
+                    // This is a simplified placeholder
+                    handleAddToCart(prod, mode === 'Bottle' ? 1 : 1); // Need to adjust this
+                    setIsPreviewOpen(false);
+                  }}
+                  stock={getProductBranchStock(previewProduct)}
+                />
+              )}
                       {/* Product Visual Header */}
                       <div className="space-y-2">
                         <div className="relative aspect-4/3 rounded-xl overflow-hidden bg-slate-900">
@@ -1275,7 +1251,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
 
           {/* RIGHT 4-5 COLUMNS: ACTIVE SALES CART & THE 2 PRIMARY ACTIONS */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-3.5">
-            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md p-3.5 sm:p-4 sticky top-20 flex flex-col max-h-[calc(100vh-80px)] overflow-y-auto">
+            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md p-4 sticky top-20 flex flex-col h-[calc(100vh-200px)]">
               {/* Cart Header */}
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <div className="flex items-center gap-2">
@@ -1310,25 +1286,9 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
               {/* Customer & Destination Details Form */}
               <div className="bg-[#F0F2F0] border border-slate-200 rounded-xl p-3 space-y-2.5 text-xs">
                 <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-                  Client &amp; Destination Details
+                  Client Details
                 </div>
 
-                {/* Customer Name */}
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
-                    Customer / Venue / Buyer Name *
-                  </label>
-                  <div className="relative">
-                    <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="e.g. Club Casablanca, John Mwangi (VIP)"
-                      className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 focus:border-[#0A006E] rounded-lg text-xs font-semibold text-slate-900 outline-none"
-                    />
-                  </div>
-                </div>
 
                 {/* Customer Phone */}
                 <div>
@@ -1340,8 +1300,8 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                     <input
                       type="text"
                       value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="e.g. 0712 345 678"
+                      onChange={(e) => setCustomerPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="e.g. 0712345678"
                       className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 focus:border-[#0A006E] rounded-lg text-xs font-semibold text-slate-900 outline-none"
                     />
                   </div>
@@ -1379,117 +1339,85 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 </div>
               </div>
 
-              {/* Cart Line Items (Collapsed to show 2 items while buttons float up) */}
-              <div className={`space-y-2 pr-1 divide-y divide-slate-100 py-2.5 ${isCartExpanded ? 'max-h-60 overflow-y-auto' : ''}`}>
+              {/* Cart Line Items */}
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100 py-3">
                 {cart.length === 0 ? (
-                  <div className="py-6 text-center text-slate-400">
+                  <div className="py-8 text-center text-slate-400">
                     <ShoppingCart className="w-8 h-8 mx-auto mb-1 opacity-40" />
                     <p className="text-xs">Cart is empty. Tap &ldquo;+ Bottle&rdquo; or &ldquo;+ Case&rdquo; on any item.</p>
                   </div>
                 ) : (
-                  <>
-                    {(isCartExpanded ? cart : cart.slice(0, 2)).map((item) => {
-                      const realIdx = cart.findIndex(
-                        (c) => c.productId === item.productId && c.unitMode === item.unitMode
-                      );
-                      const targetIdx = realIdx >= 0 ? realIdx : 0;
-
-                      return (
-                        <div key={`${item.productId}-${item.unitMode}`} className="pt-2 first:pt-0 space-y-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <h5 className="text-xs font-montserrat font-bold text-slate-900 truncate">
-                                {item.product.name}
-                              </h5>
-                              <div className="text-[10px] text-slate-500 font-medium">
-                                <span className="font-bold text-[#0A006E]">{item.unitMode}</span> · {formatKes(item.unitPrice)} each
-                              </div>
-                            </div>
-
-                            <div className="text-right shrink-0">
-                              <div className="text-xs font-montserrat font-black text-[#0A006E] font-mono-tabular">
-                                {formatKes(item.lineTotal)}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveItem(targetIdx)}
-                                className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Quantity Controls & Markup field */}
-                          <div className="flex items-center justify-between gap-2 pt-0.5">
-                            {/* Stepper */}
-                            <div className="flex items-center bg-[#F0F2F0] rounded-lg border border-slate-200">
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateQuantity(targetIdx, -1)}
-                                className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                              <span className="w-8 text-center text-xs font-montserrat font-black text-slate-900">
-                                {item.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateQuantity(targetIdx, 1)}
-                                className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </button>
-                            </div>
-
-                            {/* Optional Markup Per Unit */}
-                            <div className="flex items-center gap-1 text-[11px]">
-                              <span className="text-slate-500 font-medium text-[10px]">Markup:</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="50"
-                                value={item.affiliateMarkupPerUnit || ''}
-                                onChange={(e) => handleUpdateMarkup(targetIdx, Number(e.target.value))}
-                                placeholder="+0"
-                                className="w-16 px-1.5 py-0.5 bg-[#F0F2F0] border border-slate-200 rounded text-center text-[10px] font-mono font-bold text-[#1E9E60] outline-none"
-                                title="Add your custom profit markup per unit"
-                              />
-                            </div>
+                  cart.map((item, idx) => (
+                    <div key={`${item.productId}-${item.unitMode}`} className="pt-2 first:pt-0 space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h5 className="text-xs font-montserrat font-bold text-slate-900 truncate">
+                            {item.product.name}
+                          </h5>
+                          <div className="text-[10px] text-slate-500 font-medium">
+                            <span className="font-bold text-[#0A006E]">{item.unitMode}</span> · {formatKes(item.unitPrice)} each
                           </div>
                         </div>
-                      );
-                    })}
 
-                    {/* Expand / Collapse Toggle Button */}
-                    {cart.length > 2 && (
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsCartExpanded(!isCartExpanded)}
-                          className="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-[#0A006E] font-montserrat font-black text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition shadow-2xs"
-                        >
-                          {isCartExpanded ? (
-                            <>
-                              <ChevronUp className="w-3.5 h-3.5 stroke-[2.5]" />
-                              <span>Collapse to 2 items</span>
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
-                              <span>+{cart.length - 2} more item{cart.length - 2 === 1 ? '' : 's'} in cart (View all {cart.length})</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="text-right shrink-0">
+                          <div className="text-xs font-montserrat font-black text-[#0A006E] font-mono-tabular">
+                            {formatKes(item.lineTotal)}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </>
+
+                      {/* Quantity Controls & Markup field */}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        {/* Stepper */}
+                        <div className="flex items-center bg-[#F0F2F0] rounded-lg border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQuantity(idx, -1)}
+                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-8 text-center text-xs font-montserrat font-black text-slate-900">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQuantity(idx, 1)}
+                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        {/* Optional Markup Per Unit */}
+                        <div className="flex items-center gap-1 text-[11px]">
+                          <span className="text-slate-500 font-medium text-[10px]">Markup:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="50"
+                            value={item.affiliateMarkupPerUnit || ''}
+                            onChange={(e) => handleUpdateMarkup(idx, Number(e.target.value))}
+                            placeholder="+0"
+                            className="w-16 px-1.5 py-0.5 bg-[#F0F2F0] border border-slate-200 rounded text-center text-[10px] font-mono font-bold text-[#1E9E60] outline-none"
+                            title="Add your custom profit markup per unit"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
 
-              {/* Financial Calculation Summary & Floating Checkout Actions */}
-              <div className="pt-2.5 border-t border-slate-200 bg-white mt-1">
+              {/* Financial Calculation Summary & Footer Actions */}
+              <div className="flex-none mt-auto pt-3 border-t border-slate-100 bg-white">
                 {cart.length > 0 && (
                   <div className="bg-slate-50 rounded-xl p-3 space-y-2 mb-3">
                     <div className="flex justify-between text-slate-600">
@@ -2142,79 +2070,98 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
         />
       )}
 
-      {/* Floating Wide Sales Keyboard Modal with Autofill Search & Bold Letters */}
+      {/* Floating Keyboard Modal */}
       <FloatingSalesKeyboardModal
         isOpen={isKeyboardOpen}
         onClose={() => setIsKeyboardOpen(false)}
-        initialMode={keyboardInitialMode}
-        activeFieldName={keyboardActiveFieldName}
-        targetElement={keyboardTargetElement}
-        products={branchScopedProducts}
-        onSelectProduct={(product, unitMode) => {
-          handleAddToCart(product, unitMode || 'Bottle', 1);
-        }}
-        onAutofillText={(text) => {
-          setSearchQuery(text);
-        }}
       />
 
       {/* Fixed Bottom Navigation Bar for Sales Reps */}
-      <div className="sticky bottom-0 left-0 right-0 z-40 bg-[#0A006E] text-white border-t border-[#FFDE00]/30 px-3 py-2 flex items-center justify-around shadow-2xl mt-6 rounded-t-2xl">
-        <button
-          type="button"
-          onClick={() => setActiveTab('pos')}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition cursor-pointer ${
-            activeTab === 'pos' ? 'text-[#FFDE00] font-bold' : 'text-white/70 hover:text-white'
-          }`}
-        >
-          <ShoppingCart className="w-5 h-5" />
-          <span className="text-[10px]">POS Terminal</span>
-        </button>
+      <div className="sticky bottom-0 left-0 right-0 z-40 bg-[#0A006E] text-white border-t-2 border-[#FFDE00]/40 px-3 py-2 flex items-center justify-between gap-2 shadow-2xl mt-6 rounded-t-2xl backdrop-blur-md">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-1 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('pos')}
+            className={`flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1 rounded-xl transition cursor-pointer ${
+              activeTab === 'pos' ? 'text-[#FFDE00] font-bold bg-white/10' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px]">POS Terminal</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('orders')}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition cursor-pointer ${
-            activeTab === 'orders' ? 'text-[#FFDE00] font-bold' : 'text-white/70 hover:text-white'
-          }`}
-        >
-          <FileText className="w-5 h-5" />
-          <span className="text-[10px]">Orders</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('orders')}
+            className={`flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1 rounded-xl transition cursor-pointer relative ${
+              activeTab === 'orders' ? 'text-[#FFDE00] font-bold bg-white/10' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px]">Orders</span>
+            {userTodayTransactions.length > 0 && (
+              <span className="absolute -top-1 -right-1 px-1 bg-amber-400 text-[#0A006E] text-[9px] font-black rounded-full leading-tight">
+                {userTodayTransactions.length}
+              </span>
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('sales_statement')}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition cursor-pointer ${
-            activeTab === 'sales_statement' ? 'text-[#FFDE00] font-bold' : 'text-white/70 hover:text-white'
-          }`}
-        >
-          <TrendingUp className="w-5 h-5" />
-          <span className="text-[10px]">Statements</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('sales_statement')}
+            className={`flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1 rounded-xl transition cursor-pointer ${
+              activeTab === 'sales_statement' ? 'text-[#FFDE00] font-bold bg-white/10' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px]">Statements</span>
+          </button>
+        </div>
 
-        {/* Floating Keyboard Trigger Button at Bottom Nav - Desktop Only */}
+        {/* SPECIFIC LOGGED IN USER TOTAL SALE TODAY */}
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/15 border border-[#FFDE00]/50 rounded-2xl shadow-inner transition">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#34D186] animate-pulse shrink-0" />
+          <div className="text-left">
+            <div className="text-[9px] font-montserrat font-black text-[#FFDE00] uppercase tracking-wider leading-none">
+              My Sales Today ({currentUser.name.split(' ')[0]})
+            </div>
+            <div className="text-xs sm:text-sm font-mono-tabular font-black text-white leading-tight">
+              {formatKes(userTodaySalesVolume > 0 ? userTodaySalesVolume : userTodayTotalAllOrdersVolume)}
+            </div>
+          </div>
+          {userTodayCommission > 0 && (
+            <div className="hidden sm:flex flex-col text-right pl-2 border-l border-white/20">
+              <span className="text-[8px] text-emerald-300 font-mono uppercase">Commission</span>
+              <span className="text-[10px] font-mono font-bold text-[#34D186]">
+                +{formatKes(userTodayCommission)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Floating Keyboard Trigger Button at Bottom Nav */}
         <button
           type="button"
-          onClick={() => {
-            if (isKeyboardOpen) {
-              setIsKeyboardOpen(false);
-            } else {
-              setKeyboardInitialMode('qwerty');
-              setIsKeyboardOpen(true);
-            }
-          }}
-          className={`hidden md:flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-2xl shadow-md font-montserrat font-black cursor-pointer transition ${
-            isKeyboardOpen
-              ? 'bg-white text-[#0A006E] ring-2 ring-[#FFDE00]'
-              : 'bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400'
-          }`}
-          title="Toggle Sales Keypad (Desktop)"
+          onClick={() => setIsKeyboardOpen(true)}
+          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-[#FFDE00] text-[#0A006E] rounded-xl shadow-md font-montserrat font-black cursor-pointer hover:bg-amber-400 transition active:scale-95 shrink-0"
         >
-          <Keyboard className="w-5 h-5" />
-          <span className="text-[10px]">{isKeyboardOpen ? 'Hide' : 'Keypad'}</span>
+          <Keyboard className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-[10px] sm:text-xs">Keypad</span>
         </button>
       </div>
+
+      {isPreviewOpen && previewProduct && (
+        <ProductPreviewModal
+          product={previewProduct}
+          onClose={() => setIsPreviewOpen(false)}
+          onAddToCart={(prod, mode) => {
+            handleAddToCart(prod, mode, 1);
+            setIsPreviewOpen(false);
+          }}
+          stock={getProductBranchStock(previewProduct)}
+        />
+      )}
     </div>
   );
 };

@@ -96,5 +96,3 @@ export const ProductImage: React.FC<ProductImageProps> = React.memo(({
   prev.product.category === next.product.category &&
   prev.product.volumeMl === next.product.volumeMl
 ));
-
-ProductImage.displayName = 'ProductImage';

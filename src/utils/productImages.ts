@@ -64,7 +64,7 @@ export function extractGoogleDriveFileId(rawUrl: string): string | null {
     return null;
   }
 
-  // Match /file/d/{FILE_ID} or /d/{FILE_ID}
+    // Match /file/d/{FILE_ID} or /d/{FILE_ID}
   const pathMatch = trimmed.match(/\/(?:file\/)?d\/([a-zA-Z0-9_-]{10,})/);
   if (pathMatch && pathMatch[1]) {
     return pathMatch[1];
@@ -94,15 +94,15 @@ export function normalizeProductImageUrl(rawUrl: string): string {
 
   const driveFileId = extractGoogleDriveFileId(trimmed);
   if (driveFileId) {
-    return `https://drive.google.com/thumbnail?id=${driveFileId}&sz=w420`;
+    return `https://drive.google.com/thumbnail?id=${driveFileId}&sz=w200`;
   }
 
-  // Automatically cap external Unsplash URLs to lightweight 420px WebP/AVIF format
+  // Automatically cap external Unsplash URLs to lightweight 200px WebP/AVIF format
   if (trimmed.includes('images.unsplash.com')) {
     try {
       const urlObj = new URL(trimmed);
-      urlObj.searchParams.set('w', '420');
-      urlObj.searchParams.set('q', '74');
+      urlObj.searchParams.set('w', '200');
+      urlObj.searchParams.set('q', '60');
       urlObj.searchParams.set('auto', 'format');
       return urlObj.toString();
     } catch {
@@ -117,7 +117,7 @@ export function normalizeProductImageUrl(rawUrl: string): string {
  * Reads an uploaded image File from local drive / device and compresses it to a lightweight Data URL
  * (~15KB-30KB WebP/JPEG) so it loads instantly and persists reliably in localStorage & Firestore.
  */
-export function compressImageFileToDataUrl(file: File, maxDimension = 420): Promise<string> {
+export function compressImageFileToDataUrl(file: File, maxDimension = 200): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Failed to read image file'));
@@ -156,12 +156,12 @@ export function compressImageFileToDataUrl(file: File, maxDimension = 420): Prom
             return;
           }
           ctx.drawImage(img, 0, 0, width, height);
-          const webpCompressed = canvas.toDataURL('image/webp', 0.74);
+          const webpCompressed = canvas.toDataURL('image/webp', 0.6);
           if (webpCompressed.startsWith('data:image/webp')) {
             resolve(webpCompressed);
             return;
           }
-          const jpegCompressed = canvas.toDataURL('image/jpeg', 0.74);
+          const jpegCompressed = canvas.toDataURL('image/jpeg', 0.6);
           resolve(jpegCompressed);
         } catch {
           resolve(rawDataUrl);
