@@ -111,7 +111,7 @@ export const UserFeatureAccessModal: React.FC<UserFeatureAccessModalProps> = ({
   };
 
   const handleStripPosAndSales = () => {
-    const posKeys = ['retail_pos', 'sales_pos', 'pos_discounts', 'pos_voids', 'customer_portal'];
+    const posKeys = ['retail_pos', 'sales_pos', 'pos_discounts', 'pos_voids'];
     setStripped((prev) => Array.from(new Set([...prev, ...posKeys])));
     setGranted((prev) => prev.filter((k) => !posKeys.includes(k)));
   };

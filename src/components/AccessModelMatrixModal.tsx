@@ -66,7 +66,6 @@ const ALL_MODULES: { id: ERPModuleId; label: string }[] = [
   { id: 'compliance', label: 'Excise & Regulatory Stamps' },
   { id: 'hr_rbac', label: 'HR Provisioning & Roles' },
   { id: 'audit_security', label: 'User Monitoring & Logs' },
-  { id: 'customer_portal', label: 'Customer Online Store' },
   { id: 'outlets_restaurants', label: 'Outlets, Bars & Clubs' },
 ];
 

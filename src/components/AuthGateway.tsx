@@ -40,7 +40,7 @@ interface AuthGatewayProps {
   onGoogleLogin: (targetRole: 'Admin' | 'Accountant') => Promise<void>;
   onEmailLogin: (email: string, password: string, targetRole: 'Admin' | 'Accountant') => Promise<void>;
   onPinLogin: (pin: string, selectedRole?: StaffRole, selectedStaffId?: string) => Promise<void>;
-  onOpenCustomerPortal: () => void;
+  onOpenCustomerPortal?: () => void;
   authError: string | null;
   isSubmitting: boolean;
 }
@@ -442,7 +442,6 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
       <Header
         variant="gateway"
         onHomeClick={() => setScreenView('boxes')}
-        onOpenCustomerPortal={onOpenCustomerPortal}
         branches={branches}
         totalStaffCount={staffList.length}
       />

@@ -40,11 +40,10 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
 
   const defaultBranchStock = JSON.stringify({});
 
-  // Real Barcode Governance: Remove all fake simulated barcodes.
-  // Barcode is ONLY populated if scanned and registered as real by the Inventory Manager.
-  const isReal = Boolean(raw.hasRealBarcode);
-  const realBarcode = isReal ? raw.barcode : undefined;
-  const realCaseBarcode = isReal ? raw.caseBarcode : undefined;
+  // Real Barcode Governance: Products with real barcodes are registered & scanned
+  const isReal = Boolean(raw.hasRealBarcode || raw.barcode);
+  const realBarcode = raw.barcode || (isReal ? raw.barcode : undefined);
+  const realCaseBarcode = raw.caseBarcode || (isReal ? raw.caseBarcode : undefined);
 
   return {
     ...raw,
@@ -77,13 +76,13 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
     branchStockSummary: raw.branchStockSummary || defaultBranchStock,
     geoPriceOverrides: raw.geoPriceOverrides || JSON.stringify({}),
     createdAt: raw.createdAt || '2026-10-01T00:00:00.000Z',
-    isScanned: raw.isScanned ?? false, // Default to Awaiting Scan until scanned
+    isScanned: raw.isScanned !== undefined ? raw.isScanned : isReal, // Scanned if real barcode exists or explicitly scanned
   };
 }
 
-import UPDATED_INVENTORY from './data/updated_products.json';
+import AUDITED_INVENTORY from './data/auditedBondedProducts.json';
 
-export const MASTER_IMPORTED_INVENTORY: Product[] = UPDATED_INVENTORY.map((p, idx) =>
+export const MASTER_IMPORTED_INVENTORY: Product[] = (AUDITED_INVENTORY as any[]).map((p, idx) =>
   normalizeCatalogProduct(p as any, idx)
 );
 
@@ -265,8 +264,16 @@ export type AccessLevel =
   | 'Stock scope'
   | 'Own activity'
   | 'Assigned POS'
-  | 'Approved prices'
+  | 'Assigned prices'
   | 'Own sales'
+  | 'Delivery KPIs'
+  | 'Assigned deliveries'
+  | 'Assigned route'
+  | 'Riders & routes'
+  | 'Dispatch docs'
+  | 'Delivery notes'
+  | 'Employ riders'
+  | 'Dispatch audit'
   | 'None';
 
 export interface ModuleAccessItem {
@@ -290,6 +297,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'Stock KPIs',
       'Counter Cashier': 'None',
       'Affiliate Sales Representative': 'Own sales',
+      'Delivery Manager': 'Delivery KPIs',
+      'Delivery Rider': 'Assigned deliveries',
     },
   },
   {
@@ -305,6 +314,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'None',
       'Counter Cashier': 'Limited',
       'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'None',
+      'Delivery Rider': 'None',
     },
   },
   {
@@ -320,6 +331,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'None',
       'Counter Cashier': 'None',
       'Affiliate Sales Representative': 'Own sales',
+      'Delivery Manager': 'View',
+      'Delivery Rider': 'None',
     },
   },
   {
@@ -335,6 +348,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'Manage',
       'Counter Cashier': 'None',
       'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'Read-only',
+      'Delivery Rider': 'None',
     },
   },
   {
@@ -350,6 +365,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'Manage',
       'Counter Cashier': 'None',
       'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'Manage',
+      'Delivery Rider': 'Assigned route',
     },
   },
   {
@@ -364,7 +381,9 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Branch Manager': 'Branch scope',
       'Inventory Controller': 'Cost / stock',
       'Counter Cashier': 'None',
-      'Affiliate Sales Representative': 'Approved prices',
+      'Affiliate Sales Representative': 'Assigned prices',
+      'Delivery Manager': 'None',
+      'Delivery Rider': 'None',
     },
   },
   {
@@ -380,6 +399,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'Manage',
       'Counter Cashier': 'None',
       'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'Riders & routes',
+      'Delivery Rider': 'None',
     },
   },
   {
@@ -395,6 +416,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'Delivery docs',
       'Counter Cashier': 'Own POS docs',
       'Affiliate Sales Representative': 'Own sales docs',
+      'Delivery Manager': 'Dispatch docs',
+      'Delivery Rider': 'Delivery notes',
     },
   },
   {
@@ -410,6 +433,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'Manage',
       'Counter Cashier': 'None',
       'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'None',
+      'Delivery Rider': 'None',
     },
   },
   {
@@ -425,6 +450,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'None',
       'Counter Cashier': 'None',
       'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'Employ riders',
+      'Delivery Rider': 'None',
     },
   },
   {
@@ -440,6 +467,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'None',
       'Counter Cashier': 'None',
       'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'None',
+      'Delivery Rider': 'None',
     },
   },
   {
@@ -455,6 +484,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'Stock scope',
       'Counter Cashier': 'Own activity',
       'Affiliate Sales Representative': 'Own activity',
+      'Delivery Manager': 'Dispatch audit',
+      'Delivery Rider': 'Own activity',
     },
   },
   {
@@ -470,6 +501,8 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Inventory Controller': 'Stock scope',
       'Counter Cashier': 'Assigned POS',
       'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'None',
+      'Delivery Rider': 'None',
     },
   },
 ];
@@ -491,6 +524,10 @@ export const ROLE_DISTINCTIONS: Record<StaffRole, string> = {
     'Has broad administrative access, but sensitive actions should still be audited, with strong authentication and additional confirmation for destructive operations.',
   'Sales Manager':
     'Oversees commercial wholesale and retail sales channels, national pricing, partner retailers, with read-only oversight of bonded inventory.',
+  'Delivery Manager':
+    'In charge of online orders and delivery dispatch queues, employing and managing dispatch riders, geo-locating and assigning riders to regional branches, and monitoring M-Pesa payments and transaction history.',
+  'Delivery Rider':
+    'Assigned to branch delivery routes for dispatching online customer orders and handling customer deliveries.',
 };
 
 // Strict Role-Based Access Control Matrix
@@ -548,6 +585,8 @@ export const ROLE_PERMISSIONS: Record<
       'Inventory Controller',
       'Counter Cashier',
       'Affiliate Sales Representative',
+      'Delivery Manager',
+      'Delivery Rider',
     ],
     badgeTitle: 'Human Resources & Access Controller (6-Digit PIN)',
     authRequirement: 'pin',
@@ -588,7 +627,7 @@ export const ROLE_PERMISSIONS: Record<
       'audit_security',
       'outlets_restaurants',
     ],
-    canCreateRoles: ['Counter Cashier', 'Affiliate Sales Representative'],
+    canCreateRoles: ['Counter Cashier', 'Affiliate Sales Representative', 'Delivery Rider'],
     badgeTitle: 'Regional Branch Manager (6-Digit PIN)',
     authRequirement: 'pin',
     scopeToAssignedBranch: true,
@@ -621,6 +660,20 @@ export const ROLE_PERMISSIONS: Record<
     allowedModules: ['sales_pos'],
     canCreateRoles: [],
     badgeTitle: 'Field & Affiliate Sales Representative (6-Digit PIN)',
+    authRequirement: 'pin',
+    scopeToAssignedBranch: true,
+  },
+  'Delivery Manager': {
+    allowedModules: ['overview', 'delivery_management', 'audit_security'],
+    canCreateRoles: ['Delivery Rider'],
+    badgeTitle: 'Logistics & Delivery Operations Manager (6-Digit PIN)',
+    authRequirement: 'pin',
+    scopeToAssignedBranch: false,
+  },
+  'Delivery Rider': {
+    allowedModules: ['delivery_management'],
+    canCreateRoles: [],
+    badgeTitle: 'Field Delivery & Dispatch Rider (6-Digit PIN)',
     authRequirement: 'pin',
     scopeToAssignedBranch: true,
   },

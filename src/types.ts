@@ -6,7 +6,9 @@ export type StaffRole =
   | 'Branch Manager'
   | 'Inventory Controller'
   | 'Counter Cashier'
-  | 'Affiliate Sales Representative';
+  | 'Affiliate Sales Representative'
+  | 'Delivery Manager'
+  | 'Delivery Rider';
 
 export type StockCategory = 'IPS' | 'LPS'; // Imported Products Stock vs Local Products Stock
 
@@ -543,7 +545,8 @@ export type ERPModuleId =
   | 'payroll'
   | 'audit_security'
   | 'customer_portal'
-  | 'outlets_restaurants';
+  | 'outlets_restaurants'
+  | 'delivery_management';
 
 // ==========================================
 // STOREFRONT & GEO-ROUTING ENTERPRISE TYPES

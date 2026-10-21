@@ -42,6 +42,7 @@ import {
   UtensilsCrossed,
   Clock,
   Coins,
+  Truck,
 } from 'lucide-react';
 import {
   db,
@@ -113,6 +114,7 @@ import { UserFeatureAccessModal } from './components/UserFeatureAccessModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
+import { DeliveryManagementModule } from './components/DeliveryManagementModule';
 import { Header } from './components/Header';
 import { PhoneScannerCompanion } from './components/PhoneScannerCompanion';
 import { GoogleIcon } from './components/icons/GoogleIcon';
@@ -138,6 +140,7 @@ const MODULE_META: Record<
   customer_portal: { label: 'Customer Online Portal', shortMobileLabel: 'Online Store', icon: ShoppingBag },
   outlets_restaurants: { label: 'Hospitality, Kitchen & Bars', shortMobileLabel: 'Outlets', icon: UtensilsCrossed },
   external_customers: { label: 'External Customers (Sales)', shortMobileLabel: 'Customers', icon: Users },
+  delivery_management: { label: 'Delivery & Dispatch Operations', shortMobileLabel: 'Deliveries', icon: Truck },
 };
 
 const ERP_DEPARTMENTS: {
@@ -156,13 +159,13 @@ const ERP_DEPARTMENTS: {
     id: 'sales',
     title: 'Sales & Commercial POS',
     icon: Store,
-    modules: ['retail_pos', 'sales_pos', 'external_customers', 'customer_portal', 'documents_credit'],
+    modules: ['retail_pos', 'sales_pos', 'external_customers', 'documents_credit'],
   },
   {
     id: 'inventory',
     title: 'Inventory, Depots & Logistics',
     icon: Package,
-    modules: ['inventory', 'branches_transfers', 'partners'],
+    modules: ['inventory', 'branches_transfers', 'partners', 'delivery_management'],
   },
   {
     id: 'hospitality',
@@ -501,6 +504,23 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<StaffMember | null>(null);
 
   // Inactivity & Auto-Logoff State (2 minutes total: 90s idle + 30s countdown)
+  // Inactivity & Auto-Logoff State (2 minutes total: 90s idle + 30s countdown)
+  const [standaloneCustomerPortal, setStandaloneCustomerPortal] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.toLowerCase();
+    const search = new URLSearchParams(window.location.search);
+    return (
+      path === '/website' ||
+      path.startsWith('/website/') ||
+      path === '/store' ||
+      path.startsWith('/store/') ||
+      path === '/shop' ||
+      path.startsWith('/shop/') ||
+      search.get('view') === 'website' ||
+      search.get('view') === 'store' ||
+      search.get('view') === 'shop'
+    );
+  });
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const [inactivityCountdown, setInactivityCountdown] = useState(30);
   const inactivityTimerRef = useRef<any>(null);
@@ -574,22 +594,7 @@ export default function App() {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
   }, [showInactivityWarning, currentUser]);
-  const [standaloneCustomerPortal, setStandaloneCustomerPortal] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    const path = window.location.pathname.toLowerCase();
-    const search = new URLSearchParams(window.location.search);
-    return (
-      path === '/website' ||
-      path.startsWith('/website/') ||
-      path === '/store' ||
-      path.startsWith('/store/') ||
-      path === '/shop' ||
-      path.startsWith('/shop/') ||
-      search.get('view') === 'website' ||
-      search.get('view') === 'store' ||
-      search.get('mode') === 'website'
-    );
-  });
+
   const [phoneScannerSession, setPhoneScannerSession] = useState<{
     isOpen: boolean;
     staffId: string;
@@ -669,14 +674,14 @@ export default function App() {
       const override = overrideMap.get(baseItem.id);
       if (override) {
         overrideMap.delete(baseItem.id);
-        const isReal = Boolean(override.hasRealBarcode || override.barcode);
+        const isReal = Boolean(override.hasRealBarcode || override.barcode || baseItem.hasRealBarcode || baseItem.barcode);
         return {
           ...baseItem,
           ...override,
           barcode: override.barcode || (isReal ? baseItem.barcode : undefined),
           caseBarcode: override.caseBarcode || (isReal ? baseItem.caseBarcode : undefined),
           hasRealBarcode: isReal,
-          isScanned: Boolean(override.isScanned || isReal),
+          isScanned: Boolean(override.isScanned !== undefined ? override.isScanned : (baseItem.isScanned || isReal)),
         };
       }
       return baseItem;
@@ -3131,6 +3136,8 @@ export default function App() {
     }
   };
 
+
+
   if (!currentUser && standaloneCustomerPortal) {
     return (
       <>
@@ -3143,7 +3150,6 @@ export default function App() {
           onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
           onPreviewDoc={(d) => setPreviewDoc(d)}
           onBackToErpLogin={() => setStandaloneCustomerPortal(false)}
-          isStandalonePortal={true}
         />
         <DocumentPrintModal docData={previewDoc} onClose={() => setPreviewDoc(null)} />
       </>
@@ -3242,11 +3248,6 @@ export default function App() {
         currentUser={currentUser}
         activeModule={activeModule}
         onSelectModule={handleSelectModule}
-        onOpenCustomerPortal={() =>
-          activeModule === 'customer_portal'
-            ? handleSelectModule('overview')
-            : handleSelectModule('customer_portal')
-        }
         onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
         onOpenUserProfile={() => setShowUserProfileModal(true)}
         onLogout={handleLogout}
@@ -3449,38 +3450,7 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Client Website / Customer Store Shortcut */}
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileDrawerOpen(false);
-                  if (activeModule === 'customer_portal') {
-                    handleSelectModule('overview');
-                  } else {
-                    handleSelectModule('customer_portal');
-                  }
-                }}
-                className={`w-full p-3 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition shadow-xs active:scale-98 ${
-                  activeModule === 'customer_portal'
-                    ? 'bg-[#FFDE00] border-[#0A006E] text-[#0A006E]'
-                    : 'bg-white border-slate-200 hover:border-[#0A006E] text-slate-800'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
-                    <Globe className="w-5 h-5 stroke-[2.2]" />
-                  </div>
-                  <div className="text-left">
-                    <div className="text-xs font-montserrat font-black leading-tight text-slate-900">
-                      {activeModule === 'customer_portal' ? 'Return to ERP Operations' : 'Client Website & Store'}
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      {activeModule === 'customer_portal' ? 'Back to dashboard' : 'Browse public customer catalog'}
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
+
 
               {/* Manage HR Staff Shortcut for Admins */}
               {allowedModules.includes('hr_rbac') && (
@@ -4083,6 +4053,8 @@ export default function App() {
             />
           )}
 
+
+
           {activeModule === 'customer_portal' && (
             <CustomerPortalView
               products={products}
@@ -4090,6 +4062,7 @@ export default function App() {
               regions={regions}
               onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
               onPreviewDoc={(d) => setPreviewDoc(d)}
+              onBackToErpLogin={() => handleSelectModule('overview')}
             />
           )}
 
@@ -4109,6 +4082,16 @@ export default function App() {
               onDeleteRestaurantItem={handleDeleteRestaurantItem}
             />
           )}
+
+          {activeModule === 'delivery_management' && (
+            <DeliveryManagementModule
+              currentUser={currentUser}
+              branches={scopedBranches}
+              staffList={scopedStaffList}
+              onCreateStaff={handleCreateStaff}
+              onTriggerToast={triggerToast}
+            />
+          )}
         </main>
       </div>
 
@@ -4121,7 +4104,6 @@ export default function App() {
         activeBranch={scopedBranches.find((b) => b.id === currentUser.branchId) || scopedBranches[0]}
         products={products}
         transactions={scopedTransactions}
-        onOpenCustomerPortal={() => handleSelectModule('customer_portal')}
         onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
         onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
         onOpenPhoneScanner={() => {

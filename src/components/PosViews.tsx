@@ -429,6 +429,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
       }
 
       // Activate product into POS checkout session shelf
+      setActivatedProductIds((prev) => Array.from(new Set([matched!.id, ...prev])));
       if (!activatedProductIds.includes(matched!.id)) {
         const activationId = `${activeBranch.id}_${matched!.id}`;
         setDoc(doc(db, 'branch_product_activations', activationId), {
@@ -555,24 +556,11 @@ export const PosViews: React.FC<PosViewsProps> = ({
     }
   }, [scanNotification]);
 
-  // Real registered barcodes for test simulation
-  const sampleTestBarcodes = useMemo(() => {
-    return products
-      .filter((p) => Boolean(p.hasRealBarcode && p.barcode))
-      .slice(0, 10)
-      .map((p) => ({
-        barcode: p.barcode!,
-        name: p.name,
-        sku: p.sku,
-        category: p.category,
-      }));
-  }, [products]);
-
-  // Products displayed on Cashier POS: ONLY items explicitly scanned in this transaction session
+  // Products displayed on Cashier POS: Show all products that have been scanned and verified
   const activatedProducts = useMemo(() => {
     return products.filter((p) =>
       Boolean(
-        activatedProductIds.includes(p.id) &&
+        (p.isScanned || p.hasRealBarcode || p.barcode || activatedProductIds.includes(p.id)) &&
         p.status !== ('Deleted' as any)
       )
     );
@@ -1205,10 +1193,14 @@ export const PosViews: React.FC<PosViewsProps> = ({
                 Barcode Scan-To-Activate POS Mode
               </div>
               <h3 className="font-montserrat font-black text-lg text-[#0A006E]">
-                {activatedProducts.length === 0 ? 'No Products Displayed Yet' : `Active Shelf (${activatedProducts.length} Scanned Item${activatedProducts.length === 1 ? '' : 's'})`}
+                {activatedProducts.length === 0
+                  ? 'No Products Scanned Yet'
+                  : `Scanned Products Ready for POS Checkout (${activatedProducts.length} Items)`}
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                To eliminate mistakes and ensure 100% stock fidelity, products remain hidden until a real physical bottle barcode is scanned to activate them.
+                {activatedProducts.length === 0
+                  ? 'Products with verified real barcodes or scanned in inventory appear here. Use phone scanner, camera, or laser gun to scan and add.'
+                  : `Displaying all ${activatedProducts.length} verified products with scanned barcodes. Scan with phone, camera, or laser gun to add directly to cart.`}
               </p>
             </div>
 
@@ -1237,16 +1229,13 @@ export const PosViews: React.FC<PosViewsProps> = ({
                 <Barcode className="w-3.5 h-3.5 text-[#0A006E]" />
                 Focus Laser Gun
               </button>
-              {activatedProducts.length > 0 && (
+              {cart.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setActivatedProductIds([]);
-                    setCart([]);
-                  }}
+                  onClick={() => setCart([])}
                   className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-montserrat font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition"
                 >
-                  Reset Shelf
+                  Clear Cart ({cart.length})
                 </button>
               )}
             </div>
@@ -1255,7 +1244,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
             {activatedProducts.length > 0 && (
               <div className="pt-5 border-t border-slate-200 text-left space-y-4">
                 <div className="flex items-center justify-between text-xs font-montserrat font-bold text-[#0A006E]">
-                  <span>Scanned &amp; Activated Items ({activatedProducts.length})</span>
+                  <span>Scanned &amp; Activated Items ({filteredProducts.length}{filteredProducts.length !== activatedProducts.length ? ` of ${activatedProducts.length}` : ''})</span>
                   <button
                     type="button"
                     onClick={() => setIsPhoneScannerOpen(true)}
@@ -1383,6 +1372,18 @@ export const PosViews: React.FC<PosViewsProps> = ({
                     );
                   })}
                 </div>
+
+                {filteredProducts.length > displayedProducts.length && (
+                  <div className="pt-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleLimit((prev) => prev + 48)}
+                      className="px-6 py-2.5 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-2xl text-xs font-montserrat font-black cursor-pointer shadow-md transition hover:scale-105 inline-flex items-center gap-2"
+                    >
+                      <span>Load More Scanned Products ({filteredProducts.length - displayedProducts.length} more)</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

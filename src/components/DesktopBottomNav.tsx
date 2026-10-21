@@ -24,6 +24,7 @@ import {
   Maximize2,
   Minimize2,
   UtensilsCrossed,
+  Truck,
   UserCircle,
   Search,
   Printer,
@@ -54,7 +55,6 @@ interface DesktopBottomNavProps {
   activeBranch?: Branch | null;
   products?: Product[];
   transactions?: TransactionDoc[];
-  onOpenCustomerPortal?: () => void;
   onOpenAccessMatrix?: () => void;
   onOpenOnboardItems?: () => void;
   onOpenPhoneScanner?: () => void;
@@ -86,6 +86,7 @@ const MODULE_NAV_DEFINITIONS: Record<
   customer_portal: { label: 'Customer Online Store', shortLabel: 'Online Store', icon: ShoppingBag },
   outlets_restaurants: { label: 'Branch Outlets & Restaurants', shortLabel: 'Outlets', icon: UtensilsCrossed },
   external_customers: { label: 'External Customers', shortLabel: 'Customers', icon: UserCircle },
+  delivery_management: { label: 'Delivery & Dispatch Operations', shortLabel: 'Deliveries', icon: Truck },
 };
 
 export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
@@ -96,7 +97,6 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
   activeBranch,
   products = [],
   transactions = [],
-  onOpenCustomerPortal,
   onOpenAccessMatrix,
   onOpenOnboardItems,
   onOpenPhoneScanner,
@@ -678,20 +678,6 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
 
           {/* Right: Pinned System Utilities */}
           <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-slate-200">
-            {/* Customer Online Store Portal Launcher */}
-            {onOpenCustomerPortal && (
-              <button
-                type="button"
-                onClick={onOpenCustomerPortal}
-                title="Launch Customer Online Storefront Preview"
-                aria-label="Customer Online Store"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#1E9E60] border border-emerald-300 text-xs font-montserrat font-bold transition cursor-pointer shadow-2xs"
-              >
-                <ShoppingBag className="w-4 h-4 text-[#1E9E60] shrink-0" />
-                <span className="hidden xl:inline">Storefront</span>
-              </button>
-            )}
-
             {/* Audio Mute / Unmute Button */}
             <button
               type="button"
@@ -1018,20 +1004,6 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
                   </button>
                 );
               })}
-
-              {onOpenCustomerPortal && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMobileModulesSheetOpen(false);
-                    onOpenCustomerPortal();
-                  }}
-                  className="p-3 rounded-2xl border border-emerald-300 bg-emerald-50 text-[#1E9E60] flex flex-col items-center justify-center gap-1.5 text-center transition cursor-pointer"
-                >
-                  <ShoppingBag className="w-5 h-5 text-[#1E9E60]" />
-                  <span className="text-[11px] font-montserrat font-bold leading-tight">Online Store</span>
-                </button>
-              )}
 
               <button
                 type="button"

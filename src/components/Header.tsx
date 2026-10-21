@@ -35,8 +35,6 @@ export interface HeaderProps {
   activeModule?: ERPModuleId;
   /** Handler to select ERP module */
   onSelectModule?: (modId: ERPModuleId) => void;
-  /** Handler to open customer storefront / website */
-  onOpenCustomerPortal?: () => void;
   /** Handler to open RBAC access matrix modal */
   onOpenAccessMatrix?: () => void;
   /** Handler to open user profile modal */
@@ -60,7 +58,6 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser,
   activeModule,
   onSelectModule,
-  onOpenCustomerPortal,
   onOpenAccessMatrix,
   onOpenUserProfile,
   onLogout,
@@ -168,33 +165,6 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Header: Header Right Action Icons (White Background) */}
             <div className="hidden sm:flex items-center gap-2.5 sm:gap-3.5 shrink-0 relative z-10">
-              {/* 1. Website for client icon */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenCustomerPortal) {
-                    onOpenCustomerPortal();
-                  } else if (onSelectModule) {
-                    if (activeModule === 'customer_portal') {
-                      onSelectModule('overview');
-                    } else {
-                      onSelectModule('customer_portal');
-                    }
-                  }
-                }}
-                className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 transition-all cursor-pointer shadow-md relative group ${
-                  activeModule === 'customer_portal'
-                    ? 'bg-[#FFDE00] text-[#0A006E] border-white'
-                    : 'bg-white text-[#0A006E] hover:bg-slate-100 border-white'
-                }`}
-                title="Client Website / Customer Portal"
-                aria-label="Client Website / Customer Portal"
-              >
-                <Globe className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
-                <span className="absolute -bottom-9 right-0 hidden group-hover:block bg-slate-900 text-white text-[11px] font-montserrat font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-lg z-50 pointer-events-none">
-                  Client Website
-                </span>
-              </button>
 
               {/* 1.5 Target Access Model Matrix button */}
               {onOpenAccessMatrix && (
@@ -246,22 +216,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </>
         ) : (
-          /* Gateway mode: Customer Website & Utilities Hamburger */
+          /* Gateway mode: Utilities Hamburger */
           <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 relative z-10">
-            {onOpenCustomerPortal && (
-              <button
-                type="button"
-                onClick={onOpenCustomerPortal}
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white hover:bg-[#FFDE00] text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center justify-center active:scale-95 relative group"
-                title="Customer Website & Online Storefront"
-                aria-label="Customer Website & Online Storefront"
-              >
-                <Globe className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.3] text-[#0A006E] group-hover:rotate-12 transition-transform" />
-                <span className="absolute -bottom-9 right-0 hidden group-hover:block bg-slate-900 text-white text-[11px] font-montserrat font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-lg z-50 pointer-events-none">
-                  Customer Website
-                </span>
-              </button>
-            )}
 
             <button
               type="button"
@@ -362,34 +318,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
-              {/* Feature 2: Customer Online Storefront Portal */}
-              {onOpenCustomerPortal && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsGatewayDrawerOpen(false);
-                    onOpenCustomerPortal();
-                  }}
-                  className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-300 text-left flex items-start gap-3 transition cursor-pointer group shadow-2xs"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-                    <ShoppingBag className="w-5 h-5 stroke-[2.3]" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-black text-emerald-950 flex items-center justify-between">
-                      <span>Customer Online Store</span>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-700 text-white uppercase">
-                        Catalog
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
-                      Browse customer retail storefront and place direct orders.
-                    </p>
-                  </div>
-                </button>
-              )}
-
-              {/* Feature 3: Replay Brand Splash Intro Animation */}
+              {/* Feature 2: Replay Brand Splash Intro Animation */}
               <button
                 type="button"
                 onClick={handleReplaySplash}

@@ -725,7 +725,7 @@ export const OverviewModule: React.FC<{
               New Wholesale Order
             </button>
             <button
-              onClick={() => onNavigateModule?.('customer_portal')}
+              onClick={() => onNavigateModule?.('inventory')}
               className="px-3.5 py-2 bg-white border border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
             >
               Browse Catalog
