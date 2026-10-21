@@ -1151,6 +1151,8 @@ export const OverviewModule: React.FC<{
           currentUser={currentUser}
           onPreviewDoc={onPreviewDoc}
           onNavigateToPos={(mode) => onNavigateModule?.(mode === 'retail' ? 'retail_pos' : 'sales_pos')}
+          branches={branches}
+          staff={staffList}
         />
       </div>
 
@@ -1403,6 +1405,51 @@ export const InventoryModule: React.FC<{
     duplicateNames: { name: string; items: Product[] }[];
     totalDuplicates: number;
   }>({ duplicateSkus: [], duplicateBarcodes: [], duplicateNames: [], totalDuplicates: 0 });
+
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+
+  const handleSelectAllProducts = () => {
+    if (selectedProductIds.size === filteredProducts.length) {
+      setSelectedProductIds(new Set());
+    } else {
+      setSelectedProductIds(new Set(filteredProducts.map((p) => p.id)));
+    }
+  };
+
+  const handleSelectAllAndWipe = async () => {
+    setSelectedProductIds(new Set(filteredProducts.map((p) => p.id)));
+    if (onWipeAllProducts) {
+      await onWipeAllProducts();
+      setSelectedProductIds(new Set());
+    } else if (onDeleteProduct) {
+      if (!confirm(`Are you sure you want to wipe all ${filteredProducts.length} products?`)) return;
+      for (const p of filteredProducts) {
+        try {
+          await onDeleteProduct(p.id);
+        } catch {}
+      }
+      setSelectedProductIds(new Set());
+    }
+  };
+
+  const handleWipeSelectedProducts = async () => {
+    if (selectedProductIds.size === 0 || selectedProductIds.size >= filteredProducts.length) {
+      if (onWipeAllProducts) {
+        await onWipeAllProducts();
+        setSelectedProductIds(new Set());
+        return;
+      }
+    }
+    if (!confirm(`Are you sure you want to wipe ${selectedProductIds.size} selected products from inventory?`)) return;
+    if (onDeleteProduct) {
+      for (const id of selectedProductIds) {
+        try {
+          await onDeleteProduct(id);
+        } catch {}
+      }
+      setSelectedProductIds(new Set());
+    }
+  };
 
   const handleRunDuplicateCheck = () => {
     const skuMap: Record<string, Product[]> = {};
@@ -2438,6 +2485,7 @@ export const InventoryModule: React.FC<{
 
       {/* Master Catalog Filter Bar & Table */}
       <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
+        {/* Row 1: Search Bar & Stock Category Filters */}
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -2449,7 +2497,7 @@ export const InventoryModule: React.FC<{
                 setTableLimit(60);
               }}
               placeholder={`Filter ${products.length} master SKUs by brand, product name, Auto-SKU, or EAN-13 barcode...`}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-montserrat"
             />
           </div>
 
@@ -2462,7 +2510,7 @@ export const InventoryModule: React.FC<{
                   setFilterStockCat(sc);
                   setTableLimit(60);
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-montserrat font-black cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-montserrat font-black cursor-pointer transition ${
                   filterStockCat === sc
                     ? 'bg-[#0A006E] text-[#FFDE00]'
                     : 'text-slate-600 hover:text-slate-900'
@@ -2474,19 +2522,61 @@ export const InventoryModule: React.FC<{
           </div>
         </div>
 
-        {/* Health & Rotation Filter Pills */}
+        {/* Row 2: Action & Wipe Toolbar */}
         {onWipeAllProducts && (
-          <div className="pb-2">
-            <button
-              type="button"
-              onClick={onWipeAllProducts}
-              className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition hover:bg-red-700"
-            >
-              Wipe Database
-            </button>
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-200">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleSelectAllProducts}
+                className="px-3 py-2 bg-white hover:bg-slate-50 text-[#0A006E] border border-slate-300 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+              >
+                {selectedProductIds.size === filteredProducts.length && filteredProducts.length > 0 ? 'Deselect All' : `Select All (${filteredProducts.length})`}
+              </button>
+
+              {selectedProductIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={handleWipeSelectedProducts}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+                >
+                  Wipe Selected ({selectedProductIds.size})
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSelectAllAndWipe}
+                className="px-4 py-2 bg-red-700 hover:bg-red-800 text-[#FFDE00] border border-red-500 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition"
+              >
+                Select All & Wipe All
+              </button>
+
+              <button
+                type="button"
+                onClick={onWipeAllProducts}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+              >
+                Wipe Database (All)
+              </button>
+            </div>
+
+            {canEditProduct ? (
+              <span className="px-2.5 py-1 bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/50 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                {currentUser.role}: Can Edit Specs & Upload Photos
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                View-Only
+              </span>
+            )}
           </div>
         )}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+
+        {/* Row 3: Stock Rotation & Health Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-2 border-t border-slate-200">
           <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider shrink-0 mr-1">
             Stock Rotation & Health:
           </span>
@@ -2520,7 +2610,7 @@ export const InventoryModule: React.FC<{
           ))}
         </div>
 
-        {/* Real Barcode Governance Filter Pills */}
+        {/* Row 4: Barcode Status Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <span className="text-[11px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
             <Barcode className="w-3.5 h-3.5 text-[#0A006E]" />
@@ -2555,58 +2645,55 @@ export const InventoryModule: React.FC<{
           ))}
         </div>
 
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        {/* Row 5: Subcategories Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setFilterSubCat('ALL');
+              setTableLimit(60);
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer transition ${
+              filterSubCat === 'ALL'
+                ? 'bg-[#0A006E] text-[#FFDE00]'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            All 12 Subcategories ({filteredProducts.length})
+          </button>
+          {NAIROBI_DRINKS_SUB_CATEGORIES.map((sub) => (
             <button
+              key={sub}
               type="button"
               onClick={() => {
-                setFilterSubCat('ALL');
+                setFilterSubCat(sub);
                 setTableLimit(60);
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer ${
-                filterSubCat === 'ALL'
+              className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer transition ${
+                filterSubCat === sub
                   ? 'bg-[#0A006E] text-[#FFDE00]'
-                  : 'bg-white text-slate-700 border border-slate-200'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
               }`}
             >
-              All 12 Subcategories ({filteredProducts.length})
+              {sub}
             </button>
-            {NAIROBI_DRINKS_SUB_CATEGORIES.map((sub) => (
-              <button
-                key={sub}
-                type="button"
-                onClick={() => {
-                  setFilterSubCat(sub);
-                  setTableLimit(60);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap shrink-0 cursor-pointer ${
-                  filterSubCat === sub
-                    ? 'bg-[#0A006E] text-[#FFDE00]'
-                    : 'bg-white text-slate-700 border border-slate-200'
-                }`}
-              >
-                {sub}
-              </button>
-            ))}
-          </div>
-
-          {canEditProduct ? (
-            <span className="px-2.5 py-1 bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/50 rounded-lg text-[10px] font-bold flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              {currentUser.role}: Can Edit Specs & Upload Photos
-            </span>
-          ) : (
-            <span className="px-2.5 py-1 bg-slate-200 text-slate-600 rounded-lg text-[10px] font-bold flex items-center gap-1">
-              <Lock className="w-3 h-3" />
-              View-Only: Only Inventory Person & System Admin can edit products
-            </span>
-          )}
+          ))}
         </div>
+
 
         <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                <th className="py-2.5 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={filteredProducts.length > 0 && selectedProductIds.size === filteredProducts.length}
+                    onChange={handleSelectAllProducts}
+                    className="cursor-pointer accent-[#FFDE00]"
+                    title="Select All"
+                  />
+                </th>
                 <th className="py-2.5 px-3 font-black">Bottle</th>
                 <th className="py-2.5 px-3 font-black">Auto SKU & Barcode</th>
                 <th className="py-2.5 px-3 font-black">Brand & Product Name</th>
@@ -2627,7 +2714,7 @@ export const InventoryModule: React.FC<{
             <tbody className="divide-y divide-slate-200">
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-500 font-montserrat">
+                  <td colSpan={11} className="py-16 text-center text-slate-500 font-montserrat">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="p-4 bg-amber-50 text-amber-700 rounded-2xl border border-amber-200 shadow-xs">
                         <Package className="w-8 h-8 text-amber-600" />
@@ -2665,7 +2752,20 @@ export const InventoryModule: React.FC<{
                 const spoil = p.spoiledBottlesCount || 0;
 
                 return (
-                  <tr key={p.id} className="hover:bg-slate-50">
+                  <tr key={p.id} className={`hover:bg-slate-50 ${selectedProductIds.has(p.id) ? 'bg-amber-50/60' : ''}`}>
+                    <td className="py-2 px-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedProductIds.has(p.id)}
+                        onChange={() => {
+                          const next = new Set(selectedProductIds);
+                          if (next.has(p.id)) next.delete(p.id);
+                          else next.add(p.id);
+                          setSelectedProductIds(next);
+                        }}
+                        className="cursor-pointer accent-[#0A006E]"
+                      />
+                    </td>
                     <td className="py-2 px-3">
                       <ProductImage
                         product={{

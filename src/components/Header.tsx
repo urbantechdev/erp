@@ -140,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <span className="font-montserrat font-black italic text-2xl sm:text-3xl lg:text-4xl tracking-tighter text-white">
             VAAIRO{' '}
-            <span className="text-[#FFDE00] not-italic text-xs sm:text-sm font-black px-2.5 py-0.5 bg-white/10 rounded-xl ml-1.5 align-middle">
+            <span className="bg-[#FFDE00] text-[#0A006E] not-italic text-xs sm:text-sm font-black px-2.5 py-0.5 rounded-xl ml-1.5 align-middle shadow-xs">
               ERP
             </span>
           </span>
@@ -252,12 +252,14 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onOpenCustomerPortal}
-                className="h-10 sm:h-12 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-white hover:bg-[#FFDE00] text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 text-xs font-montserrat font-black group"
+                className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white hover:bg-[#FFDE00] text-[#0A006E] border-2 border-white shadow-md transition-all cursor-pointer flex items-center justify-center active:scale-95 relative group"
                 title="Customer Website & Online Storefront"
                 aria-label="Customer Website & Online Storefront"
               >
-                <Globe className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.3] text-[#0A006E] group-hover:rotate-12 transition-transform" />
-                <span className="hidden sm:inline font-bold">Customer Website</span>
+                <Globe className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.3] text-[#0A006E] group-hover:rotate-12 transition-transform" />
+                <span className="absolute -bottom-9 right-0 hidden group-hover:block bg-slate-900 text-white text-[11px] font-montserrat font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-lg z-50 pointer-events-none">
+                  Customer Website
+                </span>
               </button>
             )}
 
@@ -314,7 +316,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <div>
                   <h3 className="font-montserrat font-black italic text-base text-white">
-                    VAAIRO <span className="text-[#FFDE00]">ERP</span>
+                    VAAIRO <span className="bg-[#FFDE00] text-[#0A006E] not-italic text-xs font-black px-2 py-0.5 rounded-lg ml-1">ERP</span>
                   </h3>
                   <p className="text-[11px] text-slate-300 font-montserrat">
                     Portal Utilities &amp; Features

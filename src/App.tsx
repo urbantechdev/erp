@@ -41,6 +41,7 @@ import {
   ChevronRight,
   UtensilsCrossed,
   Clock,
+  Coins,
 } from 'lucide-react';
 import {
   db,
@@ -132,6 +133,7 @@ const MODULE_META: Record<
   documents_credit: { label: 'Docs, Receipts & Credit Notes', shortMobileLabel: 'Docs', icon: FileText },
   compliance: { label: 'Regulatory & Excise Stamps', shortMobileLabel: 'Compliance', icon: ShieldCheck },
   hr_rbac: { label: 'HR & Role Provisioning', shortMobileLabel: 'HR & Roles', icon: UserPlus },
+  payroll: { label: 'Staff Payroll & Compensation', shortMobileLabel: 'Payroll', icon: Coins },
   audit_security: { label: 'User Monitoring & Security Logs', shortMobileLabel: 'Security', icon: Activity },
   customer_portal: { label: 'Customer Online Portal', shortMobileLabel: 'Online Store', icon: ShoppingBag },
   outlets_restaurants: { label: 'Hospitality, Kitchen & Bars', shortMobileLabel: 'Outlets', icon: UtensilsCrossed },
@@ -148,7 +150,7 @@ const ERP_DEPARTMENTS: {
     id: 'executive',
     title: 'Executive & Governance',
     icon: ShieldCheck,
-    modules: ['overview', 'hr_rbac', 'compliance', 'geo_pricing'],
+    modules: ['overview', 'hr_rbac', 'payroll', 'compliance', 'geo_pricing'],
   },
   {
     id: 'sales',
@@ -205,11 +207,11 @@ const INITIAL_DEFAULT_BRANCHES: Branch[] = [
   },
   {
     id: 'br-ind-003',
-    code: 'BR-IND-003',
-    name: 'Industrial Area Bonded Warehouse',
+    code: 'BR-QR-001',
+    name: 'Industrial Area & Mombasa Road Logistics Yard',
     regionId: 'reg-nrb-ind',
     regionName: 'Industrial Area & Mombasa Road Logistics Yard',
-    address: 'Enterprise Road, Industrial Area, Nairobi',
+    address: 'Mombasa Road & Enterprise Road, Industrial Area (Nairobi West corridor)',
     managerName: 'Logistics Manager',
     exciseBondLicense: 'KRA-BOND-2026-8843C',
     status: 'Operational',
@@ -3300,7 +3302,7 @@ export default function App() {
               </div>
               <div>
                 <div className="font-montserrat font-black italic text-lg text-white leading-tight">
-                  VAAIRO <span className="text-[#FFDE00] not-italic text-xs font-black">ERP</span>
+                  VAAIRO <span className="bg-[#FFDE00] text-[#0A006E] not-italic text-xs font-black px-2 py-0.5 rounded-lg ml-1">ERP</span>
                 </div>
                 <div className="text-[10px] text-slate-300 font-medium">Operations Command & System Menu</div>
               </div>
@@ -4047,7 +4049,7 @@ export default function App() {
             />
           )}
 
-          {activeModule === 'hr_rbac' && (
+          {(activeModule === 'hr_rbac' || activeModule === 'payroll') && (
             <HrAndRbacModule
               currentUser={currentUser}
               staffList={scopedStaffList}

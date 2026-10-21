@@ -1104,8 +1104,8 @@ export const PosViews: React.FC<PosViewsProps> = ({
         </div>
 
         {/* Barcode Quick-Scan Input Row */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center relative z-10">
-          <div className="md:col-span-8 relative">
+        <div className="relative z-10">
+          <div className="relative">
             <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none text-slate-400">
               <ScanLine className="w-5 h-5 text-[#0A006E]" />
             </div>
@@ -1142,38 +1142,6 @@ export const PosViews: React.FC<PosViewsProps> = ({
               >
                 Scan Item
               </button>
-            </div>
-          </div>
-
-          {/* Quick-Test Sample Barcode Selector */}
-          <div className="md:col-span-4">
-            <div className="relative">
-              <select
-                onChange={(e) => {
-                  if (e.target.value) {
-                    handleScanBarcode(e.target.value);
-                    e.target.value = '';
-                  }
-                }}
-                defaultValue=""
-                className="w-full py-3 px-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl text-xs font-montserrat font-semibold text-slate-700 cursor-pointer focus:outline-none focus:border-[#0A006E]"
-              >
-                <option value="" disabled>
-                  {sampleTestBarcodes.length > 0
-                    ? '⚡ Test Registered Real Barcodes...'
-                    : '⚠️ No Real Barcodes Registered Yet'}
-                </option>
-                {sampleTestBarcodes.map((item) => (
-                  <option key={item.barcode} value={item.barcode}>
-                    {item.name} ({item.barcode})
-                  </option>
-                ))}
-                {sampleTestBarcodes.length === 0 && (
-                  <option value="" disabled>
-                    ℹ️ Inventory Manager scans real bottle barcodes in Inventory Management
-                  </option>
-                )}
-              </select>
             </div>
           </div>
         </div>
@@ -1423,7 +1391,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
         </div>
 
         {/* Right 5 Columns: Active Order Register & Document Generator with Permanently Floating Total */}
-        <div className="lg:col-span-5 bg-[#F0F2F0] border border-slate-200 rounded-2xl flex flex-col sticky top-20 max-h-[calc(100vh-6rem)] overflow-hidden shadow-sm">
+        <div className="lg:col-span-5 bg-[#F0F2F0] border border-slate-200 rounded-2xl flex flex-col sticky top-20 h-[calc(100vh-5.5rem)] max-h-[900px] overflow-hidden shadow-sm">
           {/* Fixed Register Header */}
           <div className="p-4 border-b border-slate-200 bg-white/90 backdrop-blur-xs flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
@@ -1476,55 +1444,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
                 </div>
               )}
 
-              <div>
-                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                  Customer / Business Name
-                </label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs text-slate-900"
-                />
-              </div>
 
-              <div>
-                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                  Liquor License / Age ID
-                </label>
-                <input
-                  type="text"
-                  value={customerLicense}
-                  onChange={(e) => setCustomerLicense(e.target.value)}
-                  className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs font-mono-tabular text-slate-900"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-montserrat font-bold text-slate-600">
-                  Document to Generate
-                </label>
-                <select
-                  value={docTypeToIssue}
-                  onChange={(e) => setDocTypeToIssue(e.target.value as DocType)}
-                  className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs font-montserrat font-black text-[#0A006E]"
-                >
-                  {mode === 'retail' ? (
-                    <>
-                      <option value="Receipt">Fiscal POS Receipt</option>
-                      <option value="Invoice">Tax Invoice</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="Invoice">B2B Tax Invoice</option>
-                      <option value="Quote">Commercial Proforma Quote</option>
-                      <option value="Packing List">Warehouse Packing List</option>
-                      <option value="Delivery Note">Bonded Delivery Note</option>
-                      <option value="Receipt">Wholesale Cash Receipt</option>
-                    </>
-                  )}
-                </select>
-              </div>
 
               {/* Payment Method Selector */}
               <div className="sm:col-span-2 space-y-1.5 pt-1">

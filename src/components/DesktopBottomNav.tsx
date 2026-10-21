@@ -81,6 +81,7 @@ const MODULE_NAV_DEFINITIONS: Record<
   documents_credit: { label: 'Docs & Credit Notes', shortLabel: 'Docs', icon: FileText },
   compliance: { label: 'Regulatory & Excise', shortLabel: 'Compliance', icon: ShieldCheck },
   hr_rbac: { label: 'HR & Role Provisioning', shortLabel: 'HR & Roles', icon: UserPlus },
+  payroll: { label: 'Staff Payroll & PAYE/NSSF', shortLabel: 'Payroll', icon: Coins },
   audit_security: { label: 'Security & Audit Logs', shortLabel: 'Security', icon: Activity },
   customer_portal: { label: 'Customer Online Store', shortLabel: 'Online Store', icon: ShoppingBag },
   outlets_restaurants: { label: 'Branch Outlets & Restaurants', shortLabel: 'Outlets', icon: UtensilsCrossed },

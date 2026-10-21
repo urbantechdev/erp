@@ -235,7 +235,7 @@ export const RestaurantOutletManagement: React.FC<RestaurantOutletManagementProp
       if (outletTypeFilter === 'warehouse') return u.unitType === 'warehouse';
       if (outletTypeFilter === 'hospitality') {
         return (u.unitType === 'restaurant_club' || u.unitType === 'bar_lounge') &&
-               !(u.unitType === 'shop' || u.unitType === 'merchant_shop' || u.name?.toLowerCase().includes('retail shop'));
+               !u.name?.toLowerCase().includes('retail shop');
       }
       return true;
     });

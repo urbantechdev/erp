@@ -244,6 +244,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
   const [dispatchType, setDispatchType] = useState<'counter_pickup' | 'field_delivery'>('counter_pickup');
+  const [showAllCartItems, setShowAllCartItems] = useState(false);
 
   // Modals & UI States
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1138,8 +1139,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                   onAddToCart={(prod, mode) => {
                     // Logic to add to cart based on mode
                     // You might need to call the existing add to cart logic
-                    // This is a simplified placeholder
-                    handleAddToCart(prod, mode === 'Bottle' ? 1 : 1); // Need to adjust this
+                    handleAddToCart(prod, mode, 1);
                     setIsPreviewOpen(false);
                   }}
                   stock={getProductBranchStock(previewProduct)}
@@ -1249,13 +1249,13 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
             </div>
           </div>
 
-          {/* RIGHT 4-5 COLUMNS: ACTIVE SALES CART & THE 2 PRIMARY ACTIONS */}
+          {/* RIGHT 4-5 COLUMNS: ACTIVE SALES CART & PERMANENTLY FLOATING TOTAL CHARGE */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-3.5">
-            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md p-4 sticky top-20 flex flex-col h-[calc(100vh-200px)]">
-              {/* Cart Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+            <div className="bg-white border-2 border-[#0A006E] rounded-2xl shadow-md sticky top-20 flex flex-col h-[calc(100vh-5.5rem)] max-h-[880px] overflow-hidden">
+              {/* Fixed Cart Header */}
+              <div className="flex items-center justify-between border-b border-slate-200 p-3.5 sm:p-4 bg-white/95 backdrop-blur-xs shrink-0 z-10">
                 <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center font-bold">
+                  <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center font-bold shadow-xs">
                     <ShoppingCart className="w-4 h-4" />
                   </div>
                   <div>
@@ -1275,7 +1275,7 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                         playPosBeep('error');
                       }
                     }}
-                    className="text-xs text-rose-600 hover:text-rose-800 font-montserrat font-bold flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-rose-600 hover:text-rose-800 font-montserrat font-bold flex items-center gap-1 cursor-pointer transition active:scale-95"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Clear</span>
@@ -1283,197 +1283,206 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                 )}
               </div>
 
-              {/* Customer & Destination Details Form */}
-              <div className="bg-[#F0F2F0] border border-slate-200 rounded-xl p-3 space-y-2.5 text-xs">
-                <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-                  Client Details
-                </div>
+              {/* Scrollable Center: Client Details & Line Items */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-4 space-y-3">
+                {/* Customer & Destination Details Form */}
+                <div className="bg-[#F0F2F0] border border-slate-200 rounded-xl p-3 space-y-2.5 text-xs">
+                  <div className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
+                    Client Details
+                  </div>
 
+                  {/* Customer Phone */}
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                      Client Phone / M-PESA Number
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder="e.g. 0712345678"
+                        className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 focus:border-[#0A006E] rounded-lg text-xs font-semibold text-slate-900 outline-none"
+                      />
+                    </div>
+                  </div>
 
-                {/* Customer Phone */}
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
-                    Client Phone / M-PESA Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                      placeholder="e.g. 0712345678"
-                      className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 focus:border-[#0A006E] rounded-lg text-xs font-semibold text-slate-900 outline-none"
-                    />
+                  {/* Dispatch Mode */}
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                      Fulfillment Destination
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setDispatchType('counter_pickup')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-montserrat font-bold cursor-pointer transition text-center ${
+                          dispatchType === 'counter_pickup'
+                            ? 'bg-[#0A006E] text-[#FFDE00]'
+                            : 'bg-white text-slate-700 border border-slate-200'
+                        }`}
+                      >
+                        Counter Pickup
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDispatchType('field_delivery')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-montserrat font-bold cursor-pointer transition text-center ${
+                          dispatchType === 'field_delivery'
+                            ? 'bg-[#0A006E] text-[#FFDE00]'
+                            : 'bg-white text-slate-700 border border-slate-200'
+                        }`}
+                      >
+                        Field / Direct Delivery
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Dispatch Mode */}
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
-                    Fulfillment Destination
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setDispatchType('counter_pickup')}
-                      className={`py-1.5 px-2 rounded-lg text-[10px] font-montserrat font-bold cursor-pointer transition text-center ${
-                        dispatchType === 'counter_pickup'
-                          ? 'bg-[#0A006E] text-[#FFDE00]'
-                          : 'bg-white text-slate-700 border border-slate-200'
-                      }`}
-                    >
-                      Counter Pickup
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDispatchType('field_delivery')}
-                      className={`py-1.5 px-2 rounded-lg text-[10px] font-montserrat font-bold cursor-pointer transition text-center ${
-                        dispatchType === 'field_delivery'
-                          ? 'bg-[#0A006E] text-[#FFDE00]'
-                          : 'bg-white text-slate-700 border border-slate-200'
-                      }`}
-                    >
-                      Field / Direct Delivery
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Cart Line Items */}
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100 py-3">
-                {cart.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400">
-                    <ShoppingCart className="w-8 h-8 mx-auto mb-1 opacity-40" />
-                    <p className="text-xs">Cart is empty. Tap &ldquo;+ Bottle&rdquo; or &ldquo;+ Case&rdquo; on any item.</p>
-                  </div>
-                ) : (
-                  cart.map((item, idx) => (
-                    <div key={`${item.productId}-${item.unitMode}`} className="pt-2 first:pt-0 space-y-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h5 className="text-xs font-montserrat font-bold text-slate-900 truncate">
-                            {item.product.name}
-                          </h5>
-                          <div className="text-[10px] text-slate-500 font-medium">
-                            <span className="font-bold text-[#0A006E]">{item.unitMode}</span> · {formatKes(item.unitPrice)} each
-                          </div>
-                        </div>
-
-                        <div className="text-right shrink-0">
-                          <div className="text-xs font-montserrat font-black text-[#0A006E] font-mono-tabular">
-                            {formatKes(item.lineTotal)}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Quantity Controls & Markup field */}
-                      <div className="flex items-center justify-between gap-2 pt-1">
-                        {/* Stepper */}
-                        <div className="flex items-center bg-[#F0F2F0] rounded-lg border border-slate-200">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(idx, -1)}
-                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="w-8 text-center text-xs font-montserrat font-black text-slate-900">
-                            {item.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(idx, 1)}
-                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-
-                        {/* Optional Markup Per Unit */}
-                        <div className="flex items-center gap-1 text-[11px]">
-                          <span className="text-slate-500 font-medium text-[10px]">Markup:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="50"
-                            value={item.affiliateMarkupPerUnit || ''}
-                            onChange={(e) => handleUpdateMarkup(idx, Number(e.target.value))}
-                            placeholder="+0"
-                            className="w-16 px-1.5 py-0.5 bg-[#F0F2F0] border border-slate-200 rounded text-center text-[10px] font-mono font-bold text-[#1E9E60] outline-none"
-                            title="Add your custom profit markup per unit"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Financial Calculation Summary & Footer Actions */}
-              <div className="flex-none mt-auto pt-3 border-t border-slate-100 bg-white">
-                {cart.length > 0 && (
-                  <div className="bg-slate-50 rounded-xl p-3 space-y-2 mb-3">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Subtotal:</span>
-                      <span className="font-mono-tabular font-bold">{formatKes(cartSubtotal)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-500 text-[11px]">
-                      <span>16% VAT &amp; Excise Included:</span>
-                      <span className="font-mono-tabular">{formatKes(cartVatAndExcise)}</span>
-                    </div>
-                    <div className="flex justify-between text-base font-montserrat font-black text-[#0A006E] pt-1 border-t border-slate-200">
-                      <span>Total Order Amount:</span>
-                      <span className="font-mono-tabular text-lg">{formatKes(cartGrandTotal)}</span>
-                    </div>
-
-                    {/* Affiliate Commission Preview Card */}
-                    <div className="bg-[#34D186]/15 border border-[#34D186]/40 rounded-xl p-2.5 space-y-1">
-                      <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-[#0A006E]">
-                        <span className="flex items-center gap-1">
-                          <TrendingUp className="w-3.5 h-3.5 text-[#1E9E60]" />
-                          Your Commission Earnings:
-                        </span>
-                        <span className="font-mono-tabular text-sm text-[#1E9E60] font-black">
-                          +{formatKes(cartTotalEarnings)}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-600 flex justify-between">
-                        <span>Base {commPct}% Rate: +{formatKes(cartAffiliateBaseComm)}</span>
-                        {cartAffiliateMarkupTotal > 0 && (
-                          <span>Added Markup: +{formatKes(cartAffiliateMarkupTotal)}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
+                {/* Cart Line Items (displays 2 items by default, rest collapsed) */}
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-montserrat font-bold text-slate-500 px-0.5">
+                    <span>Items in Cart</span>
+                    <span className="font-mono">{cart.length} item{cart.length === 1 ? '' : 's'} · {totalUnitsInCart} unit{totalUnitsInCart === 1 ? '' : 's'}</span>
+                  </div>
+
+                  {cart.length === 0 ? (
+                    <div className="py-6 text-center text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                      <ShoppingCart className="w-7 h-7 mx-auto mb-1 opacity-40 text-[#0A006E]" />
+                      <p className="text-xs font-medium">Cart is empty.</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Tap &ldquo;+ Bottle&rdquo; or &ldquo;+ Case&rdquo; on any drink to add.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {(showAllCartItems ? cart : cart.slice(0, 2)).map((item, idx) => (
+                        <div key={`${item.productId}-${item.unitMode}`} className="bg-slate-50/80 border border-slate-200 rounded-xl p-2.5 space-y-1.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h5 className="text-xs font-montserrat font-bold text-slate-900 truncate">
+                                {item.product.name}
+                              </h5>
+                              <div className="text-[10px] text-slate-500 font-medium">
+                                <span className="font-bold text-[#0A006E]">{item.unitMode}</span> · {formatKes(item.unitPrice)} each
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <div className="text-xs font-montserrat font-black text-[#0A006E] font-mono-tabular">
+                                {formatKes(item.lineTotal)}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(idx)}
+                                className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quantity Controls & Markup field */}
+                          <div className="flex items-center justify-between gap-2 pt-0.5">
+                            {/* Stepper */}
+                            <div className="flex items-center bg-white rounded-lg border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateQuantity(idx, -1)}
+                                className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="w-7 text-center text-xs font-montserrat font-black text-slate-900 font-mono-tabular">
+                                {item.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateQuantity(idx, 1)}
+                                className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-900 cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Optional Markup Per Unit */}
+                            <div className="flex items-center gap-1 text-[11px]">
+                              <span className="text-slate-500 font-medium text-[10px]">Markup:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="50"
+                                value={item.affiliateMarkupPerUnit || ''}
+                                onChange={(e) => handleUpdateMarkup(idx, Number(e.target.value))}
+                                placeholder="+0"
+                                className="w-16 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-center text-[10px] font-mono font-bold text-[#1E9E60] outline-none"
+                                title="Add your custom profit markup per unit"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {cart.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllCartItems(!showAllCartItems)}
+                          className="w-full text-center text-xs text-[#0A006E] font-montserrat font-bold py-1.5 underline cursor-pointer hover:text-indigo-900"
+                        >
+                          {showAllCartItems ? 'Collapse items' : `Show all ${cart.length} items (+${cart.length - 2} more)`}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* FLOATING CART TOTAL CHARGE & ACTION BAR - PERMANENTLY FLOATS AT THE BOTTOM, NEVER SCROLLS */}
+              <div className="shrink-0 border-t-2 border-[#0A006E]/20 bg-white p-3.5 sm:p-4 space-y-2.5 shadow-[0_-8px_25px_rgba(10,0,110,0.08)] z-20">
+                {/* Cart Financials Summary */}
+                <div className="space-y-1 bg-slate-50/90 border border-slate-200/80 rounded-xl p-2.5">
+                  <div className="flex justify-between text-slate-500 text-[11px] font-mono-tabular">
+                    <span>Subtotal:</span>
+                    <span className="font-semibold text-slate-700">{formatKes(cartSubtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-400 font-mono-tabular">
+                    <span>16% VAT &amp; Excise Included:</span>
+                    <span>{formatKes(cartVatAndExcise)}</span>
+                  </div>
+
+                  {/* Highlighted Floating Total Charge Bar */}
+                  <div className="flex justify-between items-baseline pt-1.5 border-t border-slate-200">
+                    <span className="text-xs sm:text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wide">
+                      Cart Total Charge:
+                    </span>
+                    <span className="text-lg sm:text-xl font-montserrat font-black text-[#0A006E] font-mono-tabular">
+                      {formatKes(cartGrandTotal)}
+                    </span>
+                  </div>
+
+                  {/* Commission Preview Pill */}
+                  <div className="mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[11px] font-montserrat font-bold text-[#0A006E]">
+                    <span className="flex items-center gap-1 text-[10px] text-slate-600">
+                      <TrendingUp className="w-3.5 h-3.5 text-[#1E9E60]" />
+                      Earnings ({commPct}%):
+                    </span>
+                    <span className="font-mono-tabular text-xs text-[#1E9E60] font-black">
+                      +{formatKes(cartTotalEarnings)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2 Primary Floating Action Buttons */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
                   {/* 1. BUTTON: QUEUE TO CASHIER */}
                   <button
                     type="button"
                     disabled={isProcessing || cart.length === 0}
                     onClick={handleQueueToCashier}
-                    className="w-full py-3.5 px-4 bg-[#FFDE00] hover:bg-amber-400 active:bg-amber-500 text-[#0A006E] border-2 border-[#0A006E] rounded-2xl font-montserrat font-black text-xs cursor-pointer shadow-sm transition-all active:scale-98 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="py-2.5 px-3 bg-[#FFDE00] hover:bg-amber-400 active:bg-amber-500 text-[#0A006E] border-2 border-[#0A006E] rounded-xl font-montserrat font-black text-xs cursor-pointer shadow-xs transition-all active:scale-98 flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Send order token to cashier counter for customer payment"
                   >
-                    <div className="flex items-center gap-2.5 text-left">
-                      <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0">
-                        <Send className="w-4 h-4 stroke-[2.5]" />
-                      </div>
-                      <div>
-                        <div className="leading-tight text-sm font-black">Queue to Cashier</div>
-                        <div className="text-[10px] text-slate-800 font-semibold">
-                          Customer pays cashier at counter &amp; collects
-                        </div>
-                      </div>
-                    </div>
-                    <ArrowRight className="w-5 h-5 text-[#0A006E]" />
+                    <Send className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span className="truncate">Queue to Cashier</span>
                   </button>
 
                   {/* 2. BUTTON: DIRECT CHECKOUT */}
@@ -1481,20 +1490,11 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
                     type="button"
                     disabled={isProcessing || cart.length === 0}
                     onClick={handleOpenCheckoutModal}
-                    className="w-full py-3.5 px-4 bg-[#0A006E] hover:bg-[#080055] active:bg-[#060044] text-white border-2 border-[#0A006E] rounded-2xl font-montserrat font-black text-xs cursor-pointer shadow-md transition-all active:scale-98 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="py-2.5 px-3 bg-[#0A006E] hover:bg-[#080055] active:bg-[#060044] text-[#FFDE00] border-2 border-[#0A006E] rounded-xl font-montserrat font-black text-xs cursor-pointer shadow-xs transition-all active:scale-98 flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Process direct instant payment & issue eTIMS receipt"
                   >
-                    <div className="flex items-center gap-2.5 text-left">
-                      <div className="w-8 h-8 rounded-xl bg-[#34D186] text-[#0A006E] flex items-center justify-center shrink-0">
-                        <CreditCard className="w-4 h-4 stroke-[2.5]" />
-                      </div>
-                      <div>
-                        <div className="leading-tight text-sm font-black text-[#FFDE00]">Direct Checkout</div>
-                        <div className="text-[10px] text-white/80 font-medium">
-                          Collect payment now · Instant eTIMS receipt
-                        </div>
-                      </div>
-                    </div>
-                    <CheckCircle2 className="w-5 h-5 text-[#34D186]" />
+                    <CreditCard className="w-3.5 h-3.5 text-[#34D186]" />
+                    <span className="truncate">Direct Checkout</span>
                   </button>
                 </div>
               </div>

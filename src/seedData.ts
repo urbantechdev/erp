@@ -221,6 +221,17 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
             status: 'Operational',
           }).catch(() => {});
         }
+
+        // Check if this is the Industrial Area / Mombasa Road branch
+        if (code === 'BR-IND-003' || code === 'BR-QR-001' || name.includes('industrial area') || name.includes('mombasa road')) {
+          await updateDoc(doc(db, 'branches', branchDoc.id), {
+            code: 'BR-QR-001',
+            name: 'Industrial Area & Mombasa Road Logistics Yard',
+            regionId: 'reg-nrb-ind',
+            regionName: 'Industrial Area & Mombasa Road Logistics Yard',
+            address: 'Mombasa Road & Enterprise Road, Industrial Area (Nairobi West corridor)',
+          }).catch(() => {});
+        }
       }
     }
 

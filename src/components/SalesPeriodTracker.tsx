@@ -18,7 +18,7 @@ import {
   Receipt,
   Layers,
 } from 'lucide-react';
-import { TransactionDoc, StaffMember, LineItem } from '../types';
+import { TransactionDoc, StaffMember, LineItem, Branch } from '../types';
 import { formatKes, exportToCSV, exportReportToPDF } from '../erpUtils';
 
 export type SalesPeriod = 'today' | 'this_week' | 'this_month' | 'this_year' | 'all';
@@ -28,8 +28,8 @@ interface SalesPeriodTrackerProps {
   currentUser: StaffMember;
   onPreviewDoc: (doc: TransactionDoc) => void;
   onNavigateToPos?: (mode: 'retail' | 'wholesale') => void;
-  branches: Branch[];
-  staff: StaffMember[];
+  branches?: Branch[];
+  staff?: StaffMember[];
 }
 
 interface PeriodStats {
@@ -56,8 +56,8 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
   currentUser,
   onPreviewDoc,
   onNavigateToPos,
-  branches,
-  staff,
+  branches = [],
+  staff = [],
 }) => {
   const [activePeriod, setActivePeriod] = useState<SalesPeriod>('today');
   const [searchQuery, setSearchQuery] = useState('');
