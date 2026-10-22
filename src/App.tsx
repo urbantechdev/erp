@@ -3248,6 +3248,13 @@ export default function App() {
         currentUser={currentUser}
         activeModule={activeModule}
         onSelectModule={handleSelectModule}
+        onOpenCustomerPortal={() => {
+          if (activeModule === 'customer_portal') {
+            handleSelectModule(allowedModules[0] || 'overview');
+          } else {
+            handleSelectModule('customer_portal');
+          }
+        }}
         onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
         onOpenUserProfile={() => setShowUserProfileModal(true)}
         onLogout={handleLogout}
@@ -4104,6 +4111,7 @@ export default function App() {
         activeBranch={scopedBranches.find((b) => b.id === currentUser.branchId) || scopedBranches[0]}
         products={products}
         transactions={scopedTransactions}
+        onOpenCustomerPortal={() => handleSelectModule('customer_portal')}
         onOpenAccessMatrix={() => setIsAccessMatrixOpen(true)}
         onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
         onOpenPhoneScanner={() => {

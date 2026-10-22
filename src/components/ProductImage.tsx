@@ -42,11 +42,15 @@ export const ProductImage: React.FC<ProductImageProps> = React.memo(({
   const primarySrc = getProductImageUrl(product);
   const [imgSrc, setImgSrc] = useState<string>(primarySrc);
   const [usedFallback, setUsedFallback] = useState<boolean>(false);
+  const prevPrimaryRef = React.useRef(primarySrc);
 
   useEffect(() => {
-    setImgSrc(getProductImageUrl(product));
-    setUsedFallback(false);
-  }, [product.image, product.name, product.brand, product.subCategory, product.category]);
+    if (prevPrimaryRef.current !== primarySrc) {
+      prevPrimaryRef.current = primarySrc;
+      setImgSrc(primarySrc);
+      setUsedFallback(false);
+    }
+  }, [primarySrc]);
 
   return (
     <div

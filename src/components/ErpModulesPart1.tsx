@@ -1959,6 +1959,17 @@ export const InventoryModule: React.FC<{
           <AlertTriangle className="w-3.5 h-3.5" />
           Duplicate Check
         </button>
+        {onWipeAllProducts && canEditProduct && (
+          <button
+            type="button"
+            onClick={onWipeAllProducts}
+            className="flex-1 min-w-[120px] px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition active:scale-95 whitespace-nowrap"
+            title="Wipe all inventory SKUs"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Wipe Inventory
+          </button>
+        )}
       </div>
 
       {/* Desktop/Tablet: Minimalized Streamlined Hero Bar (Hidden on Mobile) */}

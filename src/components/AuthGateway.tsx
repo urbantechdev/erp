@@ -442,6 +442,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
       <Header
         variant="gateway"
         onHomeClick={() => setScreenView('boxes')}
+        onOpenCustomerPortal={onOpenCustomerPortal}
         branches={branches}
         totalStaffCount={staffList.length}
       />
