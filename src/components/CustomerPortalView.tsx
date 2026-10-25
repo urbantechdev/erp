@@ -20,6 +20,10 @@ import {
   Eye,
   Layers,
   Menu,
+  ScanLine,
+  Camera,
+  Barcode,
+  Zap,
 } from 'lucide-react';
 import { Product, Branch, GeoRegion, TransactionDoc, StaffMember } from '../types';
 import { ProductImage } from './ProductImage';
@@ -276,6 +280,12 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedBranchId, setSelectedBranchId] = useState<string>(branches[0]?.id || '');
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [isMobileCategorySheetOpen, setIsMobileCategorySheetOpen] = useState(false);
+  const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
+  const [scannerQuery, setScannerQuery] = useState('');
+  const [scannedProductMatch, setScannedProductMatch] = useState<Product | null>(null);
+  const [categorySearchTerm, setCategorySearchTerm] = useState('');
   const [rating, setRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewFeedback, setReviewFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -516,7 +526,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-montserrat text-slate-800 pb-24">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-montserrat text-slate-800 pb-36 md:pb-24">
       {/* Main Store Header: VAAIRO Signature Deep Navy Header (2x Height) with Curved Single-Wave Bottom Edge */}
       <header className="sticky top-0 z-30 pt-5 pb-12 px-4 sm:px-6 bg-[#0A006E] text-white flex flex-col relative overflow-hidden shadow-lg">
         {/* Animated silent scanner sweep across header */}
@@ -582,12 +592,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             {/* Cart Button (Hidden on Mobile home page / Header as requested) */}
             <button
               type="button"
-              onClick={() => {
-                const el = document.getElementById('pos-checkout-box');
-                if (el) {
-                  el.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
+              onClick={() => setIsMobileCartOpen(true)}
               className="hidden sm:flex w-11 h-11 sm:w-12 sm:h-12 rounded-2xl items-center justify-center border-2 border-white transition-all cursor-pointer shadow-md relative group bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400 active:scale-95"
               title={`Direct Checkout Box (${cartItemCount} items)`}
               aria-label="Shopping Cart"
@@ -724,7 +729,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
               {visibleProducts.map((prod) => (
                 <PortalProductCard
                   key={prod.id}
@@ -1316,13 +1321,14 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         </div>
       )}
 
-      {/* Fixed Bottom Navigation Bar for Customer Portal */}
+      {/* Constant Bottom Navigation Bar (Stays Locked in Place on Top, Zero Movement on Scroll) */}
       <nav
         aria-label="Customer Portal Bottom Navigation"
-        className="fixed bottom-0 left-0 right-0 z-40 bg-[#0A006E] text-white border-t-2 border-[#FFDE00] shadow-[0_-8px_30px_rgba(10,0,110,0.35)] px-3 sm:px-6 py-2 backdrop-blur-md transition-all relative"
+        style={{ transform: 'translate3d(0, 0, 0)', WebkitTransform: 'translate3d(0, 0, 0)' }}
+        className="fixed inset-x-0 bottom-0 z-50 bg-[#0A006E] text-white border-t-2 border-[#FFDE00] shadow-[0_-10px_35px_rgba(10,0,110,0.45)] px-2 sm:px-6 pt-1.5 sm:pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] select-none touch-manipulation overflow-visible"
       >
         {/* Single Curved Wave Top Edge with Gold Stroke */}
-        <div className="absolute left-0 right-0 -top-7 sm:-top-9 w-full leading-none pointer-events-none z-30">
+        <div className="absolute left-0 right-0 -top-7 sm:-top-9 w-full leading-none pointer-events-none z-10">
           <svg
             viewBox="0 0 1200 70"
             preserveAspectRatio="none"
@@ -1339,7 +1345,8 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
           </svg>
         </div>
 
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4 relative z-20">
+        {/* 1. Desktop View (md+) */}
+        <div className="hidden md:flex max-w-7xl mx-auto items-center justify-between gap-2 sm:gap-4 relative z-20">
           {/* Section 1: Depot Fulfillment Indicator */}
           <div className="hidden lg:flex items-center gap-2.5 shrink-0">
             <div className="w-8 h-8 rounded-xl bg-white/10 border border-[#FFDE00]/40 text-[#FFDE00] flex items-center justify-center shadow-xs">
@@ -1415,12 +1422,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             {/* Live Checkout Ticket Button */}
             <button
               type="button"
-              onClick={() => {
-                const el = document.getElementById('pos-checkout-box');
-                if (el) {
-                  el.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
+              onClick={() => setIsMobileCartOpen(true)}
               className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-montserrat font-black text-xs transition cursor-pointer shadow-md active:scale-95 ${
                 cart.length > 0
                   ? 'bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400 border border-white/30'
@@ -1453,9 +1455,653 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             </button>
           </div>
         </div>
+
+        {/* 2. Mobile Native App Sticky Tab Bar (< md) with Big Animated Center Scan Button */}
+        <div className="md:hidden flex items-center justify-between gap-1 relative z-20 px-2 py-0.5">
+          {/* Tab 1: Shop / Home */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('ALL');
+              setIsMobileCartOpen(false);
+              setIsMobileCategorySheetOpen(false);
+              setIsMobileScannerOpen(false);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition cursor-pointer flex-1 ${
+              selectedCategory === 'ALL' && !isMobileCartOpen && !isMobileCategorySheetOpen && !isMobileScannerOpen
+                ? 'text-[#FFDE00] font-black'
+                : 'text-white/75 hover:text-white'
+            }`}
+          >
+            <Store className="w-5 h-5 stroke-[2.3]" />
+            <span className="text-[10px] font-bold mt-0.5">Shop</span>
+          </button>
+
+          {/* Tab 2: Categories */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsMobileCategorySheetOpen(true);
+              setIsMobileCartOpen(false);
+              setIsMobileScannerOpen(false);
+            }}
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition cursor-pointer flex-1 ${
+              isMobileCategorySheetOpen || (selectedCategory !== 'ALL' && !isMobileCartOpen && !isMobileScannerOpen)
+                ? 'text-[#FFDE00] font-black'
+                : 'text-white/75 hover:text-white'
+            }`}
+          >
+            <Layers className="w-5 h-5 stroke-[2.3]" />
+            <span className="text-[10px] font-bold mt-0.5">Categories</span>
+          </button>
+
+          {/* Tab 3: BIG CENTER ANIMATED SEARCH BUTTON WITH YELLOW BACKGROUND & SCAN EFFECT */}
+          <div className="relative flex-1 flex flex-col items-center justify-center -mt-8 z-50">
+            <button
+              type="button"
+              onClick={() => {
+                const input =
+                  document.getElementById('customer-portal-mobile-search-input') ||
+                  document.getElementById('customer-portal-search-input');
+                if (input) {
+                  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  (input as HTMLInputElement).focus();
+                }
+                playPosBeep('click');
+              }}
+              className="center-scan-btn relative w-15 h-15 rounded-full bg-[#FFDE00] border-[4px] border-[#0A006E] text-[#0A006E] flex items-center justify-center shadow-[0_10px_35px_rgba(255,222,0,0.6)] active:scale-90 transition-transform cursor-pointer group overflow-hidden z-50"
+              title="Search Spirits Catalog"
+              aria-label="Search Spirits Catalog"
+            >
+              {/* Moving Laser Scan Line Effect */}
+              <div className="center-laser-line" />
+
+              {/* Subtly animated glow gradient */}
+              <div className="absolute inset-0 bg-gradient-to-b from-white/35 via-transparent to-amber-300/30 pointer-events-none" />
+
+              {/* Pulse Search Icon */}
+              <div className="relative z-10 flex items-center justify-center">
+                <Search className="w-6 h-6 stroke-[2.8] text-[#0A006E] drop-shadow-[0_0_8px_rgba(10,0,110,0.5)] animate-pulse" />
+              </div>
+            </button>
+            <span className="text-[9px] font-black tracking-wider uppercase text-[#FFDE00] mt-0.5 font-montserrat drop-shadow-sm z-50">
+              SEARCH
+            </span>
+          </div>
+
+          {/* Tab 4: Cart / Order Ticket */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsMobileCartOpen(true);
+              setIsMobileCategorySheetOpen(false);
+              setIsMobileScannerOpen(false);
+            }}
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition cursor-pointer flex-1 relative ${
+              isMobileCartOpen ? 'text-[#FFDE00] font-black' : 'text-white/75 hover:text-white'
+            }`}
+          >
+            <div className="relative">
+              <ShoppingCart className="w-5 h-5 stroke-[2.3]" />
+              {cartItemCount > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 px-1.5 py-0.2 bg-[#FFDE00] text-[#0A006E] text-[9px] font-black rounded-full leading-tight shadow-sm">
+                  {cartItemCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] font-bold mt-0.5">
+              {cartTotal > 0 ? formatKes(cartTotal) : 'Cart'}
+            </span>
+          </button>
+
+          {/* Tab 5: Back to ERP Backoffice */}
+          <button
+            type="button"
+            onClick={onBackToErpLogin}
+            className="flex flex-col items-center justify-center py-1 px-1 rounded-xl transition cursor-pointer flex-1 text-white/75 hover:text-white"
+          >
+            <ArrowLeft className="w-5 h-5 stroke-[2.3]" />
+            <span className="text-[10px] font-bold mt-0.5">Back</span>
+          </button>
+        </div>
       </nav>
-      
-      
+
+      {/* 1. Full-Screen Cart & Checkout Modal on Mobile */}
+      {isMobileCartOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[100] bg-white sm:bg-black/75 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-4 overflow-hidden animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white w-full h-full sm:h-auto sm:max-h-[88vh] sm:max-w-lg sm:rounded-3xl flex flex-col overflow-hidden sm:border-2 sm:border-[#0A006E] sm:shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+          >
+            {/* Mobile Native App Header */}
+            <div className="p-4 bg-[#0A006E] text-white flex items-center justify-between shrink-0 shadow-md">
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileCartOpen(false)}
+                  className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <div className="w-9 h-9 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center font-black">
+                  <Receipt className="w-4 h-4 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-montserrat font-black text-sm text-white">Order Checkout Ticket</h3>
+                  <p className="text-[10px] text-slate-300 font-medium">
+                    {cartItemCount} {cartItemCount === 1 ? 'bottle' : 'bottles'} · Fulfillment: {activeBranch.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileCartOpen(false)}
+                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition"
+                aria-label="Close Checkout"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Cart Items & Form */}
+            <div className="p-4 overflow-y-auto space-y-4 flex-1 text-xs">
+              {/* Item List */}
+              {cart.length === 0 ? (
+                <div className="py-12 text-center space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                    <ShoppingCart className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-sm font-black text-slate-800">Your ticket is empty</h4>
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                    Browse spirits and tap + to add bottles to your delivery order ticket.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileCartOpen(false)}
+                    className="px-5 py-2.5 bg-[#0A006E] text-[#FFDE00] rounded-xl font-black text-xs cursor-pointer shadow-md"
+                  >
+                    Browse Spirits Catalog
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between pb-1">
+                    <span className="font-montserrat font-black text-xs text-[#0A006E] uppercase tracking-wider">
+                      Selected Bottles ({cartItemCount})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCart([])}
+                      className="text-[11px] text-rose-600 font-bold hover:underline cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  {cart.map((item) => (
+                    <div
+                      key={item.product.id}
+                      className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 p-1 flex items-center justify-center">
+                        <ProductImage
+                          product={toImageProduct(item.product)}
+                          size="full"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h5 className="text-xs font-bold text-slate-900 truncate">{item.product.name}</h5>
+                        <div className="text-xs font-black text-[#0A006E] font-mono-tabular">
+                          {formatKes(item.unitPrice)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.product.id, -1)}
+                          className="w-7 h-7 rounded-lg bg-white border border-slate-300 text-slate-700 flex items-center justify-center cursor-pointer font-bold active:scale-90"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-xs font-black min-w-[20px] text-center font-mono-tabular">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.product.id, 1)}
+                          className="w-7 h-7 rounded-lg bg-white border border-slate-300 text-slate-700 flex items-center justify-center cursor-pointer font-bold active:scale-90"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFromCart(item.product.id)}
+                          className="w-7 h-7 rounded-lg text-rose-500 hover:bg-rose-50 flex items-center justify-center cursor-pointer ml-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Delivery Details Form */}
+              {cart.length > 0 && (
+                <div className="space-y-3 pt-3 border-t border-slate-200">
+                  <h4 className="text-xs font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-[#0A006E]" /> Delivery Information
+                  </h4>
+
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Your Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="e.g. Victor Mutua"
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0A006E] focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Phone / M-Pesa Number *</label>
+                      <input
+                        type="tel"
+                        required
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        placeholder="07XX XXX XXX"
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0A006E] focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Delivery Address / Landmark *</label>
+                      <input
+                        type="text"
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                        placeholder="e.g. Westlands, Rhapta Road, Apt 4B"
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0A006E] focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 block mb-1">Payment Method</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('M-Pesa STK')}
+                          className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition cursor-pointer text-center ${
+                            paymentMethod === 'M-Pesa STK'
+                              ? 'bg-[#0A006E] text-white border-[#0A006E] shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          M-Pesa STK
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('Cash')}
+                          className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition cursor-pointer text-center ${
+                            paymentMethod === 'Cash'
+                              ? 'bg-[#0A006E] text-white border-[#0A006E] shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          Cash on Delivery
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pricing Breakdown */}
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Subtotal</span>
+                      <span className="font-mono-tabular font-bold">{formatKes(cartSubtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>VAT (16% Included)</span>
+                      <span className="font-mono-tabular font-bold">{formatKes(Math.round(cartSubtotal * 0.16))}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Delivery Fee</span>
+                      <span className="font-mono-tabular font-bold">
+                        {deliveryFee === 0 ? <span className="text-emerald-600 font-black">FREE</span> : formatKes(deliveryFee)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-900 font-black text-sm pt-2 border-t border-slate-200">
+                      <span>Total Due</span>
+                      <span className="font-mono-tabular text-base text-[#0A006E]">{formatKes(cartTotal)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Complete Button with Safe Area Inset */}
+            {cart.length > 0 && (
+              <div className="p-4 bg-white border-t border-slate-200 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg">
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    await handlePlaceOrder(e as any);
+                    setIsMobileCartOpen(false);
+                  }}
+                  disabled={isSubmitting || cart.length === 0}
+                  className="w-full py-4 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-black text-xs font-montserrat shadow-md transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 active:scale-98"
+                >
+                  {isSubmitting ? (
+                    'Processing Order...'
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" /> Complete Delivery Order ({formatKes(cartTotal)})
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 2. Full-Screen Category Picker on Mobile */}
+      {isMobileCategorySheetOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[100] bg-white flex flex-col w-full h-full overflow-hidden animate-in fade-in slide-in-from-bottom duration-200"
+        >
+          {/* Top Header */}
+          <div className="p-4 bg-[#0A006E] text-white flex items-center justify-between shrink-0 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsMobileCategorySheetOpen(false)}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition"
+                aria-label="Back"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="w-9 h-9 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center font-black">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-montserrat font-black text-sm text-white">Spirits &amp; Beverage Categories</h3>
+                <p className="text-[10px] text-slate-300">Tap category to filter storefront catalog</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMobileCategorySheetOpen(false)}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Quick Filter Search inside Categories */}
+          <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={categorySearchTerm}
+                onChange={(e) => setCategorySearchTerm(e.target.value)}
+                placeholder="Search spirits categories..."
+                className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0A006E]"
+              />
+            </div>
+          </div>
+
+          {/* Full Screen Scrollable Categories Grid */}
+          <div className="p-4 overflow-y-auto flex-1 grid grid-cols-2 gap-3 pb-24">
+            {CATEGORIES.filter(
+              (cat) => !categorySearchTerm.trim() || cat.toLowerCase().includes(categorySearchTerm.toLowerCase().trim())
+            ).map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => {
+                  setSelectedCategory(cat);
+                  setIsMobileCategorySheetOpen(false);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`p-4 rounded-2xl border-2 text-left font-montserrat font-bold text-xs transition cursor-pointer flex flex-col justify-between h-28 relative shadow-xs active:scale-98 ${
+                  selectedCategory === cat
+                    ? 'bg-[#0A006E] text-[#FFDE00] border-[#0A006E] shadow-md ring-2 ring-[#FFDE00]'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                    selectedCategory === cat ? 'bg-white/20 text-[#FFDE00]' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    {cat === 'ALL' ? 'Catalog' : cat}
+                  </span>
+                  {selectedCategory === cat && <CheckCircle2 className="w-5 h-5 text-[#FFDE00]" />}
+                </div>
+                <div>
+                  <h4 className="font-montserrat font-black text-sm">
+                    {cat === 'ALL' ? 'All Spirits' : cat}
+                  </h4>
+                  <span className={`text-[10px] font-medium block mt-0.5 ${
+                    selectedCategory === cat ? 'text-white/80' : 'text-slate-500'
+                  }`}>
+                    Tap to view products
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. Full-Screen Mobile Barcode & Spirits Scanner Station */}
+      {isMobileScannerOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[100] bg-slate-950 text-white flex flex-col w-full h-full overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        >
+          {/* Header */}
+          <div className="p-4 bg-[#0A006E] text-white flex items-center justify-between shrink-0 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileScannerOpen(false);
+                  setScannedProductMatch(null);
+                }}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition"
+                aria-label="Back"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="w-9 h-9 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center font-black">
+                <ScanLine className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-montserrat font-black text-sm text-white">Spirits Barcode Scanner</h3>
+                <p className="text-[10px] text-slate-300">Point at bottle barcode or quick lookup</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMobileScannerOpen(false);
+                setScannedProductMatch(null);
+              }}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Scanner Viewfinder Body */}
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-start space-y-4">
+            {/* Viewfinder Target Reticle with Animated Laser Scan Beam */}
+            <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-3xl border-2 border-slate-700 overflow-hidden flex flex-col items-center justify-center shadow-2xl shrink-0 mt-2">
+              {/* Corner targeting brackets */}
+              <div className="absolute top-4 left-4 w-8 h-8 border-t-4 border-l-4 border-[#FFDE00] rounded-tl-lg pointer-events-none" />
+              <div className="absolute top-4 right-4 w-8 h-8 border-t-4 border-r-4 border-[#FFDE00] rounded-tr-lg pointer-events-none" />
+              <div className="absolute bottom-4 left-4 w-8 h-8 border-b-4 border-l-4 border-[#FFDE00] rounded-bl-lg pointer-events-none" />
+              <div className="absolute bottom-4 right-4 w-8 h-8 border-b-4 border-r-4 border-[#FFDE00] rounded-br-lg pointer-events-none" />
+
+              {/* Animated Laser Scanning Beam */}
+              <div className="absolute left-6 right-6 h-1 bg-gradient-to-r from-transparent via-[#FFDE00] to-transparent shadow-[0_0_15px_#FFDE00,0_0_25px_#FFDE00] animate-pulse pointer-events-none center-laser-line" />
+
+              <div className="text-center p-6 space-y-2 relative z-10 pointer-events-none">
+                <Barcode className="w-16 h-16 text-[#FFDE00]/80 mx-auto animate-pulse" />
+                <h4 className="font-montserrat font-black text-sm text-white">Scanner Sensor Active</h4>
+                <p className="text-[11px] text-slate-400 max-w-[220px] mx-auto">
+                  Align bottle EAN-13 barcode within brackets or use demo tests below.
+                </p>
+              </div>
+            </div>
+
+            {/* Direct Input Field */}
+            <div className="w-full max-w-sm space-y-2">
+              <div className="relative">
+                <Barcode className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={scannerQuery}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setScannerQuery(val);
+                    const q = val.trim().toLowerCase();
+                    if (!q) {
+                      setScannedProductMatch(null);
+                      return;
+                    }
+                    const match = products.find((p) => {
+                      if (p.barcode && p.barcode.toLowerCase() === q) return true;
+                      if (p.caseBarcode && p.caseBarcode.toLowerCase() === q) return true;
+                      if (p.sku && p.sku.toLowerCase() === q) return true;
+                      if (p.name && p.name.toLowerCase().includes(q)) return true;
+                      return false;
+                    });
+                    if (match) {
+                      setScannedProductMatch(match);
+                      playPosBeep('success');
+                    } else {
+                      setScannedProductMatch(null);
+                    }
+                  }}
+                  placeholder="Type barcode or search spirit name..."
+                  className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-2xl text-xs font-semibold text-white focus:outline-none focus:border-[#FFDE00] placeholder:text-slate-500 shadow-inner"
+                />
+              </div>
+            </div>
+
+            {/* Matched Product Showcase Card */}
+            {scannedProductMatch && (
+              <div className="w-full max-w-sm bg-slate-900 border-2 border-[#FFDE00] rounded-3xl p-4 space-y-3 animate-in zoom-in-95 duration-150 shadow-2xl">
+                <div className="flex items-center gap-2 text-emerald-400 text-xs font-black">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Verified Bottle Recognized!</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-2xl bg-white p-1 shrink-0 flex items-center justify-center">
+                    <ProductImage
+                      product={toImageProduct(scannedProductMatch)}
+                      size="full"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] font-black uppercase text-[#FFDE00] block">
+                      {scannedProductMatch.brand || scannedProductMatch.subCategory}
+                    </span>
+                    <h4 className="font-montserrat font-black text-sm text-white truncate">
+                      {scannedProductMatch.name}
+                    </h4>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-sm font-black font-mono-tabular text-[#FFDE00]">
+                        {formatKes(scannedProductMatch.retailPriceKes || scannedProductMatch.baseRetailPrice || 3200)}
+                      </span>
+                      <span className="text-[10px] text-slate-400">· {scannedProductMatch.volumeMl || 750}ml</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAddToCart(scannedProductMatch, 1);
+                      setIsMobileScannerOpen(false);
+                      setIsMobileCartOpen(true);
+                    }}
+                    className="flex-1 py-3 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl font-montserrat font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-98"
+                  >
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
+                    Add to Ticket ({formatKes(scannedProductMatch.retailPriceKes || scannedProductMatch.baseRetailPrice || 3200)})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openProductPreview(scannedProductMatch);
+                      setIsMobileScannerOpen(false);
+                    }}
+                    className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold cursor-pointer"
+                    title="View ML Variants"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Quick 1-Tap Sample Barcode Simulator */}
+            <div className="w-full max-w-sm pt-2 space-y-2">
+              <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block text-center">
+                Instant 1-Tap Barcode Samples:
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { name: 'Johnnie Walker Black', barcode: '5000267014203' },
+                  { name: 'Hennessy VS', barcode: '3245990250004' },
+                  { name: 'Tanqueray Gin', barcode: '5000281005409' },
+                  { name: 'Tusker 500ml', barcode: '6161100000018' },
+                ].map((sample) => (
+                  <button
+                    key={sample.barcode}
+                    type="button"
+                    onClick={() => {
+                      setScannerQuery(sample.barcode);
+                      const match = products.find(
+                        (p) =>
+                          (p.barcode && p.barcode.includes(sample.barcode)) ||
+                          p.name.toLowerCase().includes(sample.name.toLowerCase().split(' ')[0])
+                      );
+                      if (match) {
+                        setScannedProductMatch(match);
+                        playPosBeep('success');
+                      }
+                    }}
+                    className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#FFDE00] rounded-xl text-left transition cursor-pointer flex flex-col justify-between active:scale-95"
+                  >
+                    <span className="text-[11px] font-bold text-white truncate">{sample.name}</span>
+                    <span className="text-[9px] font-mono font-bold text-[#FFDE00] truncate">{sample.barcode}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

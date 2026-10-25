@@ -377,6 +377,54 @@ div.bg-white.rounded-xl:not(.fixed *):hover,
   box-shadow: 0 18px 36px -6px rgba(10, 0, 110, 0.22), 0 8px 16px -4px rgba(15, 23, 42, 0.12);
 }
 
+/* Mobile Bottom Nav Big Center Scanner Button Animation */
+@keyframes centerScanLaser {
+  0% {
+    top: 8%;
+    opacity: 0.3;
+  }
+  50% {
+    top: 88%;
+    opacity: 1;
+  }
+  100% {
+    top: 8%;
+    opacity: 0.3;
+  }
+}
+
+@keyframes scanRingPulse {
+  0% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(255, 222, 0, 0.7);
+  }
+  65% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 16px rgba(255, 222, 0, 0);
+  }
+  100% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(255, 222, 0, 0);
+  }
+}
+
+.center-scan-btn {
+  animation: scanRingPulse 2.8s ease-in-out infinite;
+}
+
+.center-laser-line {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 2.5px;
+  background: #FFDE00;
+  box-shadow: 0 0 10px #FFDE00, 0 0 18px #FFDE00, 0 0 24px #FFDE00;
+  animation: centerScanLaser 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+  border-radius: 9999px;
+  z-index: 20;
+}
+
 /* Print optimization for receipts, invoices, packing lists, delivery notes, quotes, and credit notes */
 @media print {
   body * {

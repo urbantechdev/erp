@@ -302,8 +302,10 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Install PWA Button */}
-            <PWAInstallButton />
+            {/* Install PWA Button (Hidden on Mobile) */}
+            <div className="hidden sm:block">
+              <PWAInstallButton />
+            </div>
           </div>
         )}
 

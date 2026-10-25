@@ -3396,11 +3396,12 @@ export const InventoryModule: React.FC<{
         </div>
       )}
 
-      {/* CSV Bulk Import Modal */}
+      {/* CSV Bulk Import Modal with Automated Pre-Upload Duplicate Testing */}
       <CsvInventoryImportModal
         isOpen={isCsvModalOpen}
         onClose={() => setIsCsvModalOpen(false)}
         branches={branches}
+        existingProducts={products}
         onBatchImport={async (drafts) => {
           if (onBatchCreateProducts) {
             return await onBatchCreateProducts(drafts);

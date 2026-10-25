@@ -2390,31 +2390,72 @@ export default function App() {
   ): Promise<number> => {
     if (!newProducts || newProducts.length === 0) return 0;
 
-    // Build a set of existing SKUs and Barcodes in Firestore to strictly ensure we do NOT upload any update to existing records
+    // Build sets of existing SKUs, Barcodes, and Names in Firestore to strictly ensure zero duplicates
     const existingSkus = new Set<string>();
+    const existingBarcodes = new Set<string>();
+    const existingNames = new Set<string>();
+
     firestoreProducts.forEach((p) => {
       if (p.sku) existingSkus.add(p.sku.trim().toUpperCase());
+      if (p.barcode && p.barcode.trim()) existingBarcodes.add(p.barcode.trim());
+      if (p.caseBarcode && p.caseBarcode.trim()) existingBarcodes.add(p.caseBarcode.trim());
+      if (p.name) {
+        const cleanName = p.name.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+        existingNames.add(`${cleanName}_${p.volumeMl || 750}`);
+      }
     });
 
-    // Filter to ensure we only insert brand-new items and do NOT upload any update to existing items
+    // Filter to ensure we only insert 100% brand-new, unique items
     const productsToInsert: Product[] = [];
     const now = Date.now();
     const seenNewSkus = new Set<string>();
+    const seenNewBarcodes = new Set<string>();
+    const seenNewNames = new Set<string>();
+    let skippedDuplicateCount = 0;
 
     for (let i = 0; i < newProducts.length; i++) {
       const raw = newProducts[i];
       const skuKey = raw.sku ? raw.sku.trim().toUpperCase() : '';
+      const barcodeKey = raw.barcode ? raw.barcode.trim() : '';
+      const caseBarcodeKey = raw.caseBarcode ? raw.caseBarcode.trim() : '';
+      const cleanName = (raw.name || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+      const nameKey = `${cleanName}_${raw.volumeMl || 750}`;
 
-      // Ensure we do NOT upload any update to an existing SKU
+      // 1. Strict Duplicate Check against Database
       if (skuKey && existingSkus.has(skuKey)) {
-        continue; // Skip: do not update existing product
+        skippedDuplicateCount++;
+        continue;
       }
+      if (barcodeKey && existingBarcodes.has(barcodeKey)) {
+        skippedDuplicateCount++;
+        continue;
+      }
+      if (caseBarcodeKey && existingBarcodes.has(caseBarcodeKey)) {
+        skippedDuplicateCount++;
+        continue;
+      }
+      if (cleanName && existingNames.has(nameKey)) {
+        skippedDuplicateCount++;
+        continue;
+      }
+
+      // 2. Strict Duplicate Check within this same Batch
       if (skuKey && seenNewSkus.has(skuKey)) {
-        continue; // Deduplicate within the CSV: do not update previous line
+        skippedDuplicateCount++;
+        continue;
       }
-      if (skuKey) {
-        seenNewSkus.add(skuKey);
+      if (barcodeKey && seenNewBarcodes.has(barcodeKey)) {
+        skippedDuplicateCount++;
+        continue;
       }
+      if (cleanName && seenNewNames.has(nameKey)) {
+        skippedDuplicateCount++;
+        continue;
+      }
+
+      if (skuKey) seenNewSkus.add(skuKey);
+      if (barcodeKey) seenNewBarcodes.add(barcodeKey);
+      if (cleanName) seenNewNames.add(nameKey);
 
       // Generate a clean, deterministic, valid document ID
       const safeId = `prod-${now}-${i}`;
@@ -2435,7 +2476,11 @@ export default function App() {
     }
 
     if (productsToInsert.length === 0) {
-      triggerToast('success', 'No New Products', 'All items in CSV already exist. No updates were uploaded.');
+      triggerToast(
+        'error',
+        'Duplicate Test: Upload Blocked',
+        `All ${newProducts.length} items in the CSV were flagged as duplicates (${skippedDuplicateCount} duplicate checks triggered). 0 products were uploaded.`
+      );
       return 0;
     }
 
