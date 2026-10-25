@@ -410,6 +410,7 @@ div.bg-white.rounded-xl:not(.fixed *):hover,
 
 .center-scan-btn {
   animation: scanRingPulse 2.8s ease-in-out infinite;
+  box-shadow: 0 10px 35px rgba(255, 222, 0, 0.6), 0 0 15px rgba(255, 255, 255, 0.2), inset 0 0 15px rgba(0, 0, 0, 0.2);
 }
 
 .center-laser-line {

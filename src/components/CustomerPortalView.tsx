@@ -24,6 +24,7 @@ import {
   Camera,
   Barcode,
   Zap,
+  Flame,
 } from 'lucide-react';
 import { Product, Branch, GeoRegion, TransactionDoc, StaffMember } from '../types';
 import { ProductImage } from './ProductImage';
@@ -177,16 +178,227 @@ const toImageProduct = (p: Product) => ({
   category: (p.category === 'LPS' ? 'LPS' : 'IPS') as any,
 });
 
+export interface NearestFulfillmentInfo {
+  branch: Branch;
+  region: GeoRegion;
+  distanceKm: number;
+  etaMinutes: string;
+  matchType: 'exact' | 'keyword' | 'proximity' | 'fallback';
+}
+
+// Intelligent Resolver: Given a selected region and branch inventory, attach the nearest/neighboring fulfillment branch
+export function resolveNearestBranch(
+  regionId: string,
+  branches: Branch[],
+  regions: GeoRegion[]
+): NearestFulfillmentInfo {
+  const currentRegion =
+    regions.find((r) => r.id === regionId) ||
+    regions.find((r) => r.id === 'reg-nrb-thk') ||
+    regions[0] || {
+      id: 'reg-nrb-thk',
+      code: 'NRB-THK-006',
+      name: 'Thika Road Corridor (Ruaraka, Kasarani, Roysambu)',
+      tierType: 'Suburban Ring' as const,
+      wholesaleMultiplier: 1.01,
+      retailMultiplier: 1.03,
+      freightLevyPerCase: 40,
+      regionalTaxRate: 0.16,
+      notes: 'High-density commercial hubs, vibrant social venues & clubs',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+
+  const regName = (currentRegion?.name || '').toLowerCase();
+  const regId = (currentRegion?.id || '').toLowerCase();
+
+  // 1. Direct match by regionId
+  const directBranch = branches.find((b) => b.regionId === currentRegion.id);
+  if (directBranch) {
+    return {
+      branch: directBranch,
+      region: currentRegion,
+      distanceKm: 2.1,
+      etaMinutes: '15 - 25 Mins',
+      matchType: 'exact',
+    };
+  }
+
+  // 2. Keyword matching (Thika Road, Kasarani, Roysambu, Westlands, etc.)
+  const keywords = [
+    { key: 'thika', fallbackName: 'Thika Road Distribution Hub & Garden City Depot' },
+    { key: 'roysambu', fallbackName: 'Thika Road Distribution Hub & Garden City Depot' },
+    { key: 'kasarani', fallbackName: 'Thika Road Distribution Hub & Garden City Depot' },
+    { key: 'ruaraka', fallbackName: 'Thika Road Distribution Hub & Garden City Depot' },
+    { key: 'westlands', fallbackName: 'Westlands Distribution Depot' },
+    { key: 'parklands', fallbackName: 'Westlands Distribution Depot' },
+    { key: 'cbd', fallbackName: 'HQ - Main Branch' },
+    { key: 'central', fallbackName: 'HQ - Main Branch' },
+    { key: 'karen', fallbackName: 'Westlands Distribution Depot' },
+    { key: 'industrial', fallbackName: 'Industrial Area & Mombasa Road Logistics Yard' },
+    { key: 'mombasa', fallbackName: 'Industrial Area & Mombasa Road Logistics Yard' },
+    { key: 'eastlands', fallbackName: 'Industrial Area & Mombasa Road Logistics Yard' },
+    { key: 'ruaka', fallbackName: 'Westlands Distribution Depot' },
+  ];
+
+  for (const { key } of keywords) {
+    if (regName.includes(key) || regId.includes(key)) {
+      const match = branches.find(
+        (b) =>
+          (b.name || '').toLowerCase().includes(key) ||
+          (b.address || '').toLowerCase().includes(key) ||
+          (b.regionName || '').toLowerCase().includes(key) ||
+          (b.deliveryZones || []).some((z) => z.toLowerCase().includes(key))
+      );
+      if (match) {
+        return {
+          branch: match,
+          region: currentRegion,
+          distanceKm: key === 'thika' || key === 'roysambu' ? 2.4 : 3.8,
+          etaMinutes: '20 - 35 Mins',
+          matchType: 'keyword',
+        };
+      }
+    }
+  }
+
+  // 3. Fallback specifically for Thika Road if branch list in state hasn't synced yet
+  if (regName.includes('thika') || regId.includes('thk')) {
+    const thkBranch = branches.find((b) => (b.name || '').toLowerCase().includes('thika'));
+    if (thkBranch) {
+      return {
+        branch: thkBranch,
+        region: currentRegion,
+        distanceKm: 2.4,
+        etaMinutes: '20 - 35 Mins',
+        matchType: 'proximity',
+      };
+    }
+    return {
+      branch: {
+        id: 'br-thk-004',
+        code: 'BR-THK-004',
+        name: 'Thika Road Distribution Hub & Garden City Depot',
+        regionId: 'reg-nrb-thk',
+        regionName: 'Thika Road Corridor (Ruaraka, Kasarani, Roysambu)',
+        address: 'Garden City Mall & Roysambu Corridor, Thika Road',
+        managerName: 'Thika Road Hub Manager',
+        exciseBondLicense: 'KRA-BOND-2026-8844D',
+        status: 'Operational',
+        isMain: false,
+        createdAt: new Date().toISOString(),
+      },
+      region: currentRegion,
+      distanceKm: 2.4,
+      etaMinutes: '20 - 35 Mins',
+      matchType: 'proximity',
+    };
+  }
+
+  // 4. Default to Main branch or first available
+  const mainBranch =
+    branches.find((b) => b.isMain) ||
+    branches[0] || {
+      id: 'br-hq-001',
+      code: 'BR-HQ-001',
+      name: 'HQ - Main Branch',
+      regionId: 'reg-nrb-cbd',
+      regionName: 'Nairobi Central Business District (CBD & High-Street)',
+      address: 'Kenyatta Avenue & Kimathi St, Nairobi CBD',
+      managerName: 'Operations Director',
+      exciseBondLicense: 'KRA-BOND-2026-8841A',
+      status: 'Operational',
+      isMain: true,
+      createdAt: new Date().toISOString(),
+    };
+
+  return {
+    branch: mainBranch,
+    region: currentRegion,
+    distanceKm: 4.6,
+    etaMinutes: '30 - 45 Mins',
+    matchType: 'fallback',
+  };
+}
+
+// Calculate regional price according to region multipliers, branch rates, and product geoPriceOverrides
+export function calculateRegionalProductPrice(
+  prod: Product,
+  region?: GeoRegion | null,
+  branch?: Branch | null
+): { unitPrice: number; basePrice: number; hasAdjustment: boolean; adjustmentNote: string } {
+  const basePrice = prod.retailPriceKes || prod.baseRetailPrice || 3200;
+
+  // 1. Explicit Geo Price Override on product
+  if (region?.id && prod.geoPriceOverrides) {
+    try {
+      const overrides = JSON.parse(prod.geoPriceOverrides);
+      if (overrides[region.id]?.retail) {
+        const ov = Number(overrides[region.id].retail);
+        return {
+          unitPrice: ov,
+          basePrice,
+          hasAdjustment: ov !== basePrice,
+          adjustmentNote: `Regional Tariff (${region.name.split(' ')[0]})`,
+        };
+      }
+    } catch {}
+  }
+
+  // 2. Branch specific price override
+  if (branch?.preferredProductPrices?.[prod.id]?.retailPriceKes) {
+    const bp = Number(branch.preferredProductPrices[prod.id].retailPriceKes);
+    return {
+      unitPrice: bp,
+      basePrice,
+      hasAdjustment: bp !== basePrice,
+      adjustmentNote: `Branch Rate (${branch.name.split(' ')[0]})`,
+    };
+  }
+
+  // 3. Region retail multiplier
+  let multiplier = region?.retailMultiplier || 1.0;
+  if (branch?.priceMultiplierPercent && branch.priceMultiplierPercent !== 100) {
+    multiplier *= branch.priceMultiplierPercent / 100;
+  }
+
+  // Round to nearest 50 KES for authentic commercial presentation
+  const unitPrice = Math.max(100, Math.round((basePrice * multiplier) / 50) * 50);
+  const hasAdjustment = unitPrice !== basePrice;
+  const pct = Math.round((multiplier - 1.0) * 100);
+  const adjustmentNote =
+    pct > 0 ? `+${pct}% Regional Tariff` : pct < 0 ? `${pct}% Regional Discount` : 'Standard Base Rate';
+
+  return {
+    unitPrice,
+    basePrice,
+    hasAdjustment,
+    adjustmentNote,
+  };
+}
+
 interface PortalProductCardProps {
   prod: Product;
   inCartQty: number;
+  unitPrice: number;
+  basePrice: number;
+  hasPriceAdjustment: boolean;
+  adjustmentNote: string;
+  activeBranchName: string;
   onPreview: (prod: Product) => void;
-  onQuickAdd: (prod: Product) => void;
+  onQuickAdd: (prod: Product, price: number) => void;
 }
 
 const PortalProductCard: React.FC<PortalProductCardProps> = React.memo(
-  ({ prod, inCartQty, onPreview, onQuickAdd }) => {
-    const price = prod.retailPriceKes || prod.baseRetailPrice || 3200;
+  ({
+    prod,
+    inCartQty,
+    unitPrice,
+    basePrice,
+    hasPriceAdjustment,
+    activeBranchName,
+    onPreview,
+    onQuickAdd,
+  }) => {
     return (
       <div
         onClick={() => onPreview(prod)}
@@ -221,8 +433,9 @@ const PortalProductCard: React.FC<PortalProductCardProps> = React.memo(
         {/* Product Details */}
         <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
           <div>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider line-clamp-1">
-              {prod.brand || prod.subCategory}
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+              <span className="truncate">{prod.brand || prod.subCategory}</span>
+              <span className="text-[9px] text-emerald-600 font-bold shrink-0">✓ In Stock</span>
             </div>
             <h4
               className="text-xs font-bold text-slate-900 line-clamp-2 group-hover:text-[#0A006E]"
@@ -230,17 +443,33 @@ const PortalProductCard: React.FC<PortalProductCardProps> = React.memo(
             >
               {prod.name}
             </h4>
-            <div className="pt-1 flex items-center gap-1 text-[10px] text-[#0A006E] font-bold">
-              <Eye className="w-3 h-3 text-[#0A006E]" />
-              <span>Tap for other ml sizes</span>
+
+            {/* Nearest Branch Badge */}
+            <div className="mt-1 flex items-center gap-1 text-[9px] text-slate-600 font-semibold truncate bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100">
+              <MapPin className="w-2.5 h-2.5 text-[#0A006E] shrink-0" />
+              <span className="truncate">{activeBranchName}</span>
             </div>
           </div>
 
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
-            <div>
-              <div className="text-[9px] text-slate-400 font-bold uppercase">Price</div>
-              <div className="text-xs font-black text-[#0A006E] font-mono-tabular">
-                {formatKes(price)}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] text-slate-400 font-bold uppercase">Price</span>
+                {hasPriceAdjustment && (
+                  <span className="text-[8px] font-black text-amber-800 bg-amber-100/90 px-1 py-0.2 rounded leading-none truncate">
+                    Regional Rate
+                  </span>
+                )}
+              </div>
+              <div className="flex items-baseline gap-1 flex-wrap">
+                <span className="text-xs font-black text-[#0A006E] font-mono-tabular">
+                  {formatKes(unitPrice)}
+                </span>
+                {hasPriceAdjustment && (
+                  <span className="text-[10px] text-slate-400 line-through font-mono-tabular">
+                    {formatKes(basePrice)}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -248,10 +477,10 @@ const PortalProductCard: React.FC<PortalProductCardProps> = React.memo(
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onQuickAdd(prod);
+                onQuickAdd(prod, unitPrice);
               }}
-              className="p-2 rounded-xl bg-[#FFDE00] hover:bg-amber-400 active:scale-90 text-[#0A006E] font-black text-xs transition-transform cursor-pointer shadow-xs touch-manipulation"
-              title="Instant Add to Ticket"
+              className="p-2 rounded-xl bg-[#FFDE00] hover:bg-amber-400 active:scale-90 text-[#0A006E] font-black text-xs transition-transform cursor-pointer shadow-xs touch-manipulation shrink-0"
+              title={`Instant Add to Ticket (${formatKes(unitPrice)})`}
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
             </button>
@@ -263,14 +492,31 @@ const PortalProductCard: React.FC<PortalProductCardProps> = React.memo(
   (prev, next) =>
     prev.prod.id === next.prod.id &&
     prev.inCartQty === next.inCartQty &&
-    prev.prod.retailPriceKes === next.prod.retailPriceKes &&
+    prev.unitPrice === next.unitPrice &&
+    prev.basePrice === next.basePrice &&
+    prev.hasPriceAdjustment === next.hasPriceAdjustment &&
+    prev.activeBranchName === next.activeBranchName &&
     prev.prod.name === next.prod.name &&
     prev.prod.image === next.prod.image
 );
 
+const CATEGORY_META: Record<string, { desc: string; icon: any }> = {
+  ALL: { desc: 'Browse complete spirits & beverage catalog', icon: Store },
+  Whisky: { desc: 'Single malts, Irish & blended whiskies', icon: Wine },
+  'Cognac & Brandy': { desc: 'Fine French cognac & aged brandy', icon: Sparkles },
+  Gin: { desc: 'Botanical, pink & London dry gins', icon: Zap },
+  Vodka: { desc: 'Ultra-pure & flavored premium vodkas', icon: ShieldCheck },
+  Rum: { desc: 'Dark, gold & spiced Caribbean rums', icon: Layers },
+  Tequila: { desc: '100% Agave Blanco, Reposado & Añejo', icon: Flame },
+  'Wine & Champagne': { desc: 'Red, white, rosé & sparkling champagne', icon: Wine },
+  'Beer & Cider': { desc: 'Local lagers, craft beers & ciders', icon: Store },
+  LPS: { desc: 'Locally Produced Spirits (KRA verified)', icon: CheckCircle2 },
+};
+
 export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   products,
   branches,
+  regions,
   onPlaceOnlineOrder,
   onPreviewDoc,
   onBackToErpLogin,
@@ -279,10 +525,10 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   // Catalog Search & Category Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(branches[0]?.id || '');
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [isMobileCategorySheetOpen, setIsMobileCategorySheetOpen] = useState(false);
   const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scannerQuery, setScannerQuery] = useState('');
   const [scannedProductMatch, setScannedProductMatch] = useState<Product | null>(null);
   const [categorySearchTerm, setCategorySearchTerm] = useState('');
@@ -353,14 +599,78 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     return getProductVariants(previewProduct, products);
   }, [previewProduct, products]);
 
-  // Active Branch
-  const activeBranch = useMemo(() => {
-    return branches.find((b) => b.id === selectedBranchId) || branches[0] || {
-      id: 'br-hq',
-      name: 'Nairobi Central Depôt',
-      code: 'NRB-HQ',
-    };
-  }, [branches, selectedBranchId]);
+  // Active Region (for pricing & branch assignment) - Defaults to Thika Road Corridor as requested
+  const [selectedRegionId, setSelectedRegionId] = useState<string>('reg-nrb-thk');
+
+  // Active Region Object
+  const activeRegion = useMemo(() => {
+    return (
+      regions?.find((r) => r.id === selectedRegionId) ||
+      regions?.find((r) => r.id === 'reg-nrb-thk') ||
+      regions?.[0] || {
+        id: 'reg-nrb-thk',
+        code: 'NRB-THK-006',
+        name: 'Thika Road Corridor (Ruaraka, Kasarani, Roysambu)',
+        tierType: 'Suburban Ring' as const,
+        wholesaleMultiplier: 1.01,
+        retailMultiplier: 1.03,
+        freightLevyPerCase: 40,
+        regionalTaxRate: 0.16,
+        notes: 'High-density commercial hubs, vibrant social venues & clubs',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }
+    );
+  }, [regions, selectedRegionId]);
+
+  // Nearest Branch & Fulfillment info dynamically resolved from region & proximity
+  const nearestFulfillment = useMemo(() => {
+    return resolveNearestBranch(selectedRegionId || activeRegion.id, branches, regions || []);
+  }, [selectedRegionId, activeRegion.id, branches, regions]);
+
+  // Active Branch derived from the nearest fulfillment hub
+  const activeBranch = nearestFulfillment.branch;
+
+  // Intelligent GPS location detector mapping coordinates to Nairobi regions
+  const handleDetectLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        let matched: GeoRegion | undefined;
+
+        // Thika Road / Roysambu / Kasarani / Ruaraka corridor:
+        if (latitude > -1.25 && longitude >= 36.85) {
+          matched = regions?.find((r) => r.id === 'reg-nrb-thk');
+        } else if (latitude < -1.25 && latitude > -1.275 && longitude < 36.82) {
+          matched = regions?.find((r) => r.id === 'reg-nrb-wst');
+        } else if (latitude <= -1.275 && latitude >= -1.295 && longitude >= 36.81 && longitude <= 36.84) {
+          matched = regions?.find((r) => r.id === 'reg-nrb-cbd');
+        } else if (latitude < -1.29 && longitude < 36.80) {
+          matched = regions?.find((r) => r.id === 'reg-nrb-klm');
+        } else if (latitude < -1.30 && longitude < 36.75) {
+          matched = regions?.find((r) => r.id === 'reg-nrb-krn');
+        } else if (latitude < -1.30 && longitude >= 36.85) {
+          matched = regions?.find((r) => r.id === 'reg-nrb-ind');
+        }
+
+        if (!matched) {
+          matched = regions?.find((r) => r.id === 'reg-nrb-thk') || regions?.[0];
+        }
+
+        if (matched) {
+          setSelectedRegionId(matched.id);
+          playPosBeep('success');
+        }
+      },
+      (error) => {
+        console.warn('Geolocation access denied or unavailable:', error);
+        alert('Location access was denied or is unavailable. Please pick your region from the dropdown.');
+      }
+    );
+  }, [regions]);
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
@@ -396,12 +706,44 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     });
   }, [products, selectedCategory, searchQuery]);
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    counts['ALL'] = products.filter((p) => p.status !== ('Deleted' as any)).length;
+    for (const cat of CATEGORIES.filter((c) => c !== 'ALL')) {
+      counts[cat] = products.filter((p) => {
+        if (p.status === ('Deleted' as any)) return false;
+        if (cat === 'LPS') return p.category === 'LPS';
+        const sub = (p.subCategory || '').toLowerCase();
+        const target = cat.toLowerCase();
+        return sub.includes(target) || (p.category || '').toLowerCase().includes(target);
+      }).length;
+    }
+    return counts;
+  }, [products]);
+
   // Progressive batching for instantaneous 60fps catalog navigation
   const [visibleLimit, setVisibleLimit] = useState(36);
 
   useEffect(() => {
     setVisibleLimit(36);
   }, [searchQuery, selectedCategory]);
+
+  // Automatic geolocation detection on mount
+  useEffect(() => {
+    if (navigator.geolocation && !selectedRegionId && regions && regions.length > 0) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          if (latitude > -1.25 && longitude >= 36.85) {
+            setSelectedRegionId('reg-nrb-thk');
+          } else {
+            setSelectedRegionId(regions[0].id);
+          }
+        },
+        (error) => console.warn('Geolocation access denied:', error)
+      );
+    }
+  }, [selectedRegionId, regions]);
 
   const visibleProducts = useMemo(() => {
     return filteredProducts.slice(0, visibleLimit);
@@ -428,20 +770,26 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   const deliveryFee = cartSubtotal >= 10000 || cartSubtotal === 0 ? 0 : 350;
   const cartTotal = cartSubtotal + deliveryFee;
 
-  // Add to Cart
-  const handleAddToCart = useCallback((product: Product, quantity = 1) => {
-    const unitPrice = product.retailPriceKes || product.baseRetailPrice || 3200;
-    setCart((prev) => {
-      const existingIdx = prev.findIndex((item) => item.product.id === product.id);
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        updated[existingIdx].quantity += quantity;
-        return updated;
-      }
-      return [...prev, { product, quantity, unitPrice }];
-    });
-    playPosBeep('success');
-  }, []);
+  // Add to Cart with regional price calculation
+  const handleAddToCart = useCallback(
+    (product: Product, quantity = 1, customUnitPrice?: number) => {
+      const pricing = calculateRegionalProductPrice(product, activeRegion, activeBranch);
+      const unitPrice = customUnitPrice !== undefined ? customUnitPrice : pricing.unitPrice;
+
+      setCart((prev) => {
+        const existingIdx = prev.findIndex((item) => item.product.id === product.id);
+        if (existingIdx >= 0) {
+          const updated = [...prev];
+          updated[existingIdx].quantity += quantity;
+          updated[existingIdx].unitPrice = unitPrice;
+          return updated;
+        }
+        return [...prev, { product, quantity, unitPrice }];
+      });
+      playPosBeep('success');
+    },
+    [activeRegion, activeBranch]
+  );
 
   // Modify Cart Qty
   const handleUpdateQty = (productId: string, delta: number) => {
@@ -480,8 +828,8 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       channel: 'Customer Online Portal',
       branchId: activeBranch.id,
       branchName: activeBranch.name,
-      regionId: (activeBranch as any).regionId || 'reg-metro-core',
-      regionName: (activeBranch as any).regionName || 'Nairobi Metro Core',
+      regionId: activeRegion.id,
+      regionName: activeRegion.name,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       customerLicenseNo: 'RETAIL-CONSUMER',
@@ -572,22 +920,42 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
           {/* Zone 3: Header Right Action Icons (Matching ERP White Background Style) */}
           <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0 relative z-10">
-            {/* Branch selector if multiple branches */}
-            {branches.length > 1 && (
-              <div className="hidden lg:flex items-center">
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="h-11 sm:h-12 text-xs font-bold text-[#0A006E] bg-white border-2 border-white rounded-2xl px-3 cursor-pointer shadow-md focus:outline-none"
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* Region selector (Desktop only) */}
+            <div className="hidden sm:flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDetectLocation}
+                className="h-11 px-2.5 bg-white text-[#0A006E] border-2 border-white rounded-xl text-[10px] font-bold shadow-md cursor-pointer hover:bg-slate-100 flex items-center gap-1.5"
+                title="Auto-Detect GPS Location"
+              >
+                <MapPin className="w-3.5 h-3.5 text-[#0A006E]" />
+                <span>Locate</span>
+              </button>
+              <select
+                id="desktop-region-selector"
+                value={selectedRegionId}
+                onChange={(e) => setSelectedRegionId(e.target.value)}
+                className="h-11 text-[10px] font-bold text-[#0A006E] bg-white border-2 border-white rounded-xl px-2.5 cursor-pointer shadow-md focus:outline-none"
+              >
+                <option value="">Select Region...</option>
+                {regions?.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Hamburger Button (Mobile Only) */}
+            <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="sm:hidden w-11 h-11 rounded-2xl flex items-center justify-center bg-white text-[#0A006E] border-2 border-white shadow-md cursor-pointer transition active:scale-95"
+                title="Open Menu"
+                aria-label="Open Menu"
+              >
+                <Menu className="w-6 h-6 stroke-[2.5]" />
+              </button>
 
             {/* Cart Button (Hidden on Mobile home page / Header as requested) */}
             <button
@@ -612,7 +980,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             <button
               type="button"
               onClick={onBackToErpLogin}
-              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 border-white transition-all cursor-pointer shadow-md relative group bg-white text-[#0A006E] hover:bg-slate-100 active:scale-95"
+              className="hidden sm:flex w-11 h-11 sm:w-12 sm:h-12 rounded-2xl items-center justify-center border-2 border-white transition-all cursor-pointer shadow-md relative group bg-white text-[#0A006E] hover:bg-slate-100 active:scale-95"
               title="Return to ERP Backoffice"
               aria-label="Return to ERP"
             >
@@ -648,6 +1016,118 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
           </div>
         </div>
 
+        {/* Mobile Menu Drawer (Hamburger Menu) */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 bg-white flex flex-col p-5 animate-in slide-in-from-right duration-200 overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center font-black">
+                  <MapPin className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-black text-xl text-[#0A006E]">Location &amp; Delivery</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Select region to assign nearest fulfillment branch</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-3 bg-slate-100 hover:bg-slate-200 rounded-full cursor-pointer transition active:scale-95"
+              >
+                <X className="w-6 h-6 text-slate-600" />
+              </button>
+            </div>
+
+            {/* Region Selector inside menu */}
+            <div className="space-y-3 mb-4">
+              <label className="text-xs font-black uppercase tracking-wider text-slate-500">
+                Customer Region / Sub-Region
+              </label>
+
+              {/* Automatic GPS Locate button */}
+              <button
+                type="button"
+                onClick={handleDetectLocation}
+                className="w-full h-12 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-2xl text-xs font-black shadow-md cursor-pointer transition active:scale-98 flex items-center justify-center gap-2"
+              >
+                <MapPin className="w-4 h-4 stroke-[2.5]" />
+                <span>Auto-Detect My GPS Location</span>
+              </button>
+
+              {/* Region Select dropdown */}
+              <div className="relative">
+                <select
+                  value={selectedRegionId}
+                  onChange={(e) => setSelectedRegionId(e.target.value)}
+                  className="w-full h-12 text-xs font-bold text-[#0A006E] bg-slate-50 border-2 border-slate-200 rounded-2xl px-3 focus:outline-none focus:border-[#0A006E] focus:ring-1 focus:ring-[#0A006E] truncate"
+                >
+                  <option value="">Select Region...</option>
+                  {regions?.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Live Nearest Branch & Fulfillment Card */}
+            <div className="bg-gradient-to-br from-blue-50 to-slate-50 border-2 border-[#0A006E]/20 p-4 rounded-3xl space-y-3 mb-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider bg-[#0A006E] text-[#FFDE00] px-2 py-0.5 rounded-md">
+                  Nearest Fulfillment Hub
+                </span>
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Active Depot
+                </span>
+              </div>
+
+              <div>
+                <h4 className="font-montserrat font-black text-sm text-slate-900 flex items-center gap-1.5">
+                  <span>{activeBranch.name}</span>
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {activeBranch.address || activeBranch.regionName}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 text-xs font-bold">
+                <div className="p-2 rounded-xl bg-white border border-slate-200">
+                  <div className="text-[9px] text-slate-400 font-bold uppercase">Estimated Dispatch</div>
+                  <div className="text-xs font-black text-[#0A006E]">{nearestFulfillment.etaMinutes}</div>
+                </div>
+                <div className="p-2 rounded-xl bg-white border border-slate-200">
+                  <div className="text-[9px] text-slate-400 font-bold uppercase">Distance to Hub</div>
+                  <div className="text-xs font-black text-[#0A006E]">{nearestFulfillment.distanceKm} km</div>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-medium leading-relaxed">
+                📍 Prices in catalog automatically adjust for <strong>{activeRegion.name}</strong> according to regional fulfillment tariffs.
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="w-full py-3 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] font-black text-xs rounded-xl transition cursor-pointer shadow-xs active:scale-98"
+              >
+                Apply &amp; Browse {activeBranch.name.split(' ')[0]} Products
+              </button>
+            </div>
+
+            <div className="mt-auto pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={onBackToErpLogin}
+                className="w-full h-12 bg-white border-2 border-slate-200 rounded-2xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 hover:bg-slate-50 transition cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back to ERP Backoffice
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Single Smooth Curved Wave Bottom Edge with Gold Stroke */}
         <svg
           className="absolute bottom-0 left-0 w-full h-9 sm:h-11 pointer-events-none block"
@@ -668,22 +1148,25 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       </header>
 
       {/* Category Sub-Menu Aligned at the Center */}
-      <nav aria-label="Product categories" className="w-full py-3 px-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none py-1">
+      <nav aria-label="Product categories" className="w-full py-3 px-4 bg-slate-50/80 backdrop-blur-xs border-b border-slate-200/60">
+        <div className="max-w-7xl mx-auto flex items-center justify-start sm:justify-center gap-2 overflow-x-auto scrollbar-none py-1 px-1">
           {CATEGORIES.map((cat) => {
             const isActive = selectedCategory === cat;
+            const meta = CATEGORY_META[cat] || { desc: '', icon: Wine };
+            const CatIcon = meta.icon;
             return (
               <button
                 key={cat}
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3.5 sm:px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shadow-xs active:scale-95 ${
+                className={`px-3.5 sm:px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shadow-xs active:scale-95 flex items-center gap-2 shrink-0 ${
                   isActive
                     ? 'bg-[#0A006E] text-[#FFDE00] shadow-md font-black ring-2 ring-[#FFDE00]'
                     : 'bg-white text-slate-700 hover:bg-slate-100 hover:text-[#0A006E] border border-slate-200'
                 }`}
               >
-                {cat}
+                <CatIcon className={`w-3.5 h-3.5 ${isActive ? 'text-[#FFDE00]' : 'text-[#0A006E]'}`} />
+                <span>{cat === 'ALL' ? 'All Spirits' : cat}</span>
               </button>
             );
           })}
@@ -694,6 +1177,64 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       <main className="max-w-[1680px] mx-auto w-full px-3 sm:px-6 py-4 flex-1 flex flex-col lg:flex-row gap-6 items-start">
         {/* Left Column: Product Catalog Grid */}
         <section className="flex-1 w-full min-w-0 flex flex-col space-y-3">
+          {/* Active Fulfillment Hub & Geo-Location Nearest Branch Banner */}
+          <div className="w-full bg-white rounded-3xl border-2 border-[#0A006E] p-3.5 sm:p-4 shadow-sm">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-xs">
+                  <Truck className="w-6 h-6 stroke-[2.3]" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-[#0A006E] text-[#FFDE00] px-2 py-0.5 rounded-md">
+                      Nearest Fulfillment Hub
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Dispatch in {nearestFulfillment.etaMinutes}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500 hidden sm:inline">
+                      · {nearestFulfillment.distanceKm} km from delivery location
+                    </span>
+                  </div>
+                  <div className="text-sm font-black text-slate-900 mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <span>{activeBranch.name}</span>
+                    <span className="text-xs font-semibold text-slate-500">
+                      ({activeBranch.address || activeBranch.regionName})
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 mt-0.5">
+                    Delivering to: <strong className="text-[#0A006E] font-bold">{activeRegion.name}</strong> ·{' '}
+                    <span className="text-amber-800 font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                      {activeRegion.retailMultiplier !== 1
+                        ? `${Math.round((activeRegion.retailMultiplier - 1) * 100)}% Regional Tariff Active`
+                        : 'Standard CBD Base Tariff'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Location change button */}
+              <div className="flex items-center gap-2 self-stretch md:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.innerWidth < 640) {
+                      setIsMobileMenuOpen(true);
+                    } else {
+                      const sel = document.getElementById('desktop-region-selector');
+                      if (sel) sel.focus();
+                    }
+                  }}
+                  className="flex-1 md:flex-initial px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-[#FFDE00] text-[#0A006E] font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>Change Region</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Catalog Status Bar */}
           <div className="flex items-center justify-between pb-1 border-b border-slate-200 text-xs">
             <div>
@@ -705,7 +1246,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               </span>
             </div>
             <div className="text-[11px] text-slate-500 font-medium hidden sm:block">
-              Fulfillment: <span className="font-bold text-[#0A006E]">{activeBranch.name}</span>
+              Fulfillment Depot: <span className="font-bold text-[#0A006E]">{activeBranch.name}</span>
             </div>
           </div>
 
@@ -730,15 +1271,23 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
-              {visibleProducts.map((prod) => (
-                <PortalProductCard
-                  key={prod.id}
-                  prod={prod}
-                  inCartQty={cartQtyMap.get(prod.id) || 0}
-                  onPreview={openProductPreview}
-                  onQuickAdd={handleAddToCart}
-                />
-              ))}
+              {visibleProducts.map((prod) => {
+                const pricing = calculateRegionalProductPrice(prod, activeRegion, activeBranch);
+                return (
+                  <PortalProductCard
+                    key={prod.id}
+                    prod={prod}
+                    inCartQty={cartQtyMap.get(prod.id) || 0}
+                    unitPrice={pricing.unitPrice}
+                    basePrice={pricing.basePrice}
+                    hasPriceAdjustment={pricing.hasAdjustment}
+                    adjustmentNote={pricing.adjustmentNote}
+                    activeBranchName={activeBranch.name}
+                    onPreview={openProductPreview}
+                    onQuickAdd={handleAddToCart}
+                  />
+                );
+              })}
 
               {visibleProducts.length < filteredProducts.length && (
                 <div className="col-span-full pt-6 pb-2 flex flex-col items-center justify-center space-y-2">
@@ -1815,94 +2364,153 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         </div>
       )}
 
-      {/* 2. Full-Screen Category Picker on Mobile */}
+      {/* 2. Full-Screen Category Picker on Mobile (Organized & Accessible) */}
       {isMobileCategorySheetOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[100] bg-white flex flex-col w-full h-full overflow-hidden animate-in fade-in slide-in-from-bottom duration-200"
+          className="fixed inset-0 z-[100] bg-slate-50 flex flex-col w-full h-full overflow-hidden animate-in fade-in slide-in-from-bottom duration-200"
         >
           {/* Top Header */}
-          <div className="p-4 bg-[#0A006E] text-white flex items-center justify-between shrink-0 shadow-md">
-            <div className="flex items-center gap-2.5">
+          <div className="p-4 bg-[#0A006E] text-white flex items-center justify-between shrink-0 shadow-lg">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setIsMobileCategorySheetOpen(false)}
-                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition"
+                className="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition active:scale-95"
                 aria-label="Back"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <div className="w-9 h-9 rounded-xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center font-black">
-                <Layers className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-2xl bg-[#FFDE00] text-[#0A006E] flex items-center justify-center font-black shadow-sm">
+                <Layers className="w-5 h-5 stroke-[2.5]" />
               </div>
               <div>
-                <h3 className="font-montserrat font-black text-sm text-white">Spirits &amp; Beverage Categories</h3>
-                <p className="text-[10px] text-slate-300">Tap category to filter storefront catalog</p>
+                <h3 className="font-montserrat font-black text-sm sm:text-base text-white">Spirits &amp; Beverage Menu</h3>
+                <p className="text-[11px] text-slate-300 font-medium">Select category to explore catalog</p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setIsMobileCategorySheetOpen(false)}
-              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
+              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition"
+              aria-label="Close Menu"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Quick Filter Search inside Categories */}
-          <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+          <div className="p-4 bg-white border-b border-slate-200 shrink-0 shadow-xs space-y-3">
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={categorySearchTerm}
                 onChange={(e) => setCategorySearchTerm(e.target.value)}
-                placeholder="Search spirits categories..."
-                className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0A006E]"
+                placeholder="Search category (e.g. Whisky, Gin, Tequila)..."
+                className="w-full pl-10 pr-9 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xs font-semibold focus:outline-none focus:border-[#0A006E] focus:bg-white transition"
               />
+              {categorySearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setCategorySearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
+
+            {/* Quick All Catalog Reset Banner */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory('ALL');
+                setIsMobileCategorySheetOpen(false);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`w-full p-3.5 rounded-2xl border-2 flex items-center justify-between transition cursor-pointer shadow-xs ${
+                selectedCategory === 'ALL'
+                  ? 'bg-[#0A006E] text-[#FFDE00] border-[#0A006E] ring-2 ring-[#FFDE00]'
+                  : 'bg-gradient-to-r from-amber-50 to-yellow-50 border-[#FFDE00] text-[#0A006E] hover:bg-amber-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${
+                  selectedCategory === 'ALL' ? 'bg-[#FFDE00] text-[#0A006E]' : 'bg-[#0A006E] text-[#FFDE00]'
+                }`}>
+                  <Store className="w-5 h-5 stroke-[2.3]" />
+                </div>
+                <div className="text-left">
+                  <div className="font-montserrat font-black text-xs">All Catalog Spirits</div>
+                  <div className="text-[10px] opacity-80 font-medium">View all {categoryCounts['ALL'] || products.length} bottles</div>
+                </div>
+              </div>
+              <span className="text-xs font-black px-3 py-1 rounded-xl bg-white/20">
+                {categoryCounts['ALL'] || products.length} items
+              </span>
+            </button>
           </div>
 
-          {/* Full Screen Scrollable Categories Grid */}
-          <div className="p-4 overflow-y-auto flex-1 grid grid-cols-2 gap-3 pb-24">
-            {CATEGORIES.filter(
+          {/* Full Screen Scrollable Categories List / Grid */}
+          <div className="p-4 overflow-y-auto flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 pb-32">
+            {CATEGORIES.filter((cat) => cat !== 'ALL').filter(
               (cat) => !categorySearchTerm.trim() || cat.toLowerCase().includes(categorySearchTerm.toLowerCase().trim())
-            ).map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => {
-                  setSelectedCategory(cat);
-                  setIsMobileCategorySheetOpen(false);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={`p-4 rounded-2xl border-2 text-left font-montserrat font-bold text-xs transition cursor-pointer flex flex-col justify-between h-28 relative shadow-xs active:scale-98 ${
-                  selectedCategory === cat
-                    ? 'bg-[#0A006E] text-[#FFDE00] border-[#0A006E] shadow-md ring-2 ring-[#FFDE00]'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
-                }`}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                    selectedCategory === cat ? 'bg-white/20 text-[#FFDE00]' : 'bg-slate-200 text-slate-600'
-                  }`}>
-                    {cat === 'ALL' ? 'Catalog' : cat}
-                  </span>
-                  {selectedCategory === cat && <CheckCircle2 className="w-5 h-5 text-[#FFDE00]" />}
-                </div>
-                <div>
-                  <h4 className="font-montserrat font-black text-sm">
-                    {cat === 'ALL' ? 'All Spirits' : cat}
-                  </h4>
-                  <span className={`text-[10px] font-medium block mt-0.5 ${
-                    selectedCategory === cat ? 'text-white/80' : 'text-slate-500'
-                  }`}>
-                    Tap to view products
-                  </span>
-                </div>
-              </button>
-            ))}
+            ).map((cat) => {
+              const meta = CATEGORY_META[cat] || { desc: 'Premium spirit selection', icon: Wine };
+              const CatIcon = meta.icon;
+              const isActive = selectedCategory === cat;
+              const count = categoryCounts[cat] || 0;
+
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory(cat);
+                    setIsMobileCategorySheetOpen(false);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className={`p-3.5 rounded-2xl border-2 text-left font-montserrat transition cursor-pointer flex items-center justify-between gap-3 shadow-xs active:scale-98 ${
+                    isActive
+                      ? 'bg-[#0A006E] text-[#FFDE00] border-[#0A006E] shadow-md ring-2 ring-[#FFDE00]'
+                      : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 hover:border-[#0A006E]/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+                      isActive ? 'bg-[#FFDE00] text-[#0A006E]' : 'bg-slate-100 text-[#0A006E]'
+                    }`}>
+                      <CatIcon className="w-5 h-5 stroke-[2.3]" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-black text-xs sm:text-sm truncate">{cat}</h4>
+                        {isActive && (
+                          <span className="px-1.5 py-0.2 rounded bg-white/20 text-[9px] font-black uppercase text-[#FFDE00]">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-[10px] truncate mt-0.5 ${
+                        isActive ? 'text-white/80' : 'text-slate-500 font-medium'
+                      }`}>
+                        {meta.desc}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl font-mono-tabular ${
+                      isActive ? 'bg-white/20 text-[#FFDE00]' : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {count} {count === 1 ? 'bottle' : 'bottles'}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

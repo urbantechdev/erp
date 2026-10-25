@@ -118,6 +118,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { HybridNativeWrappersModal } from './components/HybridNativeWrappersModal';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
+import { MobileOnboarding } from './components/MobileOnboarding';
 import { DeliveryManagementModule } from './components/DeliveryManagementModule';
 import { Header } from './components/Header';
 import { PhoneScannerCompanion } from './components/PhoneScannerCompanion';
@@ -224,6 +225,24 @@ const INITIAL_DEFAULT_BRANCHES: Branch[] = [
     exciseBondLicense: 'KRA-BOND-2026-8843C',
     status: 'Operational',
     isMain: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'br-thk-004',
+    code: 'BR-THK-004',
+    name: 'Thika Road Distribution Hub & Garden City Depot',
+    regionId: 'reg-nrb-thk',
+    regionName: 'Thika Road Corridor (Ruaraka, Kasarani, Roysambu)',
+    address: 'Garden City Mall & Roysambu Corridor, Thika Road',
+    managerName: 'Thika Road Hub Manager',
+    exciseBondLicense: 'KRA-BOND-2026-8844D',
+    status: 'Operational',
+    isMain: false,
+    latitude: -1.2325,
+    longitude: 36.8785,
+    maxDeliveryRadiusKm: 18,
+    deliveryZones: ['Ruaraka', 'Kasarani', 'Roysambu', 'Kahawa West', 'Garden Estate', 'Thika Road'],
+    priceMultiplierPercent: 103,
     createdAt: new Date().toISOString(),
   },
 ];
@@ -513,6 +532,9 @@ export default function App() {
 
   // Active User Session State
   const [currentUser, setCurrentUser] = useState<StaffMember | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return typeof window !== 'undefined' && !localStorage.getItem('vaairo_onboarding_completed');
+  });
 
   // Inactivity & Auto-Logoff State (2 minutes total: 90s idle + 30s countdown)
   // Inactivity & Auto-Logoff State (2 minutes total: 90s idle + 30s countdown)
@@ -3407,6 +3429,14 @@ export default function App() {
     return (
       <>
         <MobileSplashScreen />
+        {showOnboarding && (
+          <MobileOnboarding
+            onComplete={() => {
+              setShowOnboarding(false);
+              localStorage.setItem('vaairo_onboarding_completed', 'true');
+            }}
+          />
+        )}
         <StatusFeedbackToast status={toastStatus} onDismiss={() => setToastStatus(null)} />
         <CustomerPortalView
           products={products}

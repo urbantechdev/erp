@@ -265,6 +265,29 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
       }).catch(() => {});
     }
 
+    // Ensure Thika Road Distribution Hub is seeded
+    const thkBranchSnapshot = await getDocs(query(collection(db, 'branches'), where('code', '==', 'BR-THK-004'))).catch(() => null);
+    if (!thkBranchSnapshot || thkBranchSnapshot.empty) {
+      await setDoc(doc(db, 'branches', 'br-thk-004'), {
+        id: 'br-thk-004',
+        code: 'BR-THK-004',
+        name: 'Thika Road Distribution Hub & Garden City Depot',
+        regionId: 'reg-nrb-thk',
+        regionName: 'Thika Road Corridor (Ruaraka, Kasarani, Roysambu)',
+        address: 'Garden City Mall & Roysambu Corridor, Thika Road',
+        managerName: 'Thika Road Hub Manager',
+        exciseBondLicense: 'KRA-BOND-2026-8844D',
+        status: 'Operational',
+        isMain: false,
+        latitude: -1.2325,
+        longitude: 36.8785,
+        maxDeliveryRadiusKm: 18,
+        deliveryZones: ['Ruaraka', 'Kasarani', 'Roysambu', 'Kahawa West', 'Garden Estate', 'Thika Road'],
+        priceMultiplierPercent: 103,
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     // 5. Reassign any staff whose branch was deleted to HQ - Main Branch
     if (deletedBranchIds.length > 0) {
       const staffSnapshot = await getDocs(collection(db, 'staff')).catch(() => null);
