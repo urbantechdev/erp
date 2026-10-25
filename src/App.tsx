@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   setDoc,
   updateDoc,
@@ -11,6 +12,7 @@ import {
   query,
   orderBy,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import {
   LayoutDashboard,
@@ -120,6 +122,7 @@ import { PhoneScannerCompanion } from './components/PhoneScannerCompanion';
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { hashPin, isPinHashed, verifyPin, hashPassword, verifyPassword } from './utils/security';
 import { broadcastProductScanned } from './utils/productScanBroadcast';
+import { initGlobalClickSound, playSuccessSound, playErrorSound } from './utils/audioBeep';
 
 const MODULE_META: Record<
   ERPModuleId,
@@ -395,8 +398,14 @@ export default function App() {
       return NAIROBI_GEO_REGIONS;
     }
   });
+  const [sampleCatalogEnabled, setSampleCatalogEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('vaairo_load_sample_catalog') === 'true';
+  });
   const [firestoreProducts, setFirestoreProducts] = useState<Product[]>(() => {
     try {
+      const isWiped = typeof window !== 'undefined' ? localStorage.getItem('vaairo_inventory_wiped_flag') !== 'false' : true;
+      if (isWiped) return [];
       const saved = localStorage.getItem('erp_products_local_override');
       return saved ? JSON.parse(saved) : [];
     } catch {
@@ -526,8 +535,10 @@ export default function App() {
   const inactivityTimerRef = useRef<any>(null);
   const countdownIntervalRef = useRef<any>(null);
 
-  // Auto Fullscreen on open
+  // Auto Fullscreen & Global Click Sound on open
   useEffect(() => {
+    const cleanupClickSound = initGlobalClickSound();
+
     const enterFullscreen = () => {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen?.().catch(() => {});
@@ -541,6 +552,7 @@ export default function App() {
     window.addEventListener('click', handleFirstClick);
     return () => {
       window.removeEventListener('click', handleFirstClick);
+      cleanupClickSound();
     };
   }, []);
 
@@ -653,53 +665,46 @@ export default function App() {
   } | null>(null);
 
   const triggerToast = (type: 'success' | 'error', title: string, message: string) => {
+    if (type === 'success') {
+      playSuccessSound();
+    } else {
+      playErrorSound();
+    }
     setToastStatus({ type, title, message });
     window.setTimeout(() => {
       setToastStatus((prev) => (prev?.title === title && prev?.message === message ? null : prev));
     }, 4500);
   };
 
-  // Merge the 858+ imported NAIROBI_DRINKS_PRODUCTS catalog with any Firestore overrides or newly created SKUs
+  // Products catalog: directly returns real database products from Firestore (erp-db-1)
   const products = useMemo<Product[]>(() => {
-    const isWiped = typeof window !== 'undefined' && localStorage.getItem('vaairo_inventory_wiped_flag') === 'true';
-    if (isWiped && firestoreProducts.length === 0) {
+    // When real products exist in Firestore (from CSV upload or manual creation), return them directly
+    if (firestoreProducts.length > 0) {
+      return firestoreProducts.map((p) => {
+        const isReal = Boolean(p.hasRealBarcode || p.barcode);
+        return {
+          ...p,
+          totalBottles: typeof p.totalBottles === 'number' ? p.totalBottles : 0,
+          branchStockSummary: p.branchStockSummary || JSON.stringify({}),
+          hasRealBarcode: isReal,
+          isScanned: Boolean(p.isScanned || isReal),
+        };
+      });
+    }
+
+    // If database is empty and sample catalog is not explicitly opted into, return 0 SKUs
+    if (!sampleCatalogEnabled) {
       return [];
     }
-    const overrideMap = new Map<string, Product>();
-    firestoreProducts.forEach((p) => {
-      overrideMap.set(p.id, p);
-    });
 
-    const merged = MASTER_IMPORTED_INVENTORY.map((baseItem) => {
-      const override = overrideMap.get(baseItem.id);
-      if (override) {
-        overrideMap.delete(baseItem.id);
-        const isReal = Boolean(override.hasRealBarcode || override.barcode || baseItem.hasRealBarcode || baseItem.barcode);
-        return {
-          ...baseItem,
-          ...override,
-          barcode: override.barcode || (isReal ? baseItem.barcode : undefined),
-          caseBarcode: override.caseBarcode || (isReal ? baseItem.caseBarcode : undefined),
-          hasRealBarcode: isReal,
-          isScanned: Boolean(override.isScanned !== undefined ? override.isScanned : (baseItem.isScanned || isReal)),
-        };
-      }
-      return baseItem;
-    });
-
-    // Prepend any brand-new products created via the Auto-SKU generator in Firestore
-    const customCreated = Array.from(overrideMap.values()).map((item) => {
-      const isReal = Boolean(item.hasRealBarcode || item.barcode);
-      return {
-        ...item,
-        barcode: item.barcode,
-        caseBarcode: item.caseBarcode,
-        hasRealBarcode: isReal,
-        isScanned: Boolean(item.isScanned || isReal),
-      };
-    });
-    return [...customCreated, ...merged];
-  }, [firestoreProducts]);
+    // Only if sample preview is explicitly toggled by user, provide sample reference items
+    const isZeroStock = typeof window === 'undefined' || localStorage.getItem('vaairo_inventory_zero_stock') !== 'false';
+    return MASTER_IMPORTED_INVENTORY.map((baseItem) => ({
+      ...baseItem,
+      totalBottles: isZeroStock ? 0 : (baseItem.totalBottles ?? 0),
+      branchStockSummary: isZeroStock ? JSON.stringify({}) : (baseItem.branchStockSummary || JSON.stringify({})),
+    }));
+  }, [firestoreProducts, sampleCatalogEnabled]);
 
   // Derive latest finalized payroll record for current user session
   const currentUserLatestPayrollRecord = useMemo<PayrollRecord | null>(() => {
@@ -953,9 +958,7 @@ export default function App() {
           (snap) => {
             if (isUnmounted) return;
             const list = snap.docs.map((d) => ({ ...(d.data() as T), id: d.id }));
-            if (list.length > 0) {
-              onSuccess(list);
-            }
+            onSuccess(list);
           },
           (err) => {
             console.warn(`[Firestore ${onErrorTag}] sync notice:`, err?.message || err);
@@ -1202,20 +1205,15 @@ export default function App() {
       patch.barcode || patch.hasRealBarcode || baseProd?.hasRealBarcode || baseProd?.isScanned
     );
 
-    // Ensure stock across all branches for scanned products so they appear immediately on all dashboards
     let totalBottles = typeof patch.totalBottles === 'number'
       ? patch.totalBottles
       : (baseProd?.totalBottles ?? 0);
 
-    if (isNowScanned && totalBottles <= 0) {
-      totalBottles = 48;
-    }
-
     let branchStockSummary = patch.branchStockSummary || baseProd?.branchStockSummary;
-    if (isNowScanned && (!branchStockSummary || branchStockSummary === '{}')) {
+    if (!branchStockSummary || branchStockSummary === '{}') {
       const branchAllocation: Record<string, number> = {};
-      const activeBranchList = branches.length > 0 ? branches : [{ id: 'br-hq-01' }];
-      const perBranch = Math.max(12, Math.floor(totalBottles / Math.max(1, activeBranchList.length)));
+      const activeBranchList = branches.length > 0 ? branches : [{ id: 'br-hq-001' }];
+      const perBranch = totalBottles > 0 ? Math.floor(totalBottles / Math.max(1, activeBranchList.length)) : 0;
       activeBranchList.forEach((b) => {
         branchAllocation[b.id] = perBranch;
       });
@@ -2381,49 +2379,109 @@ export default function App() {
   const handleBatchCreateProducts = async (
     newProducts: Omit<Product, 'id' | 'createdAt'>[]
   ): Promise<number> => {
-    let successCount = 0;
+    if (!newProducts || newProducts.length === 0) return 0;
+
+    // Build a set of existing SKUs and Barcodes in Firestore to strictly ensure we do NOT upload any update to existing records
+    const existingSkus = new Set<string>();
+    firestoreProducts.forEach((p) => {
+      if (p.sku) existingSkus.add(p.sku.trim().toUpperCase());
+    });
+
+    // Filter to ensure we only insert brand-new items and do NOT upload any update to existing items
+    const productsToInsert: Product[] = [];
     const now = Date.now();
-    const createdList: Product[] = [];
+    const seenNewSkus = new Set<string>();
+
     for (let i = 0; i < newProducts.length; i++) {
-      const prod = newProducts[i];
-      const id = `prod-${now}-${i}`;
+      const raw = newProducts[i];
+      const skuKey = raw.sku ? raw.sku.trim().toUpperCase() : '';
+
+      // Ensure we do NOT upload any update to an existing SKU
+      if (skuKey && existingSkus.has(skuKey)) {
+        continue; // Skip: do not update existing product
+      }
+      if (skuKey && seenNewSkus.has(skuKey)) {
+        continue; // Deduplicate within the CSV: do not update previous line
+      }
+      if (skuKey) {
+        seenNewSkus.add(skuKey);
+      }
+
+      // Generate a clean, deterministic, valid document ID
+      const safeId = `prod-${now}-${i}`;
       const fullProd: Product = cleanFirestoreData({
-        ...prod,
-        id,
+        ...raw,
+        id: safeId,
+        sku: raw.sku ? raw.sku.slice(0, 80) : `SKU-${now}-${i}`,
+        name: raw.name ? raw.name.slice(0, 200) : `Product ${i + 1}`,
+        category: raw.category === 'LPS' ? 'LPS' : 'IPS',
+        volumeMl: typeof raw.volumeMl === 'number' && !Number.isNaN(raw.volumeMl) ? raw.volumeMl : 750,
         createdAt: new Date().toISOString(),
+        totalBottles: typeof raw.totalBottles === 'number' ? raw.totalBottles : (raw.pendingActivationBottles || 0),
+        status: 'Active',
+        isOnboarded: true,
       });
-      createdList.push(fullProd);
-      setDoc(doc(db, 'products', id), fullProd).catch(() => {});
-      successCount++;
+
+      productsToInsert.push(fullProd);
     }
 
+    if (productsToInsert.length === 0) {
+      triggerToast('success', 'No New Products', 'All items in CSV already exist. No updates were uploaded.');
+      return 0;
+    }
+
+    // Directly save all products into Firestore database (erp-db-1) using batched commits
+    const batchSize = 400;
+    let savedToFirestoreCount = 0;
+
+    for (let i = 0; i < productsToInsert.length; i += batchSize) {
+      const chunk = productsToInsert.slice(i, i + batchSize);
+      const batch = writeBatch(db);
+      for (const prod of chunk) {
+        batch.set(doc(db, 'products', prod.id), prod);
+      }
+      try {
+        await batch.commit();
+        savedToFirestoreCount += chunk.length;
+      } catch (err) {
+        console.error('[Firestore] Batch save error on CSV upload:', err);
+        handleFirestoreError(err, OperationType.CREATE, 'products');
+        throw err;
+      }
+    }
+
+    // Update local state and unflag wipe state so products show immediately
     setFirestoreProducts((prev) => {
-      const next = [...createdList, ...prev];
+      const next = [...productsToInsert, ...prev];
       try {
         localStorage.setItem('erp_products_local_override', JSON.stringify(next));
-        localStorage.removeItem('vaairo_inventory_wiped_flag');
+        localStorage.setItem('vaairo_inventory_wiped_flag', 'false');
+        localStorage.setItem('vaairo_inventory_zero_stock', 'false');
+        localStorage.removeItem('vaairo_load_sample_catalog');
       } catch {}
       return next;
     });
 
     triggerToast(
       'success',
-      'CSV Batch Import Completed',
-      `Successfully imported ${successCount} products into bonded inventory.`
+      'Saved Directly to Database',
+      `Successfully saved ${savedToFirestoreCount} new products directly to Firestore database (erp-db-1). No updates performed.`
     );
+
     if (currentUser) {
       await recordAuditLog(
         currentUser.name,
         currentUser.role,
         currentUser.email,
-        `Bulk Imported ${successCount} SKUs via CSV`,
+        `CSV Bulk Import (${savedToFirestoreCount} SKUs)`,
         'Inventory & Auto-SKU',
-        `Imported ${successCount} products with barcodes and prices via CSV file`,
+        `Directly saved ${savedToFirestoreCount} new products into Firestore erp-db-1 without updating existing SKUs`,
         currentUser.branchName,
         'Info'
-      );
+      ).catch(() => {});
     }
-    return successCount;
+
+    return savedToFirestoreCount;
   };
 
   const handleCreateStockTransfer = async (
@@ -2469,6 +2527,67 @@ export default function App() {
         'Branches & Transfers',
         `Transferred ${fullTr.quantityBottles} btls of ${fullTr.sku} from ${fullTr.fromBranchName} to ${fullTr.toBranchName}`,
         fullTr.fromBranchName,
+        'Financial'
+      );
+    }
+  };
+
+  const handleReceiveStockTransfer = async (transferId: string) => {
+    const tr = transfers.find((t) => t.id === transferId);
+    if (!tr || tr.status === 'Received') return;
+
+    const prod = products.find((p) => p.id === tr.productId);
+    let branchStock: Record<string, number> = {};
+    if (prod) {
+      try {
+        branchStock = prod.branchStockSummary ? JSON.parse(prod.branchStockSummary) : {};
+      } catch {
+        branchStock = {};
+      }
+      const currentDestStock = branchStock[tr.toBranchId] ?? 0;
+      branchStock[tr.toBranchId] = currentDestStock + tr.quantityBottles;
+    }
+
+    const updatedTr: StockTransfer = {
+      ...tr,
+      status: 'Received',
+    };
+
+    setTransfers((prev) => {
+      const next = prev.map((t) => (t.id === transferId ? updatedTr : t));
+      try {
+        localStorage.setItem('erp_transfers_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    if (prod) {
+      await persistProductState(prod.id, {
+        branchStockSummary: JSON.stringify(branchStock),
+      });
+    }
+
+    try {
+      await setDoc(doc(db, 'stock_transfers', transferId), updatedTr, { merge: true });
+    } catch (error) {
+      console.warn('[Firestore] Transfer update saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `Stock Received & Added`,
+      `Successfully received ${tr.quantityBottles} btls of ${tr.productName} at ${tr.toBranchName}. Automatically added to branch inventory!`
+    );
+
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Received Stock Transfer ${tr.transferNo}`,
+        'Branches & Transfers',
+        `Received ${tr.quantityBottles} btls of ${tr.sku} at ${tr.toBranchName} from ${tr.fromBranchName}`,
+        tr.toBranchName,
         'Financial'
       );
     }
@@ -2794,27 +2913,119 @@ export default function App() {
     }
   };
 
-  const handleWipeAllProducts = async () => {
-    if (!confirm('Are you absolutely sure you want to delete ALL SKUs and wipe inventory? This cannot be undone and will prepare the system for new inventory uploads.')) return;
-    
-    let wipedCount = 0;
-    for (const product of firestoreProducts) {
-      try {
-        await deleteDoc(doc(db, 'products', product.id));
-        wipedCount++;
-      } catch (error) {
-        console.warn(`Failed to delete ${product.id}, falling back to soft delete:`, error);
-        await updateDoc(doc(db, 'products', product.id), { status: 'Deleted' as any });
-        wipedCount++;
+  const handleWipeInventoryToZero = async () => {
+    if (
+      !confirm(
+        'Are you sure you want to WIPE the entire inventory back to ZERO? This will purge all products to 0 SKUs and 0 bottles in the database (erp-db-1).'
+      )
+    )
+      return;
+
+    try {
+      localStorage.setItem('vaairo_inventory_zero_stock', 'true');
+      localStorage.setItem('vaairo_inventory_wiped_flag', 'true');
+      localStorage.removeItem('vaairo_load_sample_catalog');
+      localStorage.removeItem('erp_products_local_override');
+      setSampleCatalogEnabled(false);
+
+      // Query and delete all documents in products collection from Firestore
+      const snap = await getDocs(collection(db, 'products')).catch(() => null);
+      let wipedCount = 0;
+      if (snap && !snap.empty) {
+        const batchSize = 400;
+        for (let i = 0; i < snap.docs.length; i += batchSize) {
+          const chunk = snap.docs.slice(i, i + batchSize);
+          const batch = writeBatch(db);
+          for (const prod of chunk) {
+            batch.delete(doc(db, 'products', prod.id));
+            wipedCount++;
+          }
+          await batch.commit().catch((e) => console.warn('[Firestore] Batch delete error:', e));
+        }
       }
+
+      setFirestoreProducts([]);
+
+      // Also reset restaurant inventory portionsAvailable to 0
+      setRestaurantInventory((prev) => {
+        const zeroed = prev.map((i) => ({ ...i, portionsAvailable: 0 }));
+        try {
+          localStorage.setItem('erp_restaurant_inventory', JSON.stringify(zeroed));
+        } catch {}
+        return zeroed;
+      });
+
+      // Also update restaurant inventory in Firestore
+      for (const item of restaurantInventory) {
+        updateDoc(doc(db, 'restaurant_inventory', item.id), { portionsAvailable: 0 }).catch(() => {});
+      }
+
+      await recordAuditLog(
+        currentUser?.name || 'Admin',
+        currentUser?.role || 'Admin',
+        currentUser?.email || '',
+        'WIPE_INVENTORY_BACK_TO_ZERO',
+        'Inventory & Bonded Stock',
+        `Administrator wiped entire inventory back to zero (0 SKUs, 0 bottles in erp-db-1; ${wipedCount} documents wiped).`,
+        currentUser?.branchName,
+        'Critical'
+      );
+
+      triggerToast(
+        'success',
+        'Inventory Wiped to 0 SKUs',
+        'All inventory has been wiped back to 0 SKUs and 0 bottles in erp-db-1.'
+      );
+    } catch (err: any) {
+      console.error('Error wiping inventory to zero:', err);
+      triggerToast('error', 'Wipe Failed', err?.message || 'Could not wipe inventory.');
     }
+  };
+
+  const handleWipeAllProducts = async () => {
+    if (!confirm('Are you absolutely sure you want to delete ALL SKUs and wipe inventory? This will reset the database back to 0 SKUs.')) return;
     
-    setFirestoreProducts([]);
     try {
       localStorage.setItem('vaairo_inventory_wiped_flag', 'true');
+      localStorage.setItem('vaairo_inventory_zero_stock', 'true');
+      localStorage.removeItem('vaairo_load_sample_catalog');
       localStorage.removeItem('erp_products_local_override');
-    } catch {}
-    triggerToast('success', 'Database Wiped', `Successfully wiped ${wipedCount} products. Inventory is now empty and awaiting new inventory upload.`);
+      setSampleCatalogEnabled(false);
+
+      const snap = await getDocs(collection(db, 'products')).catch(() => null);
+      let wipedCount = 0;
+      if (snap && !snap.empty) {
+        const batchSize = 400;
+        for (let i = 0; i < snap.docs.length; i += batchSize) {
+          const chunk = snap.docs.slice(i, i + batchSize);
+          const batch = writeBatch(db);
+          for (const product of chunk) {
+            batch.delete(doc(db, 'products', product.id));
+            wipedCount++;
+          }
+          await batch.commit().catch(() => {});
+        }
+      }
+      
+      setFirestoreProducts([]);
+      triggerToast('success', 'Database Wiped (0 SKUs)', `Successfully wiped ${wipedCount} products. Inventory is now completely empty (0 SKUs).`);
+    } catch (error) {
+      console.error('Wipe failed:', error);
+      triggerToast('error', 'Wipe Failed', 'Could not complete inventory wipe.');
+    }
+  };
+
+  const handleToggleSampleCatalog = (enable: boolean) => {
+    setSampleCatalogEnabled(enable);
+    if (enable) {
+      localStorage.setItem('vaairo_load_sample_catalog', 'true');
+      localStorage.setItem('vaairo_inventory_wiped_flag', 'false');
+      triggerToast('success', 'Sample Catalog Loaded', 'Loaded 2,976 sample reference products.');
+    } else {
+      localStorage.setItem('vaairo_load_sample_catalog', 'false');
+      localStorage.setItem('vaairo_inventory_wiped_flag', 'true');
+      triggerToast('success', 'Sample Catalog Removed', 'Returned to clean 0 SKU inventory.');
+    }
   };
 
   const handleSetStaffStatus = async (
@@ -3962,8 +4173,11 @@ export default function App() {
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
               onWipeAllProducts={handleWipeAllProducts}
+              onWipeInventoryToZero={handleWipeInventoryToZero}
               onLogStockIncident={handleLogStockIncident}
               onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
+              sampleCatalogEnabled={sampleCatalogEnabled}
+              onToggleSampleCatalog={handleToggleSampleCatalog}
             />
           )}
 
@@ -3980,6 +4194,7 @@ export default function App() {
               onDeleteBranch={handleDeleteBranch}
               onSetMainBranch={handleSetMainBranch}
               onCreateStockTransfer={handleCreateStockTransfer}
+              onReceiveStockTransfer={handleReceiveStockTransfer}
             />
           )}
 
@@ -4067,6 +4282,7 @@ export default function App() {
               products={products}
               branches={branches}
               regions={regions}
+              currentUser={currentUser}
               onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
               onPreviewDoc={(d) => setPreviewDoc(d)}
               onBackToErpLogin={() => handleSelectModule('overview')}

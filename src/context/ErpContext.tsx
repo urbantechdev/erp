@@ -124,7 +124,7 @@ export const ErpProvider: React.FC<{
   onCommitOrder?: (order: SaleOrder) => void;
 }> = ({
   children,
-  initialProducts = MASTER_IMPORTED_INVENTORY,
+  initialProducts = [],
   initialBranches = [DEFAULT_MAIN_BRANCH],
   initialCurrentUser = null,
   onCommitOrder
@@ -136,7 +136,7 @@ export const ErpProvider: React.FC<{
 
   // Keep synced with external prop changes
   useEffect(() => {
-    if (initialProducts && initialProducts.length > 0) {
+    if (initialProducts) {
       setProducts(initialProducts);
     }
   }, [initialProducts]);
@@ -167,7 +167,7 @@ export const ErpProvider: React.FC<{
             hasRealBarcode: true,
             isScanned: true,
             status: 'Active',
-            totalBottles: existing.totalBottles && existing.totalBottles > 0 ? existing.totalBottles : (evt.totalBottles || 48),
+            totalBottles: typeof existing.totalBottles === 'number' ? existing.totalBottles : (evt.totalBottles ?? 0),
           };
           return updated;
         }
@@ -193,7 +193,7 @@ export const ErpProvider: React.FC<{
     const branchList = branches.length > 0 ? branches : [DEFAULT_MAIN_BRANCH];
     return branchList.flatMap((branch) =>
       products.map((p) => {
-        let bottles = p.totalBottles ?? 36;
+        let bottles = p.totalBottles ?? 0;
         if (p.branchStockSummary) {
           try {
             const summary = JSON.parse(p.branchStockSummary);

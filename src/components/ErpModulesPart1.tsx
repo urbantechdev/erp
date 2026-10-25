@@ -7,6 +7,7 @@ import {
   Download,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Upload,
   Trash2,
@@ -42,6 +43,7 @@ import {
   Warehouse,
   Store,
   ShoppingBag,
+  Bell,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -146,7 +148,7 @@ export const OverviewModule: React.FC<{
     let ips = 0;
     let lps = 0;
     products.forEach((p) => {
-      btls += p.totalBottles ?? (p.packSize || 12) * 30;
+      btls += p.totalBottles ?? 0;
       if (p.category === 'LPS') lps++;
       else ips++;
     });
@@ -1349,8 +1351,11 @@ export const InventoryModule: React.FC<{
   onUpdateProduct?: (productId: string, updates: Partial<Product>) => Promise<void>;
   onDeleteProduct?: (productId: string) => Promise<void>;
   onWipeAllProducts?: () => Promise<void>;
+  onWipeInventoryToZero?: () => Promise<void>;
   onLogStockIncident?: (incident: DamageSpoilageIncident) => Promise<void>;
   onOpenOnboardItems?: () => void;
+  sampleCatalogEnabled?: boolean;
+  onToggleSampleCatalog?: (enable: boolean) => void;
 }> = ({
   currentUser,
   products,
@@ -1360,8 +1365,11 @@ export const InventoryModule: React.FC<{
   onUpdateProduct,
   onDeleteProduct,
   onWipeAllProducts,
+  onWipeInventoryToZero,
   onLogStockIncident,
   onOpenOnboardItems,
+  sampleCatalogEnabled,
+  onToggleSampleCatalog,
 }) => {
   const isInventoryPerson =
     currentUser.role === 'Inventory Controller' ||
@@ -1710,7 +1718,7 @@ export const InventoryModule: React.FC<{
     let totalSpoiledLossKes = 0;
 
     products.forEach((p) => {
-      const bottles = p.totalBottles ?? 360;
+      const bottles = p.totalBottles ?? 0;
       const unitCost = p.warehouseCostKes ?? p.baseLandedCost ?? 2000;
       const deadDays = p.deadStockThresholdDays || thresholdSettings.defaultDeadStockDays;
       const lastMove = p.lastStockMovementDate ? new Date(p.lastStockMovementDate) : new Date(p.createdAt || '2026-08-01');
@@ -1787,7 +1795,7 @@ export const InventoryModule: React.FC<{
 
       if (filterRotationStatus === 'ALL') return true;
 
-      const bottles = p.totalBottles ?? 360;
+      const bottles = p.totalBottles ?? 0;
       const deadDays = p.deadStockThresholdDays || thresholdSettings.defaultDeadStockDays;
       const lastMove = p.lastStockMovementDate ? new Date(p.lastStockMovementDate) : new Date(p.createdAt || '2026-08-01');
       const daysInactive = Math.max(0, Math.floor((now.getTime() - lastMove.getTime()) / (1000 * 60 * 60 * 24)));
@@ -2039,8 +2047,88 @@ export const InventoryModule: React.FC<{
             <AlertTriangle className="w-3.5 h-3.5" />
             Duplicate Check
           </button>
+          {onWipeAllProducts && canEditProduct && (
+            <button
+              type="button"
+              onClick={onWipeAllProducts}
+              className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap"
+              title="Wipe entire inventory to 0 SKUs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Wipe Inventory
+            </button>
+          )}
         </div>
       </div>
+
+      {/* 0 SKUs Clean Slate State Banner */}
+      {products.length === 0 && (
+        <div className="bg-emerald-50 border-2 border-emerald-400/80 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-montserrat font-black text-emerald-950 text-sm">
+                  Inventory Database Wiped to Zero (0 SKUs)
+                </h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-montserrat font-black bg-emerald-200 text-emerald-900">
+                  Clean Database Ready
+                </span>
+              </div>
+              <p className="text-xs text-emerald-800 font-medium">
+                The database has been wiped back to zero. No leftover SKUs or bottles remain. Upload your real catalog or register new products below.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {canEditProduct && (
+              <button
+                type="button"
+                onClick={() => setIsCsvModalOpen(true)}
+                className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Import Inventory CSV
+              </button>
+            )}
+            {onToggleSampleCatalog && (
+              <button
+                type="button"
+                onClick={() => onToggleSampleCatalog(true)}
+                className="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap"
+                title="Load sample catalog for testing"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                Load Sample Catalog (2,976 SKUs)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sample Reference Catalog Active Banner */}
+      {sampleCatalogEnabled && products.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <p className="text-xs text-amber-900 font-medium">
+              Currently previewing <strong>Sample Reference Catalog ({products.length} SKUs)</strong>. To return to your clean empty inventory (0 SKUs), click Wipe.
+            </p>
+          </div>
+          {onWipeAllProducts && (
+            <button
+              type="button"
+              onClick={onWipeAllProducts}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Purge Back to 0 SKUs
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Inventory Governance & Health Command Center (Dead Stock, Expiry, Damages, Spoilage) */}
       <div className="bg-white border-2 border-[#0A006E]/20 rounded-2xl p-5 shadow-2xs space-y-4">
@@ -2563,12 +2651,26 @@ export const InventoryModule: React.FC<{
                 Select All & Wipe All
               </button>
 
+              {onWipeInventoryToZero && (
+                <button
+                  type="button"
+                  onClick={onWipeInventoryToZero}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition"
+                  title="Wipe all inventory stock levels back to 0 across all branches"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Wipe Stock to Zero (0 Btls)
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={onWipeAllProducts}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+                title="Completely purge all product definitions from database"
               >
-                Wipe Database (All)
+                <Trash2 className="w-3.5 h-3.5" />
+                Purge All SKUs
               </button>
             </div>
 
@@ -2743,7 +2845,7 @@ export const InventoryModule: React.FC<{
                 const abv = p.alcoholPercentage ?? p.abv ?? 40;
                 const wholesale = p.wholesalePriceKes ?? p.baseWholesalePrice ?? 0;
                 const retail = p.retailPriceKes ?? p.baseRetailPrice ?? 0;
-                const totalBtls = p.totalBottles ?? packSize * 30;
+                const totalBtls = p.totalBottles ?? 0;
 
                 const deadDays = p.deadStockThresholdDays || thresholdSettings.defaultDeadStockDays;
                 const lastMove = p.lastStockMovementDate ? new Date(p.lastStockMovementDate) : new Date(p.createdAt || '2026-08-01');
@@ -3512,6 +3614,7 @@ export const BranchesAndTransfersModule: React.FC<{
     tr: Omit<StockTransfer, 'id' | 'createdAt'>,
     updatedProduct: { productId: string; newBranchStockJson: string }
   ) => Promise<void>;
+  onReceiveStockTransfer?: (transferId: string) => Promise<void>;
 }> = ({
   currentUser,
   branches,
@@ -3524,6 +3627,7 @@ export const BranchesAndTransfersModule: React.FC<{
   onDeleteBranch,
   onSetMainBranch,
   onCreateStockTransfer,
+  onReceiveStockTransfer,
 }) => {
   const [facilityType, setFacilityType] = useState<FacilityType>('warehouse');
   const [facilityFilter, setFacilityFilter] = useState<'all' | FacilityType>('all');
@@ -4185,6 +4289,54 @@ export const BranchesAndTransfersModule: React.FC<{
                 {isDeleting ? 'Deleting...' : 'Confirm Decommission'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Incoming Dispatched Transfers Awaiting Receiving */}
+      {transfers.filter((tr) => tr.status === 'Dispatched' && (!isBranchManager || tr.toBranchId === currentUser.branchId || tr.toBranchName === currentUser.branchName)).length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between border-b border-amber-200 pb-3">
+            <div className="flex items-center gap-2">
+              <Bell className="w-5 h-5 text-amber-700 animate-pulse" />
+              <h3 className="text-sm font-montserrat font-black text-amber-900">
+                Incoming Bonded Stock Transfers Awaiting Your Receipt &amp; Stock Auto-Update
+              </h3>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-xs font-bold">
+              {transfers.filter((tr) => tr.status === 'Dispatched' && (!isBranchManager || tr.toBranchId === currentUser.branchId || tr.toBranchName === currentUser.branchName)).length} Pending
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {transfers
+              .filter((tr) => tr.status === 'Dispatched' && (!isBranchManager || tr.toBranchId === currentUser.branchId || tr.toBranchName === currentUser.branchName))
+              .map((tr) => (
+                <div key={tr.id} className="bg-white border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono-tabular font-bold text-xs text-[#0A006E]">{tr.transferNo}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-800">
+                        {tr.quantityBottles} Bottles · {tr.sku}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-800 font-medium">
+                      {tr.productName}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Dispatched from <span className="font-semibold text-slate-700">{tr.fromBranchName}</span> → Destination: <span className="font-semibold text-[#0A006E]">{tr.toBranchName}</span> (Initiated by {tr.initiatedBy})
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => onReceiveStockTransfer?.(tr.id)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-montserrat font-black text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition shrink-0"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                    Receive &amp; Add to Branch Stock
+                  </button>
+                </div>
+              ))}
           </div>
         </div>
       )}

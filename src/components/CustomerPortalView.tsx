@@ -21,10 +21,12 @@ import {
   Layers,
   Menu,
 } from 'lucide-react';
-import { Product, Branch, GeoRegion, TransactionDoc } from '../types';
+import { Product, Branch, GeoRegion, TransactionDoc, StaffMember } from '../types';
 import { ProductImage } from './ProductImage';
 import { formatKes, generateSimpleQrSvg } from '../erpUtils';
 import { playPosBeep } from '../utils/audioBeep';
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface CustomerPortalViewProps {
   products: Product[];
@@ -33,6 +35,7 @@ interface CustomerPortalViewProps {
   onPlaceOnlineOrder: (draft: any) => Promise<TransactionDoc | null | void> | void;
   onPreviewDoc: (d: any) => void;
   onBackToErpLogin: () => void;
+  currentUser?: StaffMember | null;
 }
 
 interface CartItem {
@@ -267,11 +270,49 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   onPlaceOnlineOrder,
   onPreviewDoc,
   onBackToErpLogin,
+  currentUser,
 }) => {
   // Catalog Search & Category Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedBranchId, setSelectedBranchId] = useState<string>(branches[0]?.id || '');
+  const [rating, setRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewFeedback, setReviewFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleReviewSubmit = async () => {
+    if (!previewProduct) return;
+    if (rating === 0) {
+      playPosBeep('error');
+      setReviewFeedback({ type: 'error', message: 'Please select a star rating (1-5).' });
+      return;
+    }
+    try {
+      const consumerId = currentUser?.id || (customerPhone ? `cust-${customerPhone.replace(/\D/g, '')}` : 'guest-consumer');
+      const raterName = currentUser?.name || customerName || 'Verified Consumer';
+
+      await addDoc(collection(db, 'product_ratings'), {
+        productId: previewProduct.id,
+        consumerId,
+        raterName,
+        stars: rating,
+        comment: reviewComment,
+        isVerifiedBuyer: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      playPosBeep('success');
+      setRating(0);
+      setReviewComment('');
+      setReviewFeedback({ type: 'success', message: 'Thank you! Your rating has been transmitted to admin.' });
+      setTimeout(() => setReviewFeedback(null), 4000);
+    } catch (e) {
+      console.error('Error submitting review:', e);
+      playPosBeep('error');
+      setReviewFeedback({ type: 'error', message: 'Failed to submit review. Please try again.' });
+      setTimeout(() => setReviewFeedback(null), 4000);
+    }
+  };
 
   // Cart & Checkout State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -475,7 +516,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-montserrat text-slate-800 pb-20">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-montserrat text-slate-800 pb-24">
       {/* Main Store Header: VAAIRO Signature Deep Navy Header (2x Height) with Curved Single-Wave Bottom Edge */}
       <header className="sticky top-0 z-30 pt-5 pb-12 px-4 sm:px-6 bg-[#0A006E] text-white flex flex-col relative overflow-hidden shadow-lg">
         {/* Animated silent scanner sweep across header */}
@@ -501,6 +542,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
           <div className="hidden md:flex flex-1 max-w-lg mx-6 relative z-10">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
+              id="customer-portal-search-input"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -537,7 +579,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               </div>
             )}
 
-            {/* Cart Button */}
+            {/* Cart Button (Hidden on Mobile home page / Header as requested) */}
             <button
               type="button"
               onClick={() => {
@@ -546,7 +588,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                   el.scrollIntoView({ behavior: 'smooth' });
                 }
               }}
-              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center border-2 border-white transition-all cursor-pointer shadow-md relative group bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400 active:scale-95"
+              className="hidden sm:flex w-11 h-11 sm:w-12 sm:h-12 rounded-2xl items-center justify-center border-2 border-white transition-all cursor-pointer shadow-md relative group bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400 active:scale-95"
               title={`Direct Checkout Box (${cartItemCount} items)`}
               aria-label="Shopping Cart"
             >
@@ -582,6 +624,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
+              id="customer-portal-mobile-search-input"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -929,24 +972,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         </aside>
       </main>
 
-      {/* Mobile Floating Quick Bar */}
-      {cart.length > 0 && (
-        <div className="lg:hidden fixed bottom-4 left-4 right-4 z-30 animate-in slide-in-from-bottom duration-200">
-          <button
-            type="button"
-            onClick={() => {
-              const el = document.getElementById('pos-checkout-box');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className="w-full py-3.5 px-5 bg-[#0A006E] text-[#FFDE00] border-2 border-[#FFDE00] rounded-2xl font-black text-xs shadow-2xl flex items-center justify-between cursor-pointer active:scale-98"
-          >
-            <span className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 stroke-[2.5]" /> Review Order Ticket ({cartItemCount})
-            </span>
-            <span className="text-white font-mono font-black">{formatKes(cartTotal)}</span>
-          </button>
-        </div>
-      )}
+
 
       {/* Order Placed Success Modal */}
       {lastPlacedOrder && (
@@ -1155,6 +1181,48 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               </div>
             </div>
 
+            {/* Rate & Review Section */}
+            <div className="pt-4 border-t border-slate-200">
+              <h4 className="text-xs font-black uppercase text-[#0A006E] mb-2">Rate & Review</h4>
+              <div className="flex gap-1 mb-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRating(star)}
+                    className="text-2xl cursor-pointer hover:scale-110 transition"
+                  >
+                    {star <= rating ? '★' : '☆'}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Share your thoughts about this product..."
+                className="w-full p-2 border border-slate-200 rounded-xl text-xs mb-2"
+                rows={2}
+              />
+              {reviewFeedback && (
+                <div
+                  className={`p-2 rounded-xl text-xs font-semibold mb-2 flex items-center gap-1.5 ${
+                    reviewFeedback.type === 'success'
+                      ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                      : 'bg-red-50 border border-red-200 text-red-800'
+                  }`}
+                >
+                  <span>{reviewFeedback.message}</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleReviewSubmit}
+                className="w-full py-2 bg-[#0A006E] text-white rounded-xl text-xs font-bold hover:bg-[#070050] transition cursor-pointer"
+              >
+                Submit Review
+              </button>
+            </div>
+
             {/* Bonded Storage Note */}
             <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 flex items-center gap-2">
               <Store className="w-4 h-4 text-[#0A006E] shrink-0" />
@@ -1248,18 +1316,144 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         </div>
       )}
 
-      {/* Footer */}
-      <footer className="mt-12 bg-[#0A006E] text-white py-8 border-t-2 border-[#FFDE00] hidden md:block">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <Wine className="w-5 h-5 text-[#FFDE00]" />
-            <span className="font-black italic">VAAIRO DIRECT STOREFRONT</span>
+      {/* Fixed Bottom Navigation Bar for Customer Portal */}
+      <nav
+        aria-label="Customer Portal Bottom Navigation"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-[#0A006E] text-white border-t-2 border-[#FFDE00] shadow-[0_-8px_30px_rgba(10,0,110,0.35)] px-3 sm:px-6 py-2 backdrop-blur-md transition-all relative"
+      >
+        {/* Single Curved Wave Top Edge with Gold Stroke */}
+        <div className="absolute left-0 right-0 -top-7 sm:-top-9 w-full leading-none pointer-events-none z-30">
+          <svg
+            viewBox="0 0 1200 70"
+            preserveAspectRatio="none"
+            className="w-full h-7 sm:h-9 block"
+          >
+            <path d="M0,71 L1200,71 L1200,54 C760,2 340,68 0,22 Z" fill="#0A006E" />
+            <path
+              d="M0,22 C340,68 760,2 1200,54"
+              fill="none"
+              stroke="#FFDE00"
+              strokeWidth="5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4 relative z-20">
+          {/* Section 1: Depot Fulfillment Indicator */}
+          <div className="hidden lg:flex items-center gap-2.5 shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-white/10 border border-[#FFDE00]/40 text-[#FFDE00] flex items-center justify-center shadow-xs">
+              <Wine className="w-4 h-4 stroke-[2.5]" />
+            </div>
+            <div className="text-left">
+              <div className="text-[9px] font-black uppercase tracking-wider text-[#FFDE00] flex items-center gap-1.5 leading-none">
+                <span>VAAIRO Storefront</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              </div>
+              <div className="text-xs font-bold text-white/90 truncate max-w-[180px]">
+                {activeBranch.name}
+              </div>
+            </div>
           </div>
-          <div className="text-slate-300 text-center sm:text-right">
-            &copy; {new Date().getFullYear()} VAAIRO Commercial ERP. Licensed Liquor Distributor &amp; Bonded Depôt.
+
+          {/* Section 2: Quick Category Pills & Search */}
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory('ALL');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                selectedCategory === 'ALL'
+                  ? 'bg-[#FFDE00] text-[#0A006E] font-black shadow-xs'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Store className="w-3.5 h-3.5" />
+              <span>All Spirits</span>
+            </button>
+
+            {['Whisky', 'Gin', 'Vodka', 'Wine & Champagne', 'Beer & Cider'].map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => {
+                  setSelectedCategory(cat);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`hidden md:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer items-center gap-1 ${
+                  selectedCategory === cat
+                    ? 'bg-[#FFDE00] text-[#0A006E] font-black shadow-xs'
+                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <span>{cat}</span>
+              </button>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => {
+                const input =
+                  document.getElementById('customer-portal-search-input') ||
+                  document.getElementById('customer-portal-mobile-search-input');
+                if (input) {
+                  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  (input as HTMLInputElement).focus();
+                }
+              }}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer flex items-center gap-1.5"
+            >
+              <Search className="w-3.5 h-3.5 text-[#FFDE00]" />
+              <span className="hidden sm:inline">Search</span>
+            </button>
+          </div>
+
+          {/* Section 3: Cart / Checkout Ticket & Return to ERP */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Live Checkout Ticket Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('pos-checkout-box');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-montserrat font-black text-xs transition cursor-pointer shadow-md active:scale-95 ${
+                cart.length > 0
+                  ? 'bg-[#FFDE00] text-[#0A006E] hover:bg-amber-400 border border-white/30'
+                  : 'bg-white/10 text-white/80 hover:text-white hover:bg-white/15 border border-white/15'
+              }`}
+            >
+              <div className="relative">
+                <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2 px-1 py-0.2 bg-[#0A006E] text-[#FFDE00] text-[9px] font-black rounded-full leading-tight">
+                    {cartItemCount}
+                  </span>
+                )}
+              </div>
+              <span className="hidden sm:inline">Order Ticket</span>
+              <span className="font-mono-tabular font-black">
+                {cartTotal > 0 ? formatKes(cartTotal) : '0 items'}
+              </span>
+            </button>
+
+            {/* Back to ERP Backoffice */}
+            <button
+              type="button"
+              onClick={onBackToErpLogin}
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold transition cursor-pointer"
+              title="Return to ERP Backoffice"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span className="hidden sm:inline">Exit to ERP</span>
+            </button>
           </div>
         </div>
-      </footer>
+      </nav>
       
       
     </div>

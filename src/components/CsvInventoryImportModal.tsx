@@ -151,6 +151,7 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
         return -1;
       };
 
+      const skuIdx = findHeaderIdx(['autosku', 'sku', 'itemcode', 'code', 'productcode', 'id']);
       const nameIdx = findHeaderIdx(['name', 'productname', 'description', 'title', 'item']);
       const categoryIdx = findHeaderIdx(['category', 'stockcategory', 'class', 'stockclass', 'ipslps']);
       const subCatIdx = findHeaderIdx(['subcategory', 'liquortype', 'type']);
@@ -167,7 +168,7 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
       const costIdx = findHeaderIdx(['landedcost', 'cost', 'costprice', 'warehousecost']);
       const wholesaleIdx = findHeaderIdx(['wholesale', 'wholesaleprice', 'wsprice', 'trade']);
       const retailIdx = findHeaderIdx(['retail', 'retailprice', 'consumerprice', 'price', 'rrp']);
-      const stockIdx = findHeaderIdx(['initialbottles', 'bottles', 'qty', 'stock', 'quantity', 'inventory']);
+      const stockIdx = findHeaderIdx(['totalbottles', 'initialbottles', 'bottles', 'qty', 'stock', 'quantity', 'inventory', 'onhand']);
 
       const parsed: ParsedProductDraft[] = [];
 
@@ -237,13 +238,14 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
         const cost = Number((cols[costIdx] || '2500').replace(/[^0-9.]/g, '')) || 2500;
         const wholesale = Number((cols[wholesaleIdx] || String(cost * 1.25)).replace(/[^0-9.]/g, '')) || cost * 1.25;
         const retail = Number((cols[retailIdx] || String(cost * 1.45)).replace(/[^0-9.]/g, '')) || cost * 1.45;
-        const stock = Number((cols[stockIdx] || '24').replace(/[^0-9]/g, '')) || 24;
+        const stock = Number((cols[stockIdx !== -1 ? stockIdx : 0] || '0').replace(/[^0-9]/g, '')) || 0;
 
-        // Auto-SKU generation
+        // Auto-SKU generation or preserve CSV Auto SKU
+        const rawSku = skuIdx !== -1 ? (cols[skuIdx] || '').trim() : '';
         const catCode = category === 'IPS' ? 'IPS' : 'LPS';
         const subCode = subCat.slice(0, 3).toUpperCase();
         const brandCode = brand.slice(0, 3).toUpperCase();
-        const sku = `SKU-${catCode}-${subCode}-${brandCode}-${vol}ML-${Math.floor(100 + Math.random() * 900)}`;
+        const sku = rawSku || `SKU-${catCode}-${subCode}-${brandCode}-${vol}ML-${Math.floor(100 + Math.random() * 900)}`;
 
         const branchMap: Record<string, number> = {};
         branches.forEach((b) => {
@@ -276,12 +278,11 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
           wholesalePriceKes: wholesale,
           baseRetailPrice: retail,
           retailPriceKes: retail,
-          // Newly uploaded CSV products become unavailable on all dashboards until scanned by Branch Manager
-          isOnboarded: false,
-          status: 'Pending Onboarding',
-          pendingActivationBottles: stock,
-          totalBottles: 0,
-          branchStockSummary: JSON.stringify({}),
+          isOnboarded: true,
+          status: 'Active',
+          pendingActivationBottles: 0,
+          totalBottles: stock,
+          branchStockSummary: JSON.stringify(branchMap),
           geoPriceOverrides: JSON.stringify({}),
           rowNumber: r,
           isValid: true,
@@ -309,13 +310,18 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
     try {
       const productsToSave = validProducts.map((p) => {
         const { rowNumber, isValid, validationError, ...rest } = p;
+        const bottleCount = typeof p.totalBottles === 'number' ? p.totalBottles : 0;
+        const branchMap: Record<string, number> = {};
+        if (targetBranchId && bottleCount > 0) {
+          branchMap[targetBranchId] = bottleCount;
+        }
         return {
           ...rest,
-          isOnboarded: false,
-          status: 'Pending Onboarding' as const,
-          pendingActivationBottles: p.pendingActivationBottles ?? 12,
-          totalBottles: 0,
-          branchStockSummary: JSON.stringify({}),
+          isOnboarded: true,
+          status: 'Active' as const,
+          pendingActivationBottles: 0,
+          totalBottles: bottleCount,
+          branchStockSummary: JSON.stringify(branchMap),
         };
       });
 
@@ -326,7 +332,7 @@ export const CsvInventoryImportModal: React.FC<CsvInventoryImportModalProps> = (
       const targetBranchName = branches.find((b) => b.id === targetBranchId)?.name || 'HQ - Main Branch';
       setImportSummary({
         count: importedCount,
-        message: `Successfully uploaded ${importedCount} products as Pending Onboarding. In compliance with branch inventory governance, all items remain unavailable on dashboards until the Branch Manager scans barcodes in "Onboard Items" to activate stock and branch assets.`,
+        message: `Successfully saved ${importedCount} products directly into Firestore database (erp-db-1) allocated to ${targetBranchName}. No existing records were updated.`,
       });
 
       // Clear file after short delay

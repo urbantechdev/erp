@@ -13,7 +13,7 @@ export const INVENTORY_DATA: Omit<Product, 'id' | 'createdAt'>[] = [
     originCountry: 'Scotland',
     wholesalePriceKes: 3850.0,
     retailPriceKes: 4500.0,
-    totalBottles: 360,
+    totalBottles: 0,
   },
   {
     sku: 'IPS-WHISKY-002-1L',
@@ -27,7 +27,7 @@ export const INVENTORY_DATA: Omit<Product, 'id' | 'createdAt'>[] = [
     originCountry: 'Scotland',
     wholesalePriceKes: 4250.0,
     retailPriceKes: 4999.0,
-    totalBottles: 360,
+    totalBottles: 0,
   },
   {
     sku: 'ND-WHS-003',
@@ -41,6 +41,6 @@ export const INVENTORY_DATA: Omit<Product, 'id' | 'createdAt'>[] = [
     originCountry: 'Scotland',
     wholesalePriceKes: 2080.0,
     retailPriceKes: 2499.0,
-    totalBottles: 360,
+    totalBottles: 0,
   },
 ];

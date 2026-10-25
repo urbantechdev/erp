@@ -33,6 +33,7 @@ import { StaffMember, StaffRole, Branch } from '../types';
 import { AnimatedErrorPromptIcon } from './AnimatedFeedback';
 import { Header } from './Header';
 import { GoogleIcon } from './icons/GoogleIcon';
+import { playClickSound, playErrorSound } from '../utils/audioBeep';
 
 interface AuthGatewayProps {
   staffList: StaffMember[];
@@ -232,6 +233,12 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
     }
   }, [screenView, pinDigits, isSubmitting, selectedDepartment, selectedUser, onPinLogin]);
 
+  useEffect(() => {
+    if (authError) {
+      playErrorSound();
+    }
+  }, [authError]);
+
   const handleOpenStaffDepartments = () => {
     setSelectedBox('Staff');
     setSelectedDepartment(null);
@@ -286,16 +293,19 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
 
   const handleDigitPress = (digit: string) => {
     if (isSubmitting) return;
+    playClickSound();
     setPinDigits((prev) => (prev.length < 6 ? prev + digit : prev));
   };
 
   const handleBackspace = () => {
     lastSubmittedPinRef.current = '';
+    playClickSound();
     setPinDigits((prev) => prev.slice(0, -1));
   };
 
   const handleClear = () => {
     lastSubmittedPinRef.current = '';
+    playClickSound();
     setPinDigits('');
     pinInputRef.current?.focus();
   };

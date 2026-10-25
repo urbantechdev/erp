@@ -266,6 +266,22 @@
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["businessUnitId", "branchId", "name", "category", "itemType", "portionUnit", "costPriceKes", "sellingPriceKes", "portionsAvailable", "createdAt"]
+    },
+    "ProductRating": {
+      "title": "ProductRating",
+      "description": "Customer rating and review for a product",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "maxLength": 128 },
+        "consumerId": { "type": "string", "maxLength": 128 },
+        "raterName": { "type": "string", "maxLength": 160 },
+        "stars": { "type": "number" },
+        "comment": { "type": "string", "maxLength": 500 },
+        "isVerifiedBuyer": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["productId", "raterName", "stars", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -288,6 +304,10 @@
     "/restaurant_inventory/{itemId}": {
       "schema": { "$ref": "#/entities/RestaurantInventoryItem" },
       "description": "Separate food, beverage, and club amenity inventory items scoped to restaurant outlets"
+    },
+    "/product_ratings/{ratingId}": {
+      "schema": { "$ref": "#/entities/ProductRating" },
+      "description": "Customer ratings and reviews for products"
     },
     "/geo_regions/{regionId}": {
       "schema": { "$ref": "#/entities/GeoRegion" },

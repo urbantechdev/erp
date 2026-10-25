@@ -2086,86 +2086,13 @@ export const AffiliateSalesPosDashboard: React.FC<AffiliateSalesPosDashboardProp
         />
       )}
 
+
+
       {/* Floating Keyboard Modal */}
       <FloatingSalesKeyboardModal
         isOpen={isKeyboardOpen}
         onClose={() => setIsKeyboardOpen(false)}
       />
-
-      {/* Fixed Bottom Navigation Bar for Sales Reps */}
-      <div className="sticky bottom-0 left-0 right-0 z-40 bg-[#0A006E] text-white border-t-2 border-[#FFDE00]/40 px-3 py-2 flex items-center justify-between gap-2 shadow-2xl mt-6 rounded-t-2xl backdrop-blur-md">
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 sm:gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('pos')}
-            className={`flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1 rounded-xl transition cursor-pointer ${
-              activeTab === 'pos' ? 'text-[#FFDE00] font-bold bg-white/10' : 'text-white/70 hover:text-white'
-            }`}
-          >
-            <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="text-[10px]">POS Terminal</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('orders')}
-            className={`flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1 rounded-xl transition cursor-pointer relative ${
-              activeTab === 'orders' ? 'text-[#FFDE00] font-bold bg-white/10' : 'text-white/70 hover:text-white'
-            }`}
-          >
-            <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="text-[10px]">Orders</span>
-            {userTodayTransactions.length > 0 && (
-              <span className="absolute -top-1 -right-1 px-1 bg-amber-400 text-[#0A006E] text-[9px] font-black rounded-full leading-tight">
-                {userTodayTransactions.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('sales_statement')}
-            className={`flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1 rounded-xl transition cursor-pointer ${
-              activeTab === 'sales_statement' ? 'text-[#FFDE00] font-bold bg-white/10' : 'text-white/70 hover:text-white'
-            }`}
-          >
-            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="text-[10px]">Statements</span>
-          </button>
-        </div>
-
-        {/* SPECIFIC LOGGED IN USER TOTAL SALE TODAY */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/15 border border-[#FFDE00]/50 rounded-2xl shadow-inner transition">
-          <div className="w-2.5 h-2.5 rounded-full bg-[#34D186] animate-pulse shrink-0" />
-          <div className="text-left">
-            <div className="text-[9px] font-montserrat font-black text-[#FFDE00] uppercase tracking-wider leading-none">
-              My Sales Today ({currentUser.name.split(' ')[0]})
-            </div>
-            <div className="text-xs sm:text-sm font-mono-tabular font-black text-white leading-tight">
-              {formatKes(userTodaySalesVolume > 0 ? userTodaySalesVolume : userTodayTotalAllOrdersVolume)}
-            </div>
-          </div>
-          {userTodayCommission > 0 && (
-            <div className="hidden sm:flex flex-col text-right pl-2 border-l border-white/20">
-              <span className="text-[8px] text-emerald-300 font-mono uppercase">Commission</span>
-              <span className="text-[10px] font-mono font-bold text-[#34D186]">
-                +{formatKes(userTodayCommission)}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Floating Keyboard Trigger Button at Bottom Nav */}
-        <button
-          type="button"
-          onClick={() => setIsKeyboardOpen(true)}
-          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-[#FFDE00] text-[#0A006E] rounded-xl shadow-md font-montserrat font-black cursor-pointer hover:bg-amber-400 transition active:scale-95 shrink-0"
-        >
-          <Keyboard className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span className="text-[10px] sm:text-xs">Keypad</span>
-        </button>
-      </div>
 
       {isPreviewOpen && previewProduct && (
         <ProductPreviewModal

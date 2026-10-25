@@ -36,7 +36,8 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
   const wholesale = raw.wholesalePriceKes ?? raw.baseWholesalePrice ?? 2500;
   const retail = raw.retailPriceKes ?? raw.baseRetailPrice ?? 3200;
   const cost = raw.warehouseCostKes ?? raw.baseLandedCost ?? Math.round(wholesale * 0.82);
-  const totalBottles = raw.totalBottles ?? packSize * 30; // Default 30 cases distributed across branches
+  const isZeroStock = typeof window === 'undefined' || localStorage.getItem('vaairo_inventory_zero_stock') !== 'false';
+  const totalBottles = isZeroStock ? 0 : (raw.totalBottles ?? 0);
 
   const defaultBranchStock = JSON.stringify({});
 

@@ -596,7 +596,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
   );
 
   const getBranchBottleStock = (product: Product, branchId: string): number => {
-    const fallbackTotal = product.totalBottles ?? (product.packSize || 12) * 30;
+    const fallbackTotal = product.totalBottles ?? 0;
     try {
       const parsed = product.branchStockSummary ? JSON.parse(product.branchStockSummary) : {};
       return typeof parsed[branchId] === 'number' ? parsed[branchId] : fallbackTotal;
@@ -831,7 +831,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
         for (const line of computedLineItems) {
           const prod = products.find((p) => p.id === line.productId);
           if (prod && line.totalBottles > 0) {
-            const fallbackTotal = prod.totalBottles ?? (prod.packSize || 12) * 30;
+            const fallbackTotal = prod.totalBottles ?? 0;
             let branchMap: Record<string, number> = {};
             try {
               branchMap = prod.branchStockSummary ? JSON.parse(prod.branchStockSummary) : {};

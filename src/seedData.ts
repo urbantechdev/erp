@@ -599,6 +599,32 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
           }
         }
       }
+
+      // 10. Enforce zero stock and complete inventory wipe across all products in Firestore
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('vaairo_inventory_wiped_flag', 'true');
+        localStorage.setItem('vaairo_inventory_zero_stock', 'true');
+        localStorage.removeItem('erp_products_local_override');
+        localStorage.removeItem('vaairo_load_sample_catalog');
+      }
+      const prodSnap = await getDocs(collection(db, 'products')).catch(() => null);
+      if (prodSnap && !prodSnap.empty) {
+        for (const pDoc of prodSnap.docs) {
+          await deleteDoc(doc(db, 'products', pDoc.id)).catch(() => {});
+        }
+      }
+
+      const restInvSnap = await getDocs(collection(db, 'restaurant_inventory')).catch(() => null);
+      if (restInvSnap && !restInvSnap.empty) {
+        for (const rDoc of restInvSnap.docs) {
+          const rData = rDoc.data();
+          if (rData.portionsAvailable && rData.portionsAvailable > 0) {
+            await updateDoc(doc(db, 'restaurant_inventory', rDoc.id), {
+              portionsAvailable: 0,
+            }).catch(() => {});
+          }
+        }
+      }
     } catch {}
   } catch {
     // Ignore if restricted or already purged
