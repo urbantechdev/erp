@@ -20,9 +20,11 @@ import {
   Volume2,
   VolumeX,
   Building2,
+  Layers,
 } from 'lucide-react';
 import { StaffMember, ERPModuleId, Branch } from '../types';
 import { isAudioMuted, toggleAudioMuted, playPosBeep } from '../utils/audioBeep';
+import { PWAInstallButton } from './common/PWAInstallButton';
 
 export interface HeaderProps {
   /** Mode: 'authenticated' for active ERP session, 'gateway' for login portal */
@@ -52,6 +54,8 @@ export interface HeaderProps {
   branches?: Branch[];
   /** Total staff list count */
   totalStaffCount?: number;
+  /** Handler to open Hybrid & Cross-Platform Native Wrappers modal */
+  onOpenNativeWrappers?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -69,6 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCustomerPortal,
   branches = [],
   totalStaffCount = 0,
+  onOpenNativeWrappers,
 }) => {
   // Gateway drawer state & utilities
   const [isGatewayDrawerOpen, setIsGatewayDrawerOpen] = useState(false);
@@ -260,6 +265,9 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </button>
               )}
+
+              {/* Install PWA Button */}
+              <PWAInstallButton />
             </div>
           </>
         ) : (
@@ -293,6 +301,9 @@ export const Header: React.FC<HeaderProps> = ({
                 <Menu className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.4]" />
               )}
             </button>
+
+            {/* Install PWA Button */}
+            <PWAInstallButton />
           </div>
         )}
 
@@ -401,6 +412,33 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                     <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
                       Browse public catalog, direct customer retail ordering & delivery.
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {/* Feature 2.5: Hybrid & Cross-Platform Native Wrappers */}
+              {onOpenNativeWrappers && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsGatewayDrawerOpen(false);
+                    onOpenNativeWrappers();
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-purple-50 hover:bg-purple-100 border-2 border-purple-300 text-left flex items-start gap-3 transition cursor-pointer group shadow-2xs"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                    <Layers className="w-5 h-5 stroke-[2.3]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-black text-purple-950 flex items-center justify-between">
+                      <span>Native Wrappers (APK / iOS / Desktop)</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-800 text-white uppercase">
+                        Hybrid
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
+                      Capacitor Android APK, iOS Xcode, and Electron/Tauri desktop packages.
                     </p>
                   </div>
                 </button>

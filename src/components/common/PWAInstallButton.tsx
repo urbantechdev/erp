@@ -282,6 +282,28 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                         )}
                       </ul>
                     </div>
+
+                    {/* Native Wrappers Bridge Banner */}
+                    <div className="p-3.5 rounded-2xl bg-purple-50 border-2 border-purple-300 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-montserrat font-black text-xs text-purple-950">
+                          Looking for Native App Packages (APK, iOS, Desktop)?
+                        </div>
+                        <div className="text-[11px] text-purple-800 mt-0.5">
+                          Generate Capacitor 6 Android APK, iOS Xcode, and Electron/Tauri desktop binaries.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowGuideModal(false);
+                          window.dispatchEvent(new CustomEvent('vaairo-open-native-wrappers'));
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-montserrat font-black text-xs shrink-0 shadow-xs transition cursor-pointer"
+                      >
+                        Native Hub
+                      </button>
+                    </div>
                   </div>
 
                   {/* Modal Footer */}

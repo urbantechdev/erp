@@ -1,120 +1,69 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 
-export interface BeforeInstallPromptEvent extends Event {
-  readonly platforms?: string[];
+interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-// Keep a global reference in case beforeinstallprompt fires before a specific component mounts
-let globalDeferredPrompt: BeforeInstallPromptEvent | null = null;
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeinstallprompt', (e: Event) => {
-    e.preventDefault();
-    globalDeferredPrompt = e as BeforeInstallPromptEvent;
-  });
-}
-
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
-    () => globalDeferredPrompt
-  );
-  const [isInstalled, setIsInstalled] = useState<boolean>(false);
-  const [isIOS, setIsIOS] = useState<boolean>(false);
-  const [isInIframe, setIsInIframe] = useState<boolean>(false);
-  const [swReady, setSwReady] = useState<boolean>(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [swReady, setSwReady] = useState(false);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    setIsInstalled(isStandalone);
 
-    // Detect standalone mode (already installed as native-like PWA)
-    const checkStandalone = () => {
-      const isStandalone =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        window.matchMedia('(display-mode: fullscreen)').matches ||
-        window.matchMedia('(display-mode: minimal-ui)').matches ||
-        (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-      setIsInstalled(isStandalone);
-    };
-    checkStandalone();
-
-    // Detect iOS devices (iPhone / iPad / iPod, including iPadOS desktop-class UA)
     const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIOSDevice =
-      /iphone|ipad|ipod/.test(userAgent) ||
-      (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+    const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(isIOSDevice);
 
-    // Detect if running inside an embedded preview iframe
-    try {
-      setIsInIframe(window.self !== window.top);
-    } catch {
-      setIsInIframe(true);
-    }
-
-    // Check Service Worker registration readiness
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready
-        .then(() => setSwReady(true))
-        .catch(() => setSwReady(false));
-      navigator.serviceWorker
-        .getRegistrations()
-        .then(regs => {
-          if (regs && regs.length > 0) setSwReady(true);
-        })
-        .catch(() => {});
+      navigator.serviceWorker.ready.then(() => {
+        setSwReady(true);
+      }).catch(() => {
+        setSwReady(true);
+      });
     }
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      const promptEvent = e as BeforeInstallPromptEvent;
-      globalDeferredPrompt = promptEvent;
-      setDeferredPrompt(promptEvent);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
     const handleAppInstalled = () => {
-      globalDeferredPrompt = null;
       setIsInstalled(true);
       setDeferredPrompt(null);
     };
 
-    const mediaQuery = window.matchMedia('(display-mode: standalone)');
-    const handleDisplayModeChange = (e: MediaQueryListEvent) => {
-      if (e.matches) setIsInstalled(true);
-    };
-
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
-    mediaQuery.addEventListener?.('change', handleDisplayModeChange);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
-      mediaQuery.removeEventListener?.('change', handleDisplayModeChange);
     };
   }, []);
 
-  const install = useCallback(async () => {
-    const promptToUse = deferredPrompt || globalDeferredPrompt;
-    if (!promptToUse) return false;
-    try {
-      await promptToUse.prompt();
-      const { outcome } = await promptToUse.userChoice;
-      if (outcome === 'accepted') {
-        globalDeferredPrompt = null;
-        setIsInstalled(true);
-        setDeferredPrompt(null);
-        return true;
-      }
-    } catch {
-      // Prompt may have already been used
+  const install = async () => {
+    if (!deferredPrompt) return false;
+    await deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      return true;
     }
     return false;
-  }, [deferredPrompt]);
+  };
+
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   return {
-    isInstallable: Boolean(deferredPrompt || globalDeferredPrompt),
+    isInstallable: !!deferredPrompt,
     isInstalled,
     isIOS,
     isInIframe,

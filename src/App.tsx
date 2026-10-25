@@ -114,6 +114,8 @@ import { OnboardItemsModal } from './components/OnboardItemsModal';
 import { AccessModelMatrixModal } from './components/AccessModelMatrixModal';
 import { UserFeatureAccessModal } from './components/UserFeatureAccessModal';
 import { StatusFeedbackToast } from './components/AnimatedFeedback';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { HybridNativeWrappersModal } from './components/HybridNativeWrappersModal';
 import { MobileSplashScreen } from './components/MobileSplashScreen';
 import { DesktopBottomNav } from './components/DesktopBottomNav';
 import { DeliveryManagementModule } from './components/DeliveryManagementModule';
@@ -648,6 +650,7 @@ export default function App() {
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
   const [isAccessMatrixOpen, setIsAccessMatrixOpen] = useState(false);
+  const [isNativeWrappersModalOpen, setIsNativeWrappersModalOpen] = useState(false);
   const [userFeatureModalStaff, setUserFeatureModalStaff] = useState<StaffMember | null>(null);
   const [isUserFeatureModalOpen, setIsUserFeatureModalOpen] = useState(false);
   const [customRoleMatrix, setCustomRoleMatrix] = useState<Record<StaffRole, ERPModuleId[]> | undefined>(() => {
@@ -658,6 +661,12 @@ export default function App() {
     return undefined;
   });
   const isGoogleAuthInProgressRef = useRef(false);
+
+  useEffect(() => {
+    const handleOpenWrappers = () => setIsNativeWrappersModalOpen(true);
+    window.addEventListener('vaairo-open-native-wrappers', handleOpenWrappers);
+    return () => window.removeEventListener('vaairo-open-native-wrappers', handleOpenWrappers);
+  }, []);
   const [toastStatus, setToastStatus] = useState<{
     type: 'success' | 'error';
     title: string;
@@ -3471,6 +3480,7 @@ export default function App() {
         onLogout={handleLogout}
         mobileDrawerOpen={mobileDrawerOpen}
         onToggleMobileDrawer={() => setMobileDrawerOpen(!mobileDrawerOpen)}
+        onOpenNativeWrappers={() => setIsNativeWrappersModalOpen(true)}
       />
 
       {/* Cloud Firestore Setup Notice Banner */}
@@ -4459,6 +4469,13 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+      <OfflineIndicator />
+      {isNativeWrappersModalOpen && (
+        <HybridNativeWrappersModal
+          isOpen={isNativeWrappersModalOpen}
+          onClose={() => setIsNativeWrappersModalOpen(false)}
+        />
       )}
     </div>
   );
