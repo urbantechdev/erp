@@ -14,7 +14,6 @@ import {
 import { EtimsReceiptModal } from '../common/EtimsReceiptModal';
 import { OrderItemsDocumentModal } from '../common/OrderItemsDocumentModal';
 import { CustomerCheckoutWizard } from './CustomerCheckoutWizard';
-import { PWAInstallButton } from '../common/PWAInstallButton';
 import {
   CenterScreenFeedback,
   CenterScreenFeedbackData,

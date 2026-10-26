@@ -577,6 +577,23 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Delivery Rider': 'Assigned deliveries',
     },
   },
+  {
+    moduleName: 'Internal inbox & department chat',
+    moduleId: 'internal_inbox',
+    description: 'Inter-department and direct staff messaging with inline commercial invoice transfers and targeted stock transfer requests.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'Financial',
+      HR: 'Manage',
+      'Sales Manager': 'Manage',
+      'Branch Manager': 'Branch scope',
+      'Inventory Controller': 'Manage',
+      'Counter Cashier': 'Limited',
+      'Affiliate Sales Representative': 'Limited',
+      'Delivery Manager': 'Manage',
+      'Delivery Rider': 'Limited',
+    },
+  },
 ];
 
 export const ROLE_DISTINCTIONS: Record<StaffRole, string> = {
@@ -629,6 +646,7 @@ export const ROLE_PERMISSIONS: Record<
       'customer_portal',
       'outlets_restaurants',
       'delivery_management',
+      'internal_inbox',
     ],
     canCreateRoles: ['HR'], // Admin provisions HR, who then manages other operational roles
     badgeTitle: 'Executive System Administrator (Google Auth)',
@@ -643,6 +661,7 @@ export const ROLE_PERMISSIONS: Record<
       'compliance',
       'audit_security',
       'outlets_restaurants',
+      'internal_inbox',
     ],
     canCreateRoles: [],
     badgeTitle: 'Chief Financial Accountant (Google Auth)',
@@ -650,7 +669,7 @@ export const ROLE_PERMISSIONS: Record<
     scopeToAssignedBranch: false,
   },
   HR: {
-    allowedModules: ['overview', 'hr_rbac', 'audit_security'],
+    allowedModules: ['overview', 'hr_rbac', 'audit_security', 'internal_inbox'],
     canCreateRoles: [
       'Accountant',
       'Sales Manager',
@@ -680,6 +699,7 @@ export const ROLE_PERMISSIONS: Record<
       'outlets_restaurants',
       'customer_portal',
       'delivery_management',
+      'internal_inbox',
     ],
     canCreateRoles: [],
     badgeTitle: 'National Distribution Sales Manager (6-Digit PIN)',
@@ -701,6 +721,7 @@ export const ROLE_PERMISSIONS: Record<
       'audit_security',
       'outlets_restaurants',
       'delivery_management',
+      'internal_inbox',
     ],
     canCreateRoles: ['Counter Cashier', 'Affiliate Sales Representative', 'Delivery Rider'],
     badgeTitle: 'Regional Branch Manager (6-Digit PIN)',
@@ -718,6 +739,7 @@ export const ROLE_PERMISSIONS: Record<
       'compliance',
       'audit_security',
       'outlets_restaurants',
+      'internal_inbox',
     ],
     canCreateRoles: [],
     badgeTitle: 'Bonded Warehouse & Inventory Controller (6-Digit PIN)',
@@ -725,28 +747,28 @@ export const ROLE_PERMISSIONS: Record<
     scopeToAssignedBranch: false,
   },
   'Counter Cashier': {
-    allowedModules: ['retail_pos', 'documents_credit', 'audit_security', 'outlets_restaurants'],
+    allowedModules: ['retail_pos', 'documents_credit', 'audit_security', 'outlets_restaurants', 'internal_inbox'],
     canCreateRoles: [],
     badgeTitle: 'Retail Checkout Counter Cashier (6-Digit PIN)',
     authRequirement: 'pin',
     scopeToAssignedBranch: true,
   },
   'Affiliate Sales Representative': {
-    allowedModules: ['sales_pos'],
+    allowedModules: ['sales_pos', 'internal_inbox'],
     canCreateRoles: [],
     badgeTitle: 'Field & Affiliate Sales Representative (6-Digit PIN)',
     authRequirement: 'pin',
     scopeToAssignedBranch: true,
   },
   'Delivery Manager': {
-    allowedModules: ['overview', 'delivery_management', 'audit_security'],
+    allowedModules: ['overview', 'delivery_management', 'audit_security', 'internal_inbox'],
     canCreateRoles: ['Delivery Rider'],
     badgeTitle: 'Logistics & Delivery Operations Manager (6-Digit PIN)',
     authRequirement: 'pin',
     scopeToAssignedBranch: false,
   },
   'Delivery Rider': {
-    allowedModules: ['delivery_management'],
+    allowedModules: ['delivery_management', 'internal_inbox'],
     canCreateRoles: [],
     badgeTitle: 'Field Delivery & Dispatch Rider (6-Digit PIN)',
     authRequirement: 'pin',
@@ -883,6 +905,14 @@ export const ERP_FEATURE_CATALOG: GranularFeatureDefinition[] = [
     isModule: true,
     moduleId: 'delivery_management',
   },
+  {
+    key: 'internal_inbox',
+    label: 'Internal Inbox & Inter-Department Chat',
+    category: 'Core Modules',
+    description: 'Departmental channels and direct staff messaging with inline invoice transfers and person-targeted stock transfer requests.',
+    isModule: true,
+    moduleId: 'internal_inbox',
+  },
 
   // Granular Sub-Features
   {
@@ -972,6 +1002,14 @@ export function getEffectiveUserModules(
         effective.push(feat as ERPModuleId);
       }
     });
+  }
+
+  // Ensure internal_inbox is available to all departments/staff unless explicitly stripped
+  if (
+    !effective.includes('internal_inbox') &&
+    !(staff.strippedFeatures && staff.strippedFeatures.includes('internal_inbox'))
+  ) {
+    effective.push('internal_inbox');
   }
 
   return effective;

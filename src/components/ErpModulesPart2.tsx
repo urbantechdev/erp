@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   UserPlus,
   Download,
@@ -32,6 +32,7 @@ import {
   ShieldAlert,
   Phone,
   FileSpreadsheet,
+  ListChecks,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -47,6 +48,10 @@ import {
   PayrollRun,
   PayrollRecord,
   BusinessUnit,
+  HrDeductionCatalogItem,
+  StaffDeductionItem,
+  DeductionCategory,
+  DeductionCalcMode,
 } from '../types';
 import { GoogleIcon } from './icons/GoogleIcon';
 import {
@@ -63,6 +68,16 @@ import { AnimatedSuccessTickIcon, StatusFeedbackToast } from './AnimatedFeedback
 import { ConfirmationModal } from './common/ConfirmationModal';
 import { KraReturnsPanel } from './KraReturnsExportModal';
 import { KraReturnScheduleType } from '../utils/kraReturnsExport';
+import { HrDeductionItemsSelector } from './HrDeductionItemsSelector';
+import {
+  DEDUCTION_CATEGORIES,
+  STANDARD_HR_DEDUCTION_CATALOG,
+  buildDefaultStatutoryDeductionItems,
+  createDeductionItemFromCatalog,
+  hydrateStaffDeductionItems,
+  recalculateDeductionItemsForSalary,
+  summarizeDeductionItems,
+} from '../utils/hrDeductions';
 
 // ---------------------------------------------------------------------------
 // 5. SUPPLIERS, LICENSED RETAILERS & LOGISTICS ONBOARDING MODULE
@@ -1527,6 +1542,12 @@ export const HrAndRbacModule: React.FC<{
   staffList: StaffMember[];
   branches: Branch[];
   payrollRuns?: PayrollRun[];
+  initialTab?: 'roster' | 'payroll' | 'master_security';
+  customDeductionCatalog?: HrDeductionCatalogItem[];
+  onCreateCatalogDeduction?: (
+    draft: Omit<HrDeductionCatalogItem, 'id' | 'createdAt'>
+  ) => Promise<void>;
+  onDeleteCatalogDeduction?: (id: string) => Promise<void>;
   onCreateStaff: (newStaff: Omit<StaffMember, 'id' | 'createdAt'>) => Promise<void>;
   onUpdateStaff?: (staffId: string, updates: Partial<StaffMember>) => Promise<void>;
   onSetStaffStatus?: (staffId: string, status: 'Active' | 'Suspended' | 'Terminated') => Promise<void>;
@@ -1542,6 +1563,10 @@ export const HrAndRbacModule: React.FC<{
   staffList,
   branches,
   payrollRuns = [],
+  initialTab,
+  customDeductionCatalog = [],
+  onCreateCatalogDeduction,
+  onDeleteCatalogDeduction,
   onCreateStaff,
   onUpdateStaff,
   onSetStaffStatus,
@@ -1558,7 +1583,25 @@ export const HrAndRbacModule: React.FC<{
     (currentUser.role === 'HR' || currentUser.role === 'Admin') &&
     isUserFeaturePermitted(currentUser, 'manage_staff_salaries');
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'payroll' | 'master_security'>('roster');
+  const [activeTab, setActiveTab] = useState<'roster' | 'payroll' | 'master_security'>(() => {
+    if (initialTab === 'payroll' && canManagePayroll) return 'payroll';
+    return initialTab || 'roster';
+  });
+
+  useEffect(() => {
+    if (initialTab === 'payroll' && canManagePayroll) {
+      setActiveTab('payroll');
+    } else if (initialTab === 'roster') {
+      setActiveTab('roster');
+    }
+  }, [initialTab, canManagePayroll]);
+
+  const fullDeductionCatalog = useMemo<HrDeductionCatalogItem[]>(() => {
+    const presetIds = new Set(STANDARD_HR_DEDUCTION_CATALOG.map((c) => c.id));
+    const extras = customDeductionCatalog.filter((c) => !presetIds.has(c.id));
+    return [...STANDARD_HR_DEDUCTION_CATALOG, ...extras];
+  }, [customDeductionCatalog]);
+
   const [newMasterPasscode, setNewMasterPasscode] = useState('');
   const [confirmMasterPasscode, setConfirmMasterPasscode] = useState('');
   const [isUpdatingMaster, setIsUpdatingMaster] = useState(false);
@@ -1606,11 +1649,18 @@ export const HrAndRbacModule: React.FC<{
   );
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Default salary & deductions fields for new staff
+  // Default salary & structured deduction items for new staff onboarding
   const [baseSalary, setBaseSalary] = useState<number>(65000);
-  const [deductions, setDeductions] = useState<number>(12500);
+  const [deductionItems, setDeductionItems] = useState<StaffDeductionItem[]>(() =>
+    buildDefaultStatutoryDeductionItems(65000)
+  );
+  const [deductions, setDeductions] = useState<number>(() =>
+    summarizeDeductionItems(buildDefaultStatutoryDeductionItems(65000)).totalDeductionsKes
+  );
   const [penalties, setPenalties] = useState<number>(0);
-  const [deductionsBreakdown, setDeductionsBreakdown] = useState<string>('PAYE: KES 8,500, SHIF: KES 1,800, NSSF: KES 1,080, Housing Levy: KES 1,120');
+  const [deductionsBreakdown, setDeductionsBreakdown] = useState<string>(() =>
+    summarizeDeductionItems(buildDefaultStatutoryDeductionItems(65000)).breakdownText
+  );
   const [penaltiesReason, setPenaltiesReason] = useState<string>('');
   const [kraPin, setKraPin] = useState<string>('A009182741Z');
   const [nssfNo, setNssfNo] = useState<string>('092837192');
@@ -1628,6 +1678,7 @@ export const HrAndRbacModule: React.FC<{
   const [editStatus, setEditStatus] = useState<'Active' | 'Suspended' | 'Terminated'>('Active');
   const [editPin, setEditPin] = useState('');
   const [editBaseSalary, setEditBaseSalary] = useState<number>(65000);
+  const [editDeductionItems, setEditDeductionItems] = useState<StaffDeductionItem[]>([]);
   const [editDeductions, setEditDeductions] = useState<number>(12500);
   const [editPenalties, setEditPenalties] = useState<number>(0);
   const [editDeductionsBreakdown, setEditDeductionsBreakdown] = useState<string>('');
@@ -1638,9 +1689,10 @@ export const HrAndRbacModule: React.FC<{
   const [editIsCasual, setEditIsCasual] = useState<boolean>(false);
   const [editAgreedCommissionPct, setEditAgreedCommissionPct] = useState<number>(8.0);
 
-  // Quick Compensation & Penalties Adjustment Modal State
+  // Quick Compensation, Deductions & Penalties Adjustment Modal State
   const [compStaff, setCompStaff] = useState<StaffMember | null>(null);
   const [compBase, setCompBase] = useState<number>(65000);
+  const [compDeductionItems, setCompDeductionItems] = useState<StaffDeductionItem[]>([]);
   const [compDed, setCompDed] = useState<number>(12500);
   const [compPen, setCompPen] = useState<number>(0);
   const [compBreakdown, setCompBreakdown] = useState<string>('');
@@ -1651,6 +1703,27 @@ export const HrAndRbacModule: React.FC<{
   const [compCommissionPct, setCompCommissionPct] = useState<number>(8.0);
   const [compIsCasual, setCompIsCasual] = useState<boolean>(false);
   const [isSavingComp, setIsSavingComp] = useState<boolean>(false);
+
+  // Direct HR Quick-Assign Deduction Item & Catalog Management State (in HR Payroll Tab)
+  const [quickAssignStaffId, setQuickAssignStaffId] = useState<string>('');
+  const [quickAssignCatalogId, setQuickAssignCatalogId] = useState<string>(
+    STANDARD_HR_DEDUCTION_CATALOG.find((c) => c.code === 'HELB')?.id ||
+      STANDARD_HR_DEDUCTION_CATALOG[0].id
+  );
+  const [quickAssignMode, setQuickAssignMode] = useState<DeductionCalcMode>('FIXED');
+  const [quickAssignValue, setQuickAssignValue] = useState<number>(2500);
+  const [quickAssignFreq, setQuickAssignFreq] = useState<'Recurring Monthly' | 'One-Off'>('Recurring Monthly');
+  const [quickAssignNote, setQuickAssignNote] = useState<string>('');
+  const [isAssigningQuick, setIsAssigningQuick] = useState<boolean>(false);
+
+  // HR Reusable Deduction Item Catalog Creator State
+  const [showCatalogManager, setShowCatalogManager] = useState<boolean>(false);
+  const [newCatName, setNewCatName] = useState<string>('');
+  const [newCatCategory, setNewCatCategory] = useState<DeductionCategory>('Loan & Advance');
+  const [newCatMode, setNewCatMode] = useState<'FIXED' | 'PERCENTAGE'>('FIXED');
+  const [newCatDefaultVal, setNewCatDefaultVal] = useState<number>(2000);
+  const [newCatFreq, setNewCatFreq] = useState<'Recurring Monthly' | 'One-Off'>('Recurring Monthly');
+  const [isCreatingCatalogItem, setIsCreatingCatalogItem] = useState<boolean>(false);
 
   // Payroll Run execution state
   const [payrollPeriod, setPayrollPeriod] = useState<string>('October 2026');
@@ -1672,19 +1745,127 @@ export const HrAndRbacModule: React.FC<{
 
   const isGoogleRole = selectedRole === 'Admin';
 
-  const autoCalculateKenyanStatutory = (salary: number) => {
-    const nssf = Math.min(Math.round(salary * 0.06), 2160);
-    const shif = Math.round(salary * 0.0275);
-    const housing = Math.round(salary * 0.015);
-    const taxable = Math.max(0, salary - nssf);
-    let paye = 0;
-    if (taxable > 24000) {
-      paye = Math.round((taxable - 24000) * 0.25 - 2400);
-      if (paye < 0) paye = 0;
+  const handleOnboardingSalaryChange = (nextSalary: number) => {
+    setBaseSalary(nextSalary);
+    const updatedItems = recalculateDeductionItemsForSalary(deductionItems, nextSalary);
+    const summary = summarizeDeductionItems(updatedItems);
+    setDeductionItems(updatedItems);
+    setDeductions(summary.totalDeductionsKes);
+    setDeductionsBreakdown(summary.breakdownText);
+  };
+
+  const handleEditSalaryChange = (nextSalary: number) => {
+    setEditBaseSalary(nextSalary);
+    const updatedItems = recalculateDeductionItemsForSalary(editDeductionItems, nextSalary);
+    const summary = summarizeDeductionItems(updatedItems);
+    setEditDeductionItems(updatedItems);
+    setEditDeductions(summary.totalDeductionsKes);
+    setEditDeductionsBreakdown(summary.breakdownText);
+  };
+
+  const handleCompSalaryChange = (nextSalary: number) => {
+    setCompBase(nextSalary);
+    const updatedItems = recalculateDeductionItemsForSalary(compDeductionItems, nextSalary);
+    const summary = summarizeDeductionItems(updatedItems);
+    setCompDeductionItems(updatedItems);
+    setCompDed(summary.totalDeductionsKes);
+    setCompBreakdown(summary.breakdownText);
+  };
+
+  const handleQuickAssignDeductionToStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onUpdateStaff) return;
+    const targetStaff =
+      staffList.find((s) => s.id === quickAssignStaffId) ||
+      staffList.find((s) => s.status === 'Active') ||
+      staffList[0];
+    if (!targetStaff) return;
+
+    const preset = fullDeductionCatalog.find((c) => c.id === quickAssignCatalogId);
+    if (!preset) return;
+
+    setIsAssigningQuick(true);
+    try {
+      const staffSalary =
+        targetStaff.baseSalaryKes ??
+        (targetStaff.role === 'Admin'
+          ? 180000
+          : targetStaff.role === 'Accountant'
+          ? 120000
+          : targetStaff.role === 'Branch Manager'
+          ? 95000
+          : 65000);
+
+      const existingHydrated = hydrateStaffDeductionItems({
+        baseSalary: staffSalary,
+        deductionsKes: targetStaff.deductionsKes,
+        deductionsBreakdown: targetStaff.deductionsBreakdown,
+        deductionItems: targetStaff.deductionItems,
+      });
+
+      const newItem = createDeductionItemFromCatalog(preset, staffSalary, {
+        calcMode: quickAssignMode,
+        rateOrValue: Number(quickAssignValue) || 0,
+        frequency: quickAssignFreq,
+        referenceNote: quickAssignNote,
+      });
+
+      const singletonStatutory = ['PAYE', 'SHIF', 'NSSF', 'AHL'].includes(newItem.code);
+      const merged = singletonStatutory
+        ? [...existingHydrated.filter((i) => i.code !== newItem.code), newItem]
+        : [...existingHydrated, newItem];
+
+      const recalculated = recalculateDeductionItemsForSalary(merged, staffSalary);
+      const summary = summarizeDeductionItems(recalculated);
+
+      await onUpdateStaff(targetStaff.id, {
+        baseSalaryKes: staffSalary,
+        deductionItems: recalculated,
+        deductionsKes: summary.totalDeductionsKes,
+        deductionsBreakdown: summary.breakdownText,
+      });
+
+      setQuickAssignNote('');
+      onTriggerToast(
+        'success',
+        'Deduction Item Added',
+        `Added "${newItem.name}" (KES ${newItem.amountKes.toLocaleString()}) to ${targetStaff.name}. Total deductions: KES ${summary.totalDeductionsKes.toLocaleString()}.`
+      );
+    } catch {
+      onTriggerToast('error', 'Assignment Failed', 'Could not add deduction item to employee.');
+    } finally {
+      setIsAssigningQuick(false);
     }
-    const totalDeds = nssf + shif + housing + paye;
-    const breakdown = `PAYE: KES ${paye.toLocaleString()}, SHIF: KES ${shif.toLocaleString()}, NSSF: KES ${nssf.toLocaleString()}, Housing Levy: KES ${housing.toLocaleString()}`;
-    return { totalDeds, breakdown };
+  };
+
+  const handleCreateCustomCatalogItemSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim() || !onCreateCatalogDeduction) return;
+    setIsCreatingCatalogItem(true);
+    try {
+      const code =
+        newCatName
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 24) || 'CUSTOM_DED';
+
+      await onCreateCatalogDeduction({
+        code,
+        name: newCatName.trim(),
+        category: newCatCategory,
+        defaultCalcMode: newCatMode,
+        defaultValue: Math.max(0, Number(newCatDefaultVal) || 0),
+        defaultFrequency: newCatFreq,
+        kraP10Mapping: 'POST_TAX',
+        isSystemPreset: false,
+        createdBy: currentUser.name,
+      });
+      setNewCatName('');
+    } finally {
+      setIsCreatingCatalogItem(false);
+    }
   };
 
   const handleRandomizePin = () => {
@@ -1733,6 +1914,8 @@ export const HrAndRbacModule: React.FC<{
         : branches.find((b) => b.id === branchId) || branches[0];
 
     const isCasualSalesRep = effectiveRole === 'Affiliate Sales Representative';
+    const finalizedDedItems = recalculateDeductionItemsForSalary(deductionItems, Number(baseSalary));
+    const finalizedSummary = summarizeDeductionItems(finalizedDedItems);
 
     try {
       await onCreateStaff(
@@ -1749,9 +1932,10 @@ export const HrAndRbacModule: React.FC<{
           createdBy: currentUser.name,
           createdByRole: currentUser.role,
           baseSalaryKes: Number(baseSalary),
-          deductionsKes: Number(deductions),
+          deductionsKes: finalizedSummary.totalDeductionsKes,
           penaltiesKes: Number(penalties),
-          deductionsBreakdown: deductionsBreakdown.trim(),
+          deductionsBreakdown: finalizedSummary.breakdownText,
+          deductionItems: finalizedDedItems.slice(0, 30),
           penaltiesReason: penaltiesReason.trim(),
           kraPin: kraPin.trim(),
           nssfNo: nssfNo.trim(),
@@ -1785,10 +1969,27 @@ export const HrAndRbacModule: React.FC<{
     setEditBranchId(staff.branchId);
     setEditStatus(staff.status);
     setEditPin(staff.pin && staff.pin.length === 6 ? staff.pin : '');
-    setEditBaseSalary(staff.baseSalaryKes ?? (staff.role === 'Admin' ? 180000 : staff.role === 'Accountant' ? 120000 : staff.role === 'Branch Manager' ? 95000 : 65000));
-    setEditDeductions(staff.deductionsKes ?? 12500);
+    const defSal =
+      staff.baseSalaryKes ??
+      (staff.role === 'Admin'
+        ? 180000
+        : staff.role === 'Accountant'
+        ? 120000
+        : staff.role === 'Branch Manager'
+        ? 95000
+        : 65000);
+    const hydrated = hydrateStaffDeductionItems({
+      baseSalary: defSal,
+      deductionsKes: staff.deductionsKes,
+      deductionsBreakdown: staff.deductionsBreakdown,
+      deductionItems: staff.deductionItems,
+    });
+    const summary = summarizeDeductionItems(hydrated);
+    setEditBaseSalary(defSal);
+    setEditDeductionItems(hydrated);
+    setEditDeductions(summary.totalDeductionsKes);
     setEditPenalties(staff.penaltiesKes ?? 0);
-    setEditDeductionsBreakdown(staff.deductionsBreakdown || 'PAYE: KES 8,500, SHIF: KES 1,800, NSSF: KES 1,080, Housing Levy: KES 1,120');
+    setEditDeductionsBreakdown(summary.breakdownText);
     setEditPenaltiesReason(staff.penaltiesReason || '');
     setEditKraPin(staff.kraPin || 'A009182741Z');
     setEditNssfNo(staff.nssfNo || '092837192');
@@ -1799,11 +2000,27 @@ export const HrAndRbacModule: React.FC<{
 
   const handleOpenCompensation = (staff: StaffMember) => {
     setCompStaff(staff);
-    const defSalary = staff.baseSalaryKes ?? (staff.role === 'Admin' ? 180000 : staff.role === 'Accountant' ? 120000 : staff.role === 'Branch Manager' ? 95000 : 65000);
+    const defSalary =
+      staff.baseSalaryKes ??
+      (staff.role === 'Admin'
+        ? 180000
+        : staff.role === 'Accountant'
+        ? 120000
+        : staff.role === 'Branch Manager'
+        ? 95000
+        : 65000);
+    const hydrated = hydrateStaffDeductionItems({
+      baseSalary: defSalary,
+      deductionsKes: staff.deductionsKes,
+      deductionsBreakdown: staff.deductionsBreakdown,
+      deductionItems: staff.deductionItems,
+    });
+    const summary = summarizeDeductionItems(hydrated);
     setCompBase(defSalary);
-    setCompDed(staff.deductionsKes ?? 12500);
+    setCompDeductionItems(hydrated);
+    setCompDed(summary.totalDeductionsKes);
     setCompPen(staff.penaltiesKes ?? 0);
-    setCompBreakdown(staff.deductionsBreakdown || 'PAYE: KES 8,500, SHIF: KES 1,800, NSSF: KES 1,080, Housing Levy: KES 1,120');
+    setCompBreakdown(summary.breakdownText);
     setCompReason(staff.penaltiesReason || '');
     setCompKra(staff.kraPin || 'A009182741Z');
     setCompNssf(staff.nssfNo || '092837192');
@@ -1817,11 +2034,17 @@ export const HrAndRbacModule: React.FC<{
     if (!compStaff || !onUpdateStaff) return;
     setIsSavingComp(true);
     try {
+      const finalizedItems = recalculateDeductionItemsForSalary(
+        compDeductionItems,
+        Number(compBase)
+      ).slice(0, 30);
+      const summary = summarizeDeductionItems(finalizedItems);
       await onUpdateStaff(compStaff.id, {
         baseSalaryKes: Number(compBase),
-        deductionsKes: Number(compDed),
+        deductionsKes: summary.totalDeductionsKes,
         penaltiesKes: Number(compPen),
-        deductionsBreakdown: compBreakdown.trim(),
+        deductionsBreakdown: summary.breakdownText,
+        deductionItems: finalizedItems,
         penaltiesReason: compReason.trim(),
         kraPin: compKra.trim(),
         nssfNo: compNssf.trim(),
@@ -1829,7 +2052,11 @@ export const HrAndRbacModule: React.FC<{
         isCasual: compIsCasual,
         agreedCommissionPct: compIsCasual ? Number(compCommissionPct) : undefined,
       });
-      onTriggerToast('success', 'Compensation Updated', `Compensation details updated for ${compStaff.name}. Net take-home: KES ${(compBase - compDed - compPen).toLocaleString()}`);
+      onTriggerToast(
+        'success',
+        'Compensation & Deductions Saved',
+        `Saved ${finalizedItems.length} deduction item(s) for ${compStaff.name}. Net take-home: KES ${Math.max(0, compBase - summary.totalDeductionsKes - compPen).toLocaleString()}`
+      );
       setCompStaff(null);
     } catch(e) {
       onTriggerToast('error', 'Compensation Update Failed', 'Unable to update compensation.');
@@ -1849,6 +2076,11 @@ export const HrAndRbacModule: React.FC<{
 
     const branch = branches.find((b) => b.id === editBranchId) || branches[0];
     const effectiveAuth = editRole === 'Admin' ? 'google' : (editPin && editPin.length === 6 ? 'pin' : (editingStaff.authMethod || 'google'));
+    const finalizedItems = recalculateDeductionItemsForSalary(
+      editDeductionItems,
+      Number(editBaseSalary)
+    ).slice(0, 30);
+    const summary = summarizeDeductionItems(finalizedItems);
 
     await onUpdateStaff(
       editingStaff.id,
@@ -1863,9 +2095,10 @@ export const HrAndRbacModule: React.FC<{
         status: editStatus,
         pin: editPin && editPin.length === 6 ? editPin : editingStaff.pin,
         baseSalaryKes: Number(editBaseSalary),
-        deductionsKes: Number(editDeductions),
+        deductionsKes: summary.totalDeductionsKes,
         penaltiesKes: Number(editPenalties),
-        deductionsBreakdown: editDeductionsBreakdown.trim(),
+        deductionsBreakdown: summary.breakdownText,
+        deductionItems: finalizedItems,
         penaltiesReason: editPenaltiesReason.trim(),
         kraPin: editKraPin.trim(),
         nssfNo: editNssfNo.trim(),
@@ -1875,7 +2108,7 @@ export const HrAndRbacModule: React.FC<{
       })
     );
 
-    onTriggerToast('success', 'Staff Updated', `Updated staff account for ${editName.trim()} successfully.`);
+    onTriggerToast('success', 'Staff Updated', `Updated staff account & ${finalizedItems.length} deduction item(s) for ${editName.trim()}.`);
     setEditingStaff(null);
   };
 
@@ -1890,7 +2123,17 @@ export const HrAndRbacModule: React.FC<{
     try {
       const records: PayrollRecord[] = activeStaff.map((s) => {
         const bSalary = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
-        const ded = s.deductionsKes ?? Math.round(bSalary * 0.18);
+        const hydratedItems = recalculateDeductionItemsForSalary(
+          hydrateStaffDeductionItems({
+            baseSalary: bSalary,
+            deductionsKes: s.deductionsKes,
+            deductionsBreakdown: s.deductionsBreakdown,
+            deductionItems: s.deductionItems,
+          }),
+          bSalary
+        );
+        const summary = summarizeDeductionItems(hydratedItems);
+        const ded = s.deductionItems ? summary.totalDeductionsKes : (s.deductionsKes ?? summary.totalDeductionsKes);
         const pen = s.penaltiesKes ?? 0;
         const net = Math.max(0, bSalary - ded - pen);
         return {
@@ -1904,7 +2147,8 @@ export const HrAndRbacModule: React.FC<{
           deductions: ded,
           penalties: pen,
           netSalary: net,
-          deductionsBreakdown: s.deductionsBreakdown || 'PAYE / SHIF / NSSF / Affordable Housing Levy',
+          deductionsBreakdown: summary.breakdownText || s.deductionsBreakdown || 'PAYE / SHIF / NSSF / Affordable Housing Levy',
+          deductionItems: hydratedItems,
           penaltiesReason: s.penaltiesReason || '',
           kraPin: s.kraPin || 'A009182741Z',
           nssfNo: s.nssfNo || '092837192',
@@ -1927,7 +2171,7 @@ export const HrAndRbacModule: React.FC<{
         recordsJson: JSON.stringify(records),
       });
 
-      setFeedback(`Payroll for ${payrollPeriod} successfully executed! ${records.length} employees can now download their thermal payslips from their own dashboard.`);
+      setFeedback(`Payroll for ${payrollPeriod} successfully executed! ${records.length} employees can now download their thermal payslips with itemized deductions.`);
     } finally {
       setIsRunningPayroll(false);
     }
@@ -2204,30 +2448,14 @@ export const HrAndRbacModule: React.FC<{
                   </select>
                 </div>
 
-                {/* Initial Compensation Fields */}
+                {/* Initial Compensation & Selectable Deduction Items */}
                 <div>
                   <label className="font-montserrat font-bold text-slate-700">Basic Monthly Salary (KES)</label>
                   <input
                     type="number"
                     value={baseSalary}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setBaseSalary(val);
-                      const calc = autoCalculateKenyanStatutory(val);
-                      setDeductions(calc.totalDeds);
-                      setDeductionsBreakdown(calc.breakdown);
-                    }}
-                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-montserrat font-bold text-slate-700">Statutory Deductions (KES)</label>
-                  <input
-                    type="number"
-                    value={deductions}
-                    onChange={(e) => setDeductions(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular text-rose-600"
+                    onChange={(e) => handleOnboardingSalaryChange(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono-tabular tabular-nums font-bold"
                   />
                 </div>
 
@@ -2242,10 +2470,31 @@ export const HrAndRbacModule: React.FC<{
                 </div>
 
                 <div>
+                  <label className="font-montserrat font-bold text-slate-700">Total Selected Deductions</label>
+                  <div className="w-full mt-1 px-3 py-2 bg-rose-50/70 border border-rose-200 rounded-xl font-mono-tabular tabular-nums font-bold text-rose-700">
+                    -KES {deductions.toLocaleString()} ({deductionItems.length} item{deductionItems.length === 1 ? '' : 's'})
+                  </div>
+                </div>
+
+                <div>
                   <label className="font-montserrat font-bold text-slate-700">Estimated Net Pay</label>
-                  <div className="w-full mt-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono-tabular font-black text-[#0A006E]">
+                  <div className="w-full mt-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono-tabular tabular-nums font-black text-[#0A006E]">
                     KES {Math.max(0, baseSalary - deductions - penalties).toLocaleString()}
                   </div>
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <HrDeductionItemsSelector
+                    basicSalary={baseSalary}
+                    items={deductionItems}
+                    customCatalog={customDeductionCatalog}
+                    onSaveCustomCatalogItem={onCreateCatalogDeduction}
+                    onChange={(nextItems, totalKes, breakdownStr) => {
+                      setDeductionItems(nextItems);
+                      setDeductions(totalKes);
+                      setDeductionsBreakdown(breakdownStr);
+                    }}
+                  />
                 </div>
 
                 {/* Casual Sales Representative Agreement Section */}
@@ -2269,13 +2518,7 @@ export const HrAndRbacModule: React.FC<{
                         <input
                           type="number"
                           value={baseSalary}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setBaseSalary(val);
-                            const calc = autoCalculateKenyanStatutory(val);
-                            setDeductions(calc.totalDeds);
-                            setDeductionsBreakdown(calc.breakdown);
-                          }}
+                          onChange={(e) => handleOnboardingSalaryChange(Number(e.target.value))}
                           className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono-tabular font-bold text-[#0A006E]"
                           placeholder="e.g. 25000"
                         />
@@ -2789,15 +3032,307 @@ export const HrAndRbacModule: React.FC<{
             </div>
           </div>
 
-          {/* Staff Compensation, Penalties & Net Pay Configuration Table */}
+          {/* Direct HR Deduction Item Selector & Quick Employee Assignment Panel */}
+          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-sm font-montserrat font-black text-[#0A006E] flex items-center gap-2">
+                  <ListChecks className="w-4 h-4 text-[#0A006E]" />
+                  Select &amp; Add HR Deduction Items to Staff
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Pick an employee and select any statutory, loan, SACCO, advance, or custom deduction item to add directly to their payroll profile.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCatalogManager((prev) => !prev)}
+                className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-[#0A006E] rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+              >
+                <Tag className="w-3.5 h-3.5 text-[#0A006E]" />
+                {showCatalogManager
+                  ? 'Hide Deduction Catalog'
+                  : `Manage Deduction Catalog (${fullDeductionCatalog.length} Items)`}
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleQuickAssignDeductionToStaff}
+              className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 text-xs"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+                <div className="lg:col-span-3">
+                  <label className="block font-montserrat font-bold text-slate-700 mb-1">
+                    1. Select Employee *
+                  </label>
+                  <select
+                    value={quickAssignStaffId || staffList[0]?.id || ''}
+                    onChange={(e) => setQuickAssignStaffId(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-montserrat font-bold text-slate-900"
+                  >
+                    {staffList.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-4">
+                  <label className="block font-montserrat font-bold text-slate-700 mb-1">
+                    2. Select Deduction Item *
+                  </label>
+                  <select
+                    value={quickAssignCatalogId}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      setQuickAssignCatalogId(nextId);
+                      const found = fullDeductionCatalog.find((c) => c.id === nextId);
+                      if (found) {
+                        setQuickAssignMode(found.defaultCalcMode);
+                        setQuickAssignValue(found.defaultValue);
+                        setQuickAssignFreq(found.defaultFrequency);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-montserrat font-bold text-[#0A006E]"
+                  >
+                    {DEDUCTION_CATEGORIES.map((category) => {
+                      const entries = fullDeductionCatalog.filter((c) => c.category === category);
+                      if (entries.length === 0) return null;
+                      return (
+                        <optgroup key={category} label={category}>
+                          {entries.map((entry) => (
+                            <option key={entry.id} value={entry.id}>
+                              {entry.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label className="block font-montserrat font-bold text-slate-700 mb-1">
+                    Basis
+                  </label>
+                  <select
+                    value={quickAssignMode}
+                    onChange={(e) => setQuickAssignMode(e.target.value as DeductionCalcMode)}
+                    className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-800"
+                  >
+                    <option value="FIXED">Fixed (KES)</option>
+                    <option value="PERCENTAGE">% of Basic</option>
+                    {['PAYE', 'SHIF', 'NSSF', 'AHL'].includes(
+                      fullDeductionCatalog.find((c) => c.id === quickAssignCatalogId)?.code || ''
+                    ) && <option value="STATUTORY_AUTO">KRA Formula</option>}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-3">
+                  <label className="block font-montserrat font-bold text-slate-700 mb-1">
+                    {quickAssignMode === 'PERCENTAGE'
+                      ? 'Percentage (%)'
+                      : quickAssignMode === 'STATUTORY_AUTO'
+                      ? 'Auto KRA Formula'
+                      : 'Amount (KES)'}
+                  </label>
+                  {quickAssignMode === 'STATUTORY_AUTO' ? (
+                    <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg font-mono-tabular text-slate-600 font-bold">
+                      Auto-calculated from Salary
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min={0}
+                      step={quickAssignMode === 'PERCENTAGE' ? '0.5' : '50'}
+                      value={quickAssignValue}
+                      onChange={(e) => setQuickAssignValue(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-mono-tabular tabular-nums font-bold text-slate-900"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+                <div className="flex flex-1 items-center gap-2.5">
+                  <select
+                    value={quickAssignFreq}
+                    onChange={(e) =>
+                      setQuickAssignFreq(e.target.value as 'Recurring Monthly' | 'One-Off')
+                    }
+                    className="px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold text-slate-700"
+                  >
+                    <option value="Recurring Monthly">Recurring Monthly</option>
+                    <option value="One-Off">One-Off (This Run)</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={quickAssignNote}
+                    onChange={(e) => setQuickAssignNote(e.target.value)}
+                    placeholder="Optional reference / loan account note (e.g. HELB #9920, Advance Oct)"
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isAssigningQuick || staffList.length === 0}
+                  className="px-5 py-2 bg-[#0A006E] hover:bg-[#12009E] disabled:opacity-50 text-[#FFDE00] rounded-xl font-montserrat font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition whitespace-nowrap shrink-0"
+                >
+                  <Plus className="w-4 h-4 text-[#FFDE00]" />
+                  {isAssigningQuick ? 'Adding...' : 'Add Deduction to Employee'}
+                </button>
+              </div>
+            </form>
+
+            {/* Expandable HR Deduction Catalog Manager */}
+            {showCatalogManager && (
+              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                  <div>
+                    <h4 className="text-xs font-montserrat font-black text-[#0A006E]">
+                      Company HR Deduction Items Catalog ({fullDeductionCatalog.length} Selectable Items)
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Create custom reusable deduction items (e.g. Chama Savings, Staff Meal Plan, Uniform Recovery) so HR can select them on any employee.
+                    </p>
+                  </div>
+                </div>
+
+                {onCreateCatalogDeduction && (
+                  <form
+                    onSubmit={handleCreateCustomCatalogItemSubmit}
+                    className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs"
+                  >
+                    <div className="sm:col-span-4">
+                      <label className="block text-[11px] font-montserrat font-bold text-slate-700 mb-1">
+                        New Deduction Item Name *
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        value={newCatName}
+                        onChange={(e) => setNewCatName(e.target.value)}
+                        placeholder="e.g. Staff Chama Savings"
+                        className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg"
+                      />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <label className="block text-[11px] font-montserrat font-bold text-slate-700 mb-1">
+                        Category
+                      </label>
+                      <select
+                        value={newCatCategory}
+                        onChange={(e) => setNewCatCategory(e.target.value as DeductionCategory)}
+                        className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg"
+                      >
+                        {DEDUCTION_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-montserrat font-bold text-slate-700 mb-1">
+                        Default Basis
+                      </label>
+                      <select
+                        value={newCatMode}
+                        onChange={(e) => setNewCatMode(e.target.value as 'FIXED' | 'PERCENTAGE')}
+                        className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg"
+                      >
+                        <option value="FIXED">Fixed KES</option>
+                        <option value="PERCENTAGE">% of Basic</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-3 flex items-end gap-2">
+                      <div className="flex-1">
+                        <label className="block text-[11px] font-montserrat font-bold text-slate-700 mb-1">
+                          Default {newCatMode === 'PERCENTAGE' ? '%' : 'KES'}
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={newCatDefaultVal}
+                          onChange={(e) => setNewCatDefaultVal(Number(e.target.value))}
+                          className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg font-mono-tabular tabular-nums font-bold"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isCreatingCatalogItem || !newCatName.trim()}
+                        className="px-3.5 py-2 bg-[#FFDE00] hover:bg-amber-400 border border-[#0A006E] text-[#0A006E] rounded-lg font-montserrat font-black text-xs cursor-pointer whitespace-nowrap"
+                      >
+                        + Add Item
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-64 overflow-y-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-montserrat sticky top-0">
+                        <th className="py-2 px-3 font-bold">Deduction Item</th>
+                        <th className="py-2 px-3 font-bold">Category</th>
+                        <th className="py-2 px-3 font-bold">Default Basis</th>
+                        <th className="py-2 px-3 font-bold">Default Cadence</th>
+                        <th className="py-2 px-3 font-bold text-right">Type</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {fullDeductionCatalog.map((catItem) => (
+                        <tr key={catItem.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-montserrat font-bold text-slate-900">
+                            {catItem.name}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600">{catItem.category}</td>
+                          <td className="py-2 px-3 font-mono-tabular tabular-nums text-slate-700">
+                            {catItem.defaultCalcMode === 'STATUTORY_AUTO'
+                              ? 'KRA Statutory Formula'
+                              : catItem.defaultCalcMode === 'PERCENTAGE'
+                              ? `${catItem.defaultValue}% of Basic`
+                              : `KES ${catItem.defaultValue.toLocaleString()}`}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600">{catItem.defaultFrequency}</td>
+                          <td className="py-2 px-3 text-right">
+                            {catItem.isSystemPreset ? (
+                              <span className="text-[11px] text-slate-400 font-medium">
+                                Standard
+                              </span>
+                            ) : onDeleteCatalogDeduction ? (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteCatalogDeduction(catItem.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                                title="Delete custom catalog item"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-[#0A006E] font-semibold">Custom</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Staff Compensation, Deductions & Net Pay Configuration Table */}
           <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
-                  Staff Remuneration, Deductions & Penalties Roster ({staffList.length} Staff)
+                  Staff Remuneration, Selected Deductions &amp; Penalties Roster ({staffList.length} Staff)
                 </h3>
                 <p className="text-xs text-slate-600">
-                  Configure monthly salaries, statutory tax deductions, and disciplinary penalties for each employee.
+                  Review itemized employee deductions, configure monthly salaries, and adjust penalties before running payroll.
                 </p>
               </div>
             </div>
@@ -2807,9 +3342,9 @@ export const HrAndRbacModule: React.FC<{
                 <thead>
                   <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
                     <th className="py-2.5 px-3 font-black">Staff Member</th>
-                    <th className="py-2.5 px-3 font-black">Role & Branch Depot</th>
+                    <th className="py-2.5 px-3 font-black">Role &amp; Branch Depot</th>
                     <th className="py-2.5 px-3 font-black text-right">Basic Salary (KES)</th>
-                    <th className="py-2.5 px-3 font-black text-right">Deductions (KES)</th>
+                    <th className="py-2.5 px-3 font-black text-right">Selected Deductions (KES)</th>
                     <th className="py-2.5 px-3 font-black text-right">Penalties (KES)</th>
                     <th className="py-2.5 px-3 font-black text-right">Net Take-Home (KES)</th>
                     <th className="py-2.5 px-3 font-black text-right">Actions</th>
@@ -2818,7 +3353,16 @@ export const HrAndRbacModule: React.FC<{
                 <tbody className="divide-y divide-slate-200">
                   {staffList.map((s) => {
                     const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
-                    const ded = s.deductionsKes ?? Math.round(bSal * 0.18);
+                    const sItems = hydrateStaffDeductionItems({
+                      baseSalary: bSal,
+                      deductionsKes: s.deductionsKes,
+                      deductionsBreakdown: s.deductionsBreakdown,
+                      deductionItems: s.deductionItems,
+                    });
+                    const ded =
+                      s.deductionItems && s.deductionItems.length > 0
+                        ? summarizeDeductionItems(s.deductionItems).totalDeductionsKes
+                        : s.deductionsKes ?? summarizeDeductionItems(sItems).totalDeductionsKes;
                     const pen = s.penaltiesKes ?? 0;
                     const net = Math.max(0, bSal - ded - pen);
 
@@ -2840,13 +3384,27 @@ export const HrAndRbacModule: React.FC<{
                             {s.status}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono-tabular font-bold text-slate-900">
+                        <td className="py-2.5 px-3 text-right font-mono-tabular tabular-nums font-bold text-slate-900">
                           KES {bSal.toLocaleString()}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono-tabular text-rose-600">
-                          -KES {ded.toLocaleString()}
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="font-mono-tabular tabular-nums font-bold text-rose-600">
+                            -KES {ded.toLocaleString()}
+                          </div>
+                          <div
+                            className="text-[10px] text-slate-500 truncate max-w-[200px] ml-auto"
+                            title={sItems.map((i) => `${i.name}: KES ${i.amountKes.toLocaleString()}`).join(', ')}
+                          >
+                            {sItems.length} item{sItems.length === 1 ? '' : 's'}
+                            {sItems.length > 0
+                              ? ` · ${sItems
+                                  .slice(0, 3)
+                                  .map((i) => i.code === 'CUSTOM' ? i.name : i.code)
+                                  .join(', ')}${sItems.length > 3 ? ` +${sItems.length - 3}` : ''}`
+                              : ''}
+                          </div>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono-tabular text-amber-600">
+                        <td className="py-2.5 px-3 text-right font-mono-tabular tabular-nums text-amber-600">
                           {pen > 0 ? `-KES ${pen.toLocaleString()}` : 'KES 0'}
                           {s.penaltiesReason && (
                             <div className="text-[9px] text-amber-800 truncate max-w-[120px] ml-auto">
@@ -2854,17 +3412,17 @@ export const HrAndRbacModule: React.FC<{
                             </div>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono-tabular font-black text-[#0A006E]">
+                        <td className="py-2.5 px-3 text-right font-mono-tabular tabular-nums font-black text-[#0A006E]">
                           KES {net.toLocaleString()}
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           <button
                             type="button"
                             onClick={() => handleOpenCompensation(s)}
-                            className="px-2.5 py-1 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-lg font-montserrat font-bold text-[11px] cursor-pointer shadow-xs transition ml-auto flex items-center gap-1"
+                            className="px-2.5 py-1.5 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-lg font-montserrat font-bold text-[11px] cursor-pointer shadow-xs transition ml-auto flex items-center gap-1 whitespace-nowrap"
                           >
-                            <DollarSign className="w-3 h-3 text-[#FFDE00]" />
-                            Adjust Salary & Penalties
+                            <ListChecks className="w-3.5 h-3.5 text-[#FFDE00]" />
+                            Deductions &amp; Salary
                           </button>
                         </td>
                       </tr>
@@ -2979,14 +3537,14 @@ export const HrAndRbacModule: React.FC<{
         </div>
       )}
 
-      {/* Quick Compensation Adjustment Modal */}
+      {/* Quick Compensation & Selectable Deductions Modal */}
       {compStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-lg w-full h-full sm:h-auto overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
+          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-3xl w-full h-full sm:max-h-[92vh] overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div>
                 <h3 className="text-base font-montserrat font-black text-[#0A006E]">
-                  Configure Remuneration & Penalties
+                  Configure Salary, Deduction Items &amp; Penalties
                 </h3>
                 <p className="text-xs text-slate-500">
                   {compStaff.name} ({compStaff.role} · {compStaff.branchName})
@@ -3002,78 +3560,15 @@ export const HrAndRbacModule: React.FC<{
             </div>
 
             <form onSubmit={handleSaveCompensation} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="sm:col-span-2">
-                  <div className="flex items-center justify-between">
-                    <label className="font-montserrat font-bold text-slate-700">Basic Monthly Salary (KES) *</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const calc = autoCalculateKenyanStatutory(compBase);
-                        setCompDed(calc.totalDeds);
-                        setCompBreakdown(calc.breakdown);
-                      }}
-                      className="text-[11px] font-montserrat font-bold text-[#0A006E] hover:underline cursor-pointer flex items-center gap-1"
-                    >
-                      <Calculator className="w-3 h-3" />
-                      Auto-Calculate Statutory (KRA eTIMS)
-                    </button>
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Basic Monthly Salary (KES) *</label>
                   <input
                     required
                     type="number"
                     value={compBase}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setCompBase(val);
-                      const calc = autoCalculateKenyanStatutory(val);
-                      setCompDed(calc.totalDeds);
-                      setCompBreakdown(calc.breakdown);
-                    }}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular font-bold text-slate-900 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-montserrat font-bold text-slate-700">Statutory Deductions (KES)</label>
-                  <input
-                    required
-                    type="number"
-                    value={compDed}
-                    onChange={(e) => setCompDed(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular font-bold text-rose-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-montserrat font-bold text-slate-700">Disciplinary Penalties (KES)</label>
-                  <input
-                    type="number"
-                    value={compPen}
-                    onChange={(e) => setCompPen(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular font-bold text-amber-600"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="font-montserrat font-bold text-slate-700">Deductions Itemized Breakdown</label>
-                  <input
-                    type="text"
-                    value={compBreakdown}
-                    onChange={(e) => setCompBreakdown(e.target.value)}
-                    placeholder="e.g. PAYE: KES 8,500, SHIF: KES 1,800, NSSF: KES 1,080, Housing Levy: KES 1,120"
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl text-[11px]"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="font-montserrat font-bold text-slate-700">Reason for Penalties / Fines</label>
-                  <input
-                    type="text"
-                    value={compReason}
-                    onChange={(e) => setCompReason(e.target.value)}
-                    placeholder="e.g. Stock variance on POS batch #12 or Shift tardiness"
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl text-[11px]"
+                    onChange={(e) => handleCompSalaryChange(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular tabular-nums font-bold text-slate-900 text-sm"
                   />
                 </div>
 
@@ -3100,16 +3595,53 @@ export const HrAndRbacModule: React.FC<{
                 </div>
               </div>
 
+              <HrDeductionItemsSelector
+                basicSalary={compBase}
+                items={compDeductionItems}
+                customCatalog={customDeductionCatalog}
+                onSaveCustomCatalogItem={onCreateCatalogDeduction}
+                onChange={(nextItems, totalKes, breakdownStr) => {
+                  setCompDeductionItems(nextItems);
+                  setCompDed(totalKes);
+                  setCompBreakdown(breakdownStr);
+                }}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Disciplinary Penalties (KES)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={compPen}
+                    onChange={(e) => setCompPen(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl font-mono-tabular tabular-nums font-bold text-amber-600"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="font-montserrat font-bold text-slate-700">Reason for Penalties / Fines</label>
+                  <input
+                    type="text"
+                    value={compReason}
+                    onChange={(e) => setCompReason(e.target.value)}
+                    placeholder="e.g. Stock variance on POS batch #12 or Shift tardiness"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+
               {/* Net Pay Box */}
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
                 <div>
                   <div className="text-[11px] font-bold text-slate-500 uppercase">Calculated Net Take-Home Pay</div>
-                  <div className="text-lg font-black text-[#0A006E] font-mono-tabular">
+                  <div className="text-lg font-black text-[#0A006E] font-mono-tabular tabular-nums">
                     KES {Math.max(0, compBase - compDed - compPen).toLocaleString()}
                   </div>
                 </div>
-                <div className="text-right text-[11px] text-slate-500">
-                  Gross KES {compBase.toLocaleString()} − KES {(compDed + compPen).toLocaleString()}
+                <div className="text-right text-[11px] text-slate-500 font-mono-tabular tabular-nums">
+                  Gross KES {compBase.toLocaleString()} − Deductions KES {compDed.toLocaleString()}
+                  {compPen > 0 ? ` − Penalties KES ${compPen.toLocaleString()}` : ''}
                 </div>
               </div>
 
@@ -3126,7 +3658,7 @@ export const HrAndRbacModule: React.FC<{
                   disabled={isSavingComp}
                   className="px-5 py-2.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl font-montserrat font-black cursor-pointer shadow-md transition disabled:opacity-50"
                 >
-                  {isSavingComp ? 'Saving...' : 'Save Remuneration & Penalties'}
+                  {isSavingComp ? 'Saving...' : 'Save Deductions & Remuneration'}
                 </button>
               </div>
             </form>
@@ -3137,7 +3669,7 @@ export const HrAndRbacModule: React.FC<{
       {/* Edit Staff Modal */}
       {editingStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-lg w-full h-full sm:h-auto overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
+          <div className="bg-white rounded-none sm:rounded-3xl border-0 sm:border-2 border-[#0A006E] shadow-2xl max-w-none sm:max-w-3xl w-full h-full sm:max-h-[92vh] overflow-y-auto p-5 sm:p-6 space-y-4 flex flex-col justify-between sm:justify-start">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-montserrat font-black text-[#0A006E]">
                 Edit Staff Account: {editingStaff.name}
@@ -3247,18 +3779,8 @@ export const HrAndRbacModule: React.FC<{
                   <input
                     type="number"
                     value={editBaseSalary}
-                    onChange={(e) => setEditBaseSalary(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-mono-tabular font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-montserrat font-bold text-slate-700">Statutory Deductions (KES)</label>
-                  <input
-                    type="number"
-                    value={editDeductions}
-                    onChange={(e) => setEditDeductions(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-mono-tabular text-rose-600"
+                    onChange={(e) => handleEditSalaryChange(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-mono-tabular tabular-nums font-bold"
                   />
                 </div>
 
@@ -3273,9 +3795,30 @@ export const HrAndRbacModule: React.FC<{
                   />
                 </div>
 
+                <div className="sm:col-span-2">
+                  <HrDeductionItemsSelector
+                    basicSalary={editBaseSalary}
+                    items={editDeductionItems}
+                    customCatalog={customDeductionCatalog}
+                    onSaveCustomCatalogItem={onCreateCatalogDeduction}
+                    onChange={(nextItems, totalKes, breakdownStr) => {
+                      setEditDeductionItems(nextItems);
+                      setEditDeductions(totalKes);
+                      setEditDeductionsBreakdown(breakdownStr);
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label className="font-montserrat font-bold text-slate-700">Total Selected Deductions</label>
+                  <div className="w-full mt-1 px-3 py-2 bg-rose-50/70 border border-rose-200 rounded-xl font-mono-tabular tabular-nums font-bold text-rose-700">
+                    -KES {editDeductions.toLocaleString()} ({editDeductionItems.length} item{editDeductionItems.length === 1 ? '' : 's'})
+                  </div>
+                </div>
+
                 <div>
                   <label className="font-montserrat font-bold text-slate-700">Net Take-Home Pay</label>
-                  <div className="w-full mt-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono-tabular font-black text-[#0A006E]">
+                  <div className="w-full mt-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono-tabular tabular-nums font-black text-[#0A006E]">
                     KES {Math.max(0, editBaseSalary - editDeductions - editPenalties).toLocaleString()}
                   </div>
                 </div>

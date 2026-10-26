@@ -46,6 +46,7 @@ import {
   Coins,
   Truck,
   FileSpreadsheet,
+  Inbox,
 } from 'lucide-react';
 import {
   db,
@@ -78,6 +79,8 @@ import {
   DamageSpoilageIncident,
   BusinessUnit,
   RestaurantInventoryItem,
+  HrDeductionCatalogItem,
+  InternalChatMessage,
 } from './types';
 import {
   getDeviceFingerprint,
@@ -127,6 +130,11 @@ import { PhoneScannerCompanion } from './components/PhoneScannerCompanion';
 import { GoogleIcon } from './components/icons/GoogleIcon';
 import { KraReturnsExportModal } from './components/KraReturnsExportModal';
 import { KraReturnScheduleType } from './utils/kraReturnsExport';
+import {
+  InternalInboxModule,
+  computeUnreadInboxSummary,
+} from './components/InternalInboxModule';
+import { DesktopInboxArrivalPopup } from './components/DesktopInboxArrivalPopup';
 import { hashPin, isPinHashed, verifyPin, hashPassword, verifyPassword } from './utils/security';
 import { broadcastProductScanned } from './utils/productScanBroadcast';
 import { initGlobalClickSound, playSuccessSound, playErrorSound } from './utils/audioBeep';
@@ -151,6 +159,7 @@ const MODULE_META: Record<
   outlets_restaurants: { label: 'Hospitality, Kitchen & Bars', shortMobileLabel: 'Outlets', icon: UtensilsCrossed },
   external_customers: { label: 'External Customers (Sales)', shortMobileLabel: 'Customers', icon: Users },
   delivery_management: { label: 'Delivery & Dispatch Operations', shortMobileLabel: 'Deliveries', icon: Truck },
+  internal_inbox: { label: 'Internal Inbox & Dept Chat', shortMobileLabel: 'Inbox Chat', icon: Inbox },
 };
 
 const ERP_DEPARTMENTS: {
@@ -495,6 +504,25 @@ export default function App() {
       return [];
     }
   });
+  const [hrDeductionCatalog, setHrDeductionCatalog] = useState<HrDeductionCatalogItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_hr_deduction_catalog');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [internalChatMessages, setInternalChatMessages] = useState<InternalChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_internal_chat_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [inboxReadTick, setInboxReadTick] = useState(0);
+  const [requestedInboxThreadId, setRequestedInboxThreadId] = useState<string | null>(null);
+  const [activeInboxThreadId, setActiveInboxThreadId] = useState<string | null>(null);
   const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>(() => {
     try {
       const saved = localStorage.getItem('erp_business_units');
@@ -700,9 +728,19 @@ export default function App() {
 
   useEffect(() => {
     const handleOpenWrappers = () => setIsNativeWrappersModalOpen(true);
+    const handleInboxReadUpdated = () => setInboxReadTick((t) => t + 1);
     window.addEventListener('vaairo-open-native-wrappers', handleOpenWrappers);
-    return () => window.removeEventListener('vaairo-open-native-wrappers', handleOpenWrappers);
+    window.addEventListener('vaairo-inbox-read-updated', handleInboxReadUpdated);
+    return () => {
+      window.removeEventListener('vaairo-open-native-wrappers', handleOpenWrappers);
+      window.removeEventListener('vaairo-inbox-read-updated', handleInboxReadUpdated);
+    };
   }, []);
+
+  const inboxSummary = useMemo(() => {
+    void inboxReadTick;
+    return computeUnreadInboxSummary(internalChatMessages, currentUser);
+  }, [internalChatMessages, currentUser, inboxReadTick]);
   const [toastStatus, setToastStatus] = useState<{
     type: 'success' | 'error';
     title: string;
@@ -1143,6 +1181,17 @@ export default function App() {
       'payroll_runs'
     );
 
+    const unsubHrDeductionCatalog = subscribeWithFallback<HrDeductionCatalogItem>(
+      'hr_deduction_catalog',
+      (list) => {
+        setHrDeductionCatalog(list);
+        try {
+          localStorage.setItem('erp_hr_deduction_catalog', JSON.stringify(list));
+        } catch {}
+      },
+      'hr_deduction_catalog'
+    );
+
     const unsubBusinessUnits = subscribeWithFallback<BusinessUnit>(
       'business_units',
       (list) => {
@@ -1182,6 +1231,17 @@ export default function App() {
       'restaurant_inventory'
     );
 
+    const unsubInternalChat = subscribeWithFallback<InternalChatMessage>(
+      'internal_chat_messages',
+      (list) => {
+        setInternalChatMessages(list);
+        try {
+          localStorage.setItem('erp_internal_chat_backup', JSON.stringify(list));
+        } catch {}
+      },
+      'internal_chat_messages'
+    );
+
     return () => {
       unsubStaff();
       unsubBranches();
@@ -1194,8 +1254,10 @@ export default function App() {
       unsubCompliance();
       unsubAudit();
       unsubPayrollRuns();
+      unsubHrDeductionCatalog();
       unsubBusinessUnits();
       unsubRestaurantInventory();
+      unsubInternalChat();
     };
   }, []);
 
@@ -2710,6 +2772,75 @@ export default function App() {
         'Financial'
       );
     }
+
+    return fullTr;
+  };
+
+  const handleSendInternalChatMessage = async (
+    draft: Omit<InternalChatMessage, 'id' | 'createdAt'>
+  ) => {
+    const id = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const fullMsg: InternalChatMessage = cleanFirestoreData({
+      ...draft,
+      id,
+      createdAt: new Date().toISOString(),
+    });
+
+    setInternalChatMessages((prev) => {
+      const next = [...prev.filter((m) => m.id !== id), fullMsg];
+      try {
+        localStorage.setItem('erp_internal_chat_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await setDoc(doc(db, 'internal_chat_messages', id), fullMsg);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'internal_chat_messages');
+    }
+
+    if (currentUser && draft.messageType !== 'TEXT') {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        draft.messageType === 'INVOICE_TRANSFER'
+          ? `Inbox Invoice Transfer (${draft.invoiceTransfer?.docNumber || ''})`
+          : `Inbox Stock Request (${draft.stockTransferRequest?.sku || ''})`,
+        'Internal Inbox & Dept Chat',
+        draft.body.slice(0, 460),
+        currentUser.branchName,
+        'Info'
+      );
+    }
+  };
+
+  const handleUpdateInternalChatMessage = async (
+    messageId: string,
+    updates: Partial<InternalChatMessage>
+  ) => {
+    const existing = internalChatMessages.find((m) => m.id === messageId);
+    if (!existing) return;
+
+    const merged: InternalChatMessage = cleanFirestoreData({
+      ...existing,
+      ...updates,
+    });
+
+    setInternalChatMessages((prev) => {
+      const next = prev.map((m) => (m.id === messageId ? merged : m));
+      try {
+        localStorage.setItem('erp_internal_chat_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await setDoc(doc(db, 'internal_chat_messages', messageId), merged, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'internal_chat_messages');
+    }
   };
 
   const handleAuthorizeStockTransfer = async (transferId: string) => {
@@ -3425,6 +3556,75 @@ export default function App() {
     }
   };
 
+  const handleCreateCatalogDeduction = async (
+    draft: Omit<HrDeductionCatalogItem, 'id' | 'createdAt'>
+  ) => {
+    const id = `hrded-${Date.now()}`;
+    const fullItem: HrDeductionCatalogItem = cleanFirestoreData({
+      ...draft,
+      id,
+      createdBy: draft.createdBy || currentUser?.name || 'HR',
+      createdAt: new Date().toISOString(),
+    });
+
+    setHrDeductionCatalog((prev) => {
+      const next = [fullItem, ...prev.filter((c) => c.id !== id)];
+      try {
+        localStorage.setItem('erp_hr_deduction_catalog', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await setDoc(doc(db, 'hr_deduction_catalog', id), fullItem);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'hr_deduction_catalog');
+    }
+
+    if (currentUser) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Created HR Deduction Item: ${fullItem.name}`,
+        'HR & Access Control',
+        `Added custom HR deduction item "${fullItem.name}" (${fullItem.code}) under ${fullItem.category}`,
+        currentUser.branchName,
+        'Info'
+      );
+    }
+  };
+
+  const handleDeleteCatalogDeduction = async (itemId: string) => {
+    const existing = hrDeductionCatalog.find((c) => c.id === itemId);
+    setHrDeductionCatalog((prev) => {
+      const next = prev.filter((c) => c.id !== itemId);
+      try {
+        localStorage.setItem('erp_hr_deduction_catalog', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await deleteDoc(doc(db, 'hr_deduction_catalog', itemId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'hr_deduction_catalog');
+    }
+
+    if (currentUser && existing) {
+      await recordAuditLog(
+        currentUser.name,
+        currentUser.role,
+        currentUser.email,
+        `Removed HR Deduction Item: ${existing.name}`,
+        'HR & Access Control',
+        `Removed custom HR deduction item "${existing.name}" (${existing.code}) from company catalog`,
+        currentUser.branchName,
+        'Info'
+      );
+    }
+  };
+
   const handleCreateBusinessUnit = async (unitDraft: Omit<BusinessUnit, 'id' | 'createdAt'>) => {
     const id = `bu-${Date.now()}`;
     const newUnit: BusinessUnit = {
@@ -3766,6 +3966,7 @@ export default function App() {
         mobileDrawerOpen={mobileDrawerOpen}
         onToggleMobileDrawer={() => setMobileDrawerOpen(!mobileDrawerOpen)}
         onOpenNativeWrappers={() => setIsNativeWrappersModalOpen(true)}
+        unreadInboxCount={inboxSummary.totalBadgeCount}
       />
 
       {/* Cloud Firestore Setup Notice Banner */}
@@ -3801,12 +4002,12 @@ export default function App() {
         </aside>
       )}
 
-      {/* Mobile Full-Screen Hamburger Drawer (Consolidates Client Website, User Profile, Lock Terminal, & All ERP Modules) */}
+      {/* Mobile Full-Screen Hamburger Drawer (Consolidates Client Website, User Profile, Lock Terminal, Internal Inbox & All ERP Modules) */}
       {mobileDrawerOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex flex-col bg-white overflow-hidden animate-in fade-in sm:hidden"
+          className="fixed inset-0 z-50 flex flex-col bg-white overflow-hidden animate-in fade-in md:hidden"
         >
           {/* Mobile Drawer Header */}
           <div className="bg-[#0A006E] text-white p-4 flex items-center justify-between border-b-2 border-[#FFDE00] shrink-0">
@@ -4017,6 +4218,63 @@ export default function App() {
                 <ChevronRight className="w-4 h-4 text-[#0A006E]" />
               </button>
             </div>
+
+            {/* Quick Action: Internal Inbox & Department Chat (Mobile Hamburger Menu — Red when unread notifications exist) */}
+            <button
+              type="button"
+              onClick={() => {
+                handleSelectModule('internal_inbox');
+                setMobileDrawerOpen(false);
+              }}
+              className={`w-full p-3.5 rounded-2xl border-2 flex items-center justify-between cursor-pointer shadow-xs transition active:scale-98 ${
+                inboxSummary.totalBadgeCount > 0
+                  ? 'bg-red-600 hover:bg-red-700 text-white border-red-700'
+                  : activeModule === 'internal_inbox'
+                    ? 'bg-[#0A006E] text-white border-[#FFDE00]'
+                    : 'bg-[#0A006E] hover:bg-[#150099] text-white border-[#0A006E]'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    inboxSummary.totalBadgeCount > 0
+                      ? 'bg-white text-red-600'
+                      : 'bg-[#FFDE00] text-[#0A006E]'
+                  }`}
+                >
+                  <Inbox className="w-5 h-5 stroke-[2.4]" />
+                  {inboxSummary.totalBadgeCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-700 text-white text-[10px] font-mono-tabular font-black flex items-center justify-center border-2 border-white">
+                      {inboxSummary.totalBadgeCount > 99 ? '99+' : inboxSummary.totalBadgeCount}
+                    </span>
+                  )}
+                </div>
+                <div className="text-left min-w-0">
+                  <div
+                    className={`text-xs font-montserrat font-black leading-tight ${
+                      inboxSummary.totalBadgeCount > 0 ? 'text-white' : 'text-[#FFDE00]'
+                    }`}
+                  >
+                    Internal Inbox &amp; Dept Chat
+                    {inboxSummary.totalBadgeCount > 0
+                      ? ` (${inboxSummary.totalBadgeCount} New)`
+                      : ''}
+                  </div>
+                  <div
+                    className={`text-[10px] font-medium truncate ${
+                      inboxSummary.totalBadgeCount > 0 ? 'text-red-100' : 'text-slate-200'
+                    }`}
+                  >
+                    Transfer invoices &amp; request stock transfers by person
+                  </div>
+                </div>
+              </div>
+              <ChevronRight
+                className={`w-5 h-5 shrink-0 ${
+                  inboxSummary.totalBadgeCount > 0 ? 'text-white' : 'text-[#FFDE00]'
+                }`}
+              />
+            </button>
 
             {/* Quick Action: Onboard Items & Barcode Scanner for Branch Managers & Admin */}
             {(currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || currentUser.role === 'Inventory Controller') && (
@@ -4611,6 +4869,10 @@ export default function App() {
               staffList={scopedStaffList}
               branches={scopedBranches}
               payrollRuns={payrollRuns}
+              initialTab={activeModule === 'payroll' ? 'payroll' : 'roster'}
+              customDeductionCatalog={hrDeductionCatalog}
+              onCreateCatalogDeduction={handleCreateCatalogDeduction}
+              onDeleteCatalogDeduction={handleDeleteCatalogDeduction}
               onCreateStaff={handleCreateStaff}
               onUpdateStaff={handleUpdateStaff}
               onSetStaffStatus={handleSetStaffStatus}
@@ -4684,8 +4946,46 @@ export default function App() {
               onTriggerToast={triggerToast}
             />
           )}
+
+          {activeModule === 'internal_inbox' && (
+            <InternalInboxModule
+              currentUser={currentUser}
+              staffList={staffList}
+              branches={branches}
+              products={products}
+              transactions={scopedTransactions}
+              transfers={transfers}
+              messages={internalChatMessages}
+              externalSelectedThreadId={requestedInboxThreadId}
+              onExternalThreadHandled={() => setRequestedInboxThreadId(null)}
+              onActiveThreadChange={setActiveInboxThreadId}
+              onSendMessage={handleSendInternalChatMessage}
+              onUpdateMessage={handleUpdateInternalChatMessage}
+              onCreateStockTransfer={handleCreateStockTransfer}
+              onAuthorizeStockTransfer={handleAuthorizeStockTransfer}
+              onRejectStockTransfer={handleRejectStockTransfer}
+              onUpdateTransaction={handleUpdateTransaction}
+              onPreviewDoc={(d) => setPreviewDoc(d)}
+              onInspectOrder={(d) => setInspectingOrderTx(d)}
+              onTriggerToast={triggerToast}
+            />
+          )}
         </main>
       </div>
+
+      {/* Desktop-Only Email-Style Bottom Arrival Popup for Internal Inbox */}
+      {currentUser && (
+        <DesktopInboxArrivalPopup
+          currentUser={currentUser}
+          messages={internalChatMessages}
+          activeModule={activeModule}
+          activeInboxThreadId={activeModule === 'internal_inbox' ? activeInboxThreadId : null}
+          onOpenThread={(threadId) => {
+            setRequestedInboxThreadId(threadId);
+            handleSelectModule('internal_inbox');
+          }}
+        />
+      )}
 
       {/* Universal Desktop Dock & Mobile Ergonomic Bottom Navigation with Wave Top Edge */}
       <DesktopBottomNav
@@ -4722,6 +5022,7 @@ export default function App() {
             triggerToast('error', 'No Finalized Payslip', 'No recent payroll run record found for your account.');
           }
         }}
+        unreadInboxCount={inboxSummary.totalBadgeCount}
         onTriggerToast={(type, title, message) => triggerToast(type, title, message)}
       />
 

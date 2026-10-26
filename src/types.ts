@@ -57,6 +57,7 @@ export interface StaffMember {
   deductionsKes?: number;
   penaltiesKes?: number;
   deductionsBreakdown?: string;
+  deductionItems?: StaffDeductionItem[];
   penaltiesReason?: string;
   kraPin?: string;
   nssfNo?: string;
@@ -74,6 +75,56 @@ export interface StaffMember {
   customPermissionsNote?: string;
   permissionsModifiedAt?: string;
   permissionsModifiedBy?: string;
+}
+
+export type DeductionCategory =
+  | 'Statutory'
+  | 'Loan & Advance'
+  | 'SACCO & Pension'
+  | 'Insurance & Relief'
+  | 'Welfare & Union'
+  | 'Operational Recovery'
+  | 'Custom';
+
+export type DeductionCalcMode = 'STATUTORY_AUTO' | 'FIXED' | 'PERCENTAGE';
+
+export type KraDeductionMapping =
+  | 'PAYE'
+  | 'NSSF_PENSION'
+  | 'VOLUNTARY_PENSION'
+  | 'MORTGAGE_INTEREST'
+  | 'INSURANCE_RELIEF'
+  | 'SHIF'
+  | 'AHL'
+  | 'POST_TAX';
+
+export interface HrDeductionCatalogItem {
+  id: string;
+  code: string;
+  name: string;
+  category: DeductionCategory;
+  defaultCalcMode: DeductionCalcMode;
+  defaultValue: number; // KES if FIXED, % if PERCENTAGE, 0 if STATUTORY_AUTO
+  defaultFrequency: 'Recurring Monthly' | 'One-Off';
+  kraP10Mapping?: KraDeductionMapping;
+  description?: string;
+  isSystemPreset?: boolean;
+  createdBy?: string;
+  createdAt: string;
+}
+
+export interface StaffDeductionItem {
+  id: string;
+  catalogId: string;
+  code: string;
+  name: string;
+  category: DeductionCategory;
+  calcMode: DeductionCalcMode;
+  rateOrValue: number; // % when PERCENTAGE, KES when FIXED, computed KES when STATUTORY_AUTO
+  amountKes: number; // Effective monthly KES deduction
+  frequency: 'Recurring Monthly' | 'One-Off';
+  referenceNote?: string;
+  kraP10Mapping?: KraDeductionMapping;
 }
 
 export interface CustomAccessModel {
@@ -94,6 +145,7 @@ export interface PayrollRecord {
   penalties: number;
   netSalary: number;
   deductionsBreakdown?: string;
+  deductionItems?: StaffDeductionItem[];
   penaltiesReason?: string;
   kraPin?: string;
   nssfNo?: string;
@@ -565,7 +617,109 @@ export type ERPModuleId =
   | 'audit_security'
   | 'customer_portal'
   | 'outlets_restaurants'
-  | 'delivery_management';
+  | 'delivery_management'
+  | 'internal_inbox';
+
+export type InternalChatThreadType = 'department' | 'direct';
+
+export type InternalChatMessageType = 'TEXT' | 'INVOICE_TRANSFER' | 'STOCK_TRANSFER_REQUEST';
+
+export type InvoiceTransferPurpose =
+  | 'Payment Verification'
+  | 'Manager Approval'
+  | 'Dispatch & Delivery'
+  | 'Credit Note / Reversal'
+  | 'Account Reconciliation'
+  | 'Department Handover';
+
+export type InvoiceTransferStatus = 'Pending Acceptance' | 'Accepted' | 'Processed' | 'Returned';
+
+export interface ChatInvoiceTransferPayload {
+  transactionId: string;
+  docNumber: string;
+  docType: DocType;
+  customerName: string;
+  branchName: string;
+  totalAmount: number;
+  paymentMethod: string;
+  docStatus: string;
+  transferPurpose: InvoiceTransferPurpose;
+  transferStatus: InvoiceTransferStatus;
+  assignedToStaffId?: string;
+  assignedToStaffName?: string;
+  assignedToRole?: string;
+  handledBy?: string;
+  handledByRole?: string;
+  handledAt?: string;
+  resolutionNote?: string;
+}
+
+export type StockRequestUrgency = 'Standard' | 'Urgent Replenishment' | 'Customer Waiting';
+
+export type StockRequestChatStatus =
+  | 'Pending Review'
+  | 'Transfer Initiated'
+  | 'Authorized & Dispatched'
+  | 'Declined';
+
+export interface ChatStockTransferRequestPayload {
+  productId: string;
+  sku: string;
+  productName: string;
+  quantityBottles: number;
+  bottlesPerCase?: number;
+  fromBranchId: string;
+  fromBranchName: string;
+  toBranchId: string;
+  toBranchName: string;
+  requestedToStaffId: string;
+  requestedToStaffName: string;
+  requestedToRole: string;
+  urgency: StockRequestUrgency;
+  requestStatus: StockRequestChatStatus;
+  linkedTransferId?: string;
+  linkedTransferNo?: string;
+  actionedBy?: string;
+  actionedByRole?: string;
+  actionedAt?: string;
+  actionNote?: string;
+}
+
+export interface InternalChatMessage {
+  id: string;
+  threadId: string;
+  threadType: InternalChatThreadType;
+  channelName: string;
+  senderId: string;
+  senderName: string;
+  senderRole: StaffRole;
+  senderBranchName: string;
+  recipientStaffId?: string;
+  recipientStaffName?: string;
+  recipientStaffRole?: StaffRole;
+  recipientDepartment?: string;
+  messageType: InternalChatMessageType;
+  body: string;
+  priority?: 'Normal' | 'Urgent';
+  invoiceTransfer?: ChatInvoiceTransferPayload;
+  stockTransferRequest?: ChatStockTransferRequestPayload;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface InternalChatTypingSignal {
+  id: string;
+  staffId: string;
+  staffName: string;
+  staffRole: StaffRole;
+  branchName?: string;
+  threadId: string;
+  threadType: InternalChatThreadType;
+  isTyping: boolean;
+  updatedAtMs: number;
+  updatedAt: string;
+}
+
 
 // ==========================================
 // STOREFRONT & GEO-ROUTING ENTERPRISE TYPES

@@ -42,6 +42,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Key,
+  Inbox,
 } from 'lucide-react';
 import { ERPModuleId, StaffMember, Branch, Product, TransactionDoc } from '../types';
 import { formatKes, exportToCSV } from '../erpUtils';
@@ -61,6 +62,7 @@ interface DesktopBottomNavProps {
   onOpenPhoneScanner?: () => void;
   onQuickPrintLastDoc?: () => void;
   onOpenPayslip?: () => void;
+  unreadInboxCount?: number;
   onTriggerToast?: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
@@ -88,6 +90,7 @@ const MODULE_NAV_DEFINITIONS: Record<
   outlets_restaurants: { label: 'Branch Outlets & Restaurants', shortLabel: 'Outlets', icon: UtensilsCrossed },
   external_customers: { label: 'External Customers', shortLabel: 'Customers', icon: UserCircle },
   delivery_management: { label: 'Delivery & Dispatch Operations', shortLabel: 'Deliveries', icon: Truck },
+  internal_inbox: { label: 'Internal Dept Inbox', shortLabel: 'Inbox', icon: Inbox },
 };
 
 export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
@@ -104,6 +107,7 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
   onOpenPhoneScanner,
   onQuickPrintLastDoc,
   onOpenPayslip,
+  unreadInboxCount = 0,
   onTriggerToast,
 }) => {
   const [isMobileModulesSheetOpen, setIsMobileModulesSheetOpen] = useState(false);
@@ -552,8 +556,42 @@ export const DesktopBottomNav: React.FC<DesktopBottomNavProps> = ({
             </button>
           </div>
 
-          {/* Right: Pinned System Utilities */}
+          {/* Right: Pinned System Utilities & Desktop Internal Inbox Icon */}
           <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-slate-200">
+            {/* Internal Department Inbox & Chat Icon Button (Desktop Bottom Nav — Red when notifications exist) */}
+            <button
+              type="button"
+              onClick={() => {
+                if (activeModule === 'internal_inbox') {
+                  const fallback = allowedModules.find((m) => m !== 'internal_inbox') || 'overview';
+                  onSelectModule(fallback);
+                } else {
+                  onSelectModule('internal_inbox');
+                }
+              }}
+              title={
+                unreadInboxCount > 0
+                  ? `${unreadInboxCount} Unread Inbox Notification(s) — Click to Open`
+                  : 'Internal Department Inbox — Transfer Invoices & Request Stock Transfers'
+              }
+              aria-label="Internal Department Inbox"
+              className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 text-xs font-montserrat font-black transition cursor-pointer shadow-2xs ${
+                unreadInboxCount > 0
+                  ? 'bg-red-600 hover:bg-red-700 text-white border-red-700 ring-2 ring-red-200'
+                  : activeModule === 'internal_inbox'
+                    ? 'bg-[#0A006E] text-[#FFDE00] border-[#FFDE00]'
+                    : 'bg-[#0A006E]/5 hover:bg-[#0A006E] text-[#0A006E] hover:text-[#FFDE00] border-[#0A006E]/30 hover:border-[#0A006E]'
+              }`}
+            >
+              <Inbox className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">Inbox</span>
+              {unreadInboxCount > 0 && (
+                <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-white text-red-700 text-[10px] font-mono-tabular font-black flex items-center justify-center shadow-2xs">
+                  {unreadInboxCount > 99 ? '99+' : unreadInboxCount}
+                </span>
+              )}
+            </button>
+
             {/* Customer Online Store Portal Launcher */}
             {onOpenCustomerPortal && (
               <button

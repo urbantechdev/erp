@@ -11,13 +11,47 @@ export interface ThermalPayslipModalProps {
 export const ThermalPayslipModal: React.FC<ThermalPayslipModalProps> = ({ record, onClose }) => {
   const receiptRef = useRef<HTMLDivElement>(null);
 
+  const parsedDeductionRows = React.useMemo(() => {
+    if (Array.isArray(record.deductionItems) && record.deductionItems.length > 0) {
+      return record.deductionItems.map((it) => ({
+        label: it.referenceNote ? `${it.name} (${it.referenceNote})` : it.name,
+        amountFormatted: `KES ${Math.round(it.amountKes).toLocaleString()}`,
+        category: it.category,
+      }));
+    }
+    if (record.deductionsBreakdown) {
+      return record.deductionsBreakdown
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((p) => {
+          const colonIdx = p.indexOf(':');
+          if (colonIdx === -1) {
+            return { label: p, amountFormatted: '', category: 'Statutory' };
+          }
+          return {
+            label: p.slice(0, colonIdx).trim(),
+            amountFormatted: p.slice(colonIdx + 1).trim(),
+            category: 'Statutory',
+          };
+        });
+    }
+    return [
+      {
+        label: 'PAYE / SHIF / NSSF / Housing',
+        amountFormatted: `KES ${record.deductions.toLocaleString()}`,
+        category: 'Statutory',
+      },
+    ];
+  }, [record.deductionItems, record.deductionsBreakdown, record.deductions]);
+
   const handleDownloadPDF = () => {
-    // Generate an authentic 80mm roll width thermal PDF
-    // 80mm width = ~226.77 pt, height dynamically set to ~210mm
+    // Generate an authentic 80mm roll width thermal PDF with dynamic height for itemized deductions
+    const dynamicHeightMm = Math.max(210, 175 + parsedDeductionRows.length * 4.5);
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: [80, 210],
+      format: [80, dynamicHeightMm],
     });
 
     let y = 8;
@@ -97,24 +131,14 @@ export const ThermalPayslipModal: React.FC<ThermalPayslipModalProps> = ({ record
 
     // Deductions
     doc.setFont('courier', 'bold');
-    doc.text('STATUTORY DEDUCTIONS:', left, y);
+    doc.text('ITEMIZED DEDUCTIONS:', left, y);
     y += 4;
     doc.setFont('courier', 'normal');
-    if (record.deductionsBreakdown) {
-      const parts = record.deductionsBreakdown.split(',').map((s) => s.trim());
-      parts.forEach((p) => {
-        const [label, val] = p.split(':').map((s) => s.trim());
-        if (label && val) {
-          doc.text(label.slice(0, 22), left, y);
-          doc.text(val, right, y, { align: 'right' });
-          y += 3.5;
-        }
-      });
-    } else {
-      doc.text('Statutory & Levies', left, y);
-      doc.text(`-KES ${record.deductions.toLocaleString()}`, right, y, { align: 'right' });
+    parsedDeductionRows.forEach((row) => {
+      doc.text(row.label.slice(0, 23), left, y);
+      doc.text(row.amountFormatted ? `-${row.amountFormatted}` : '', right, y, { align: 'right' });
       y += 3.5;
-    }
+    });
     doc.setFont('courier', 'bold');
     doc.text('TOTAL DEDUCTIONS', left, y);
     doc.text(`-KES ${record.deductions.toLocaleString()}`, right, y, { align: 'right' });
@@ -306,27 +330,19 @@ export const ThermalPayslipModal: React.FC<ThermalPayslipModalProps> = ({ record
             {/* Deductions */}
             <div className="py-1 space-y-1">
               <div className="font-bold text-[10px] uppercase text-slate-700">
-                STATUTORY & VOLUNTARY DEDUCTIONS
+                STATUTORY &amp; VOLUNTARY DEDUCTIONS ({parsedDeductionRows.length})
               </div>
-              {record.deductionsBreakdown ? (
-                record.deductionsBreakdown.split(',').map((item, idx) => {
-                  const parts = item.split(':').map((s) => s.trim());
-                  return (
-                    <div key={idx} className="flex justify-between text-slate-700">
-                      <span>{parts[0]}</span>
-                      <span>-{parts[1]}</span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="flex justify-between text-slate-700">
-                  <span>PAYE / SHIF / NSSF / Housing</span>
-                  <span>-KES {record.deductions.toLocaleString()}</span>
+              {parsedDeductionRows.map((row, idx) => (
+                <div key={idx} className="flex justify-between gap-2 text-slate-700">
+                  <span className="truncate">{row.label}</span>
+                  <span className="shrink-0 tabular-nums">
+                    {row.amountFormatted ? `-${row.amountFormatted}` : ''}
+                  </span>
                 </div>
-              )}
+              ))}
               <div className="flex justify-between font-bold border-t border-slate-200 pt-0.5 text-rose-700">
                 <span>TOTAL DEDUCTIONS</span>
-                <span>-KES {record.deductions.toLocaleString()}</span>
+                <span className="tabular-nums">-KES {record.deductions.toLocaleString()}</span>
               </div>
             </div>
 

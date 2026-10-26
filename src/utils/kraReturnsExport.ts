@@ -764,17 +764,73 @@ export function buildKraReturnsDataset(params: {
     kraPin: string;
     nssfNo: string;
     basicSalary: number;
+    deductionItems?: import('../types').StaffDeductionItem[];
+    penaltiesKes?: number;
   }): KraPayeP10Row => {
     const basic = round2(Math.max(0, info.basicSalary));
-    const { totalNssf } = calculateNssf(basic);
-    const shif = calculateShif(basic);
-    const empAhl = calculateHousingLevy(basic);
-    const employerAhl = empAhl;
-    const netPaye = calculatePaye(basic, totalNssf);
+    const items = info.deductionItems || [];
+
+    const nssfOverride = items.find((i) => i.code === 'NSSF' || i.kraP10Mapping === 'NSSF_PENSION');
+    const shifOverride = items.find((i) => i.code === 'SHIF' || i.kraP10Mapping === 'SHIF');
+    const ahlOverride = items.find((i) => i.code === 'AHL' || i.kraP10Mapping === 'AHL');
+    const payeOverride = items.find((i) => i.code === 'PAYE' || i.kraP10Mapping === 'PAYE');
+
+    const voluntaryPension = round2(
+      items
+        .filter((i) => i.kraP10Mapping === 'VOLUNTARY_PENSION')
+        .reduce((sum, i) => sum + (Number(i.amountKes) || 0), 0)
+    );
+    const mortgageInterest = round2(
+      Math.min(
+        30000,
+        items
+          .filter((i) => i.kraP10Mapping === 'MORTGAGE_INTEREST')
+          .reduce((sum, i) => sum + (Number(i.amountKes) || 0), 0)
+      )
+    );
+    const insurancePremium = items
+      .filter((i) => i.kraP10Mapping === 'INSURANCE_RELIEF')
+      .reduce((sum, i) => sum + (Number(i.amountKes) || 0), 0);
+    const insuranceRelief = round2(Math.min(5000, insurancePremium * 0.15));
+
+    const postTaxDeductions = round2(
+      items
+        .filter((i) => !i.kraP10Mapping || i.kraP10Mapping === 'POST_TAX')
+        .reduce((sum, i) => sum + (Number(i.amountKes) || 0), 0)
+    );
+
+    const { totalNssf: statutoryNssf } = calculateNssf(basic);
+    const nssfBase = nssfOverride ? round2(nssfOverride.amountKes) : statutoryNssf;
+    const actualPensionNssf = round2(nssfBase + voluntaryPension);
+    const allowablePensionBenefit = round2(Math.min(30000, actualPensionNssf));
+
+    const shif = shifOverride ? round2(shifOverride.amountKes) : calculateShif(basic);
+    const empAhl = ahlOverride ? round2(ahlOverride.amountKes) : calculateHousingLevy(basic);
+    const employerAhl = calculateHousingLevy(basic);
+
+    const computedPaye = round2(
+      Math.max(
+        0,
+        calculatePaye(basic, allowablePensionBenefit + mortgageInterest) - insuranceRelief
+      )
+    );
+    const netPaye =
+      payeOverride && payeOverride.calcMode === 'FIXED'
+        ? round2(payeOverride.amountKes)
+        : computedPaye;
+
     const personalRelief = basic > 24000 ? 2400 : round2(Math.min(2400, basic * 0.1));
-    const taxChargedBeforeRelief = round2(netPaye + (netPaye > 0 ? 2400 : personalRelief));
-    const taxablePay = round2(Math.max(0, basic - totalNssf));
-    const netTakeHome = round2(Math.max(0, basic - totalNssf - shif - empAhl - netPaye));
+    const taxChargedBeforeRelief = round2(
+      netPaye + insuranceRelief + (netPaye > 0 ? 2400 : personalRelief)
+    );
+    const taxablePay = round2(Math.max(0, basic - allowablePensionBenefit - mortgageInterest));
+    const totalEmployeeDeductions =
+      items.length > 0
+        ? round2(items.reduce((sum, i) => sum + (Number(i.amountKes) || 0), 0))
+        : round2(actualPensionNssf + shif + empAhl + netPaye + postTaxDeductions);
+    const netTakeHome = round2(
+      Math.max(0, basic - totalEmployeeDeductions - (Number(info.penaltiesKes) || 0))
+    );
     const cleanPin = normalizeKraPin(info.kraPin);
 
     return {
@@ -802,15 +858,15 @@ export function buildKraReturnsDataset(params: {
       netHousingValue: 0,
       totalGrossPay: basic,
       thirtyPercentCashPay: round2(basic * 0.3),
-      actualPensionNssf: totalNssf,
+      actualPensionNssf,
       permissibleLimit: 30000,
-      mortgageInterest: 0,
+      mortgageInterest,
       hospDeposit: 0,
-      amountOfBenefit: totalNssf,
+      amountOfBenefit: allowablePensionBenefit,
       taxablePay,
       taxChargedBeforeRelief,
       monthlyPersonalRelief: 2400,
-      insuranceRelief: 0,
+      insuranceRelief,
       payeTaxNet: netPaye,
       selfAssessedPaye: netPaye,
       staffId: info.staffId,
@@ -851,6 +907,8 @@ export function buildKraReturnsDataset(params: {
             kraPin: rec.kraPin || staffMatch?.kraPin || '',
             nssfNo: rec.nssfNo || staffMatch?.nssfNo || '',
             basicSalary: rec.baseSalary,
+            deductionItems: rec.deductionItems || staffMatch?.deductionItems,
+            penaltiesKes: rec.penalties,
           })
         );
       });
@@ -880,6 +938,8 @@ export function buildKraReturnsDataset(params: {
             kraPin: s.kraPin || '',
             nssfNo: s.nssfNo || '',
             basicSalary: defaultBase,
+            deductionItems: s.deductionItems,
+            penaltiesKes: s.penaltiesKes,
           })
         );
       });

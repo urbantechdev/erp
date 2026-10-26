@@ -3874,7 +3874,7 @@ export const BranchesAndTransfersModule: React.FC<{
   onCreateStockTransfer: (
     tr: Omit<StockTransfer, 'id' | 'createdAt'>,
     updatedProduct?: { productId: string; newBranchStockJson: string }
-  ) => Promise<void>;
+  ) => Promise<StockTransfer | void>;
   onAuthorizeStockTransfer?: (transferId: string) => Promise<void>;
   onRejectStockTransfer?: (transferId: string) => Promise<void>;
   onReceiveStockTransfer?: (transferId: string) => Promise<void>;

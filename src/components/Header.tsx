@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import { StaffMember, ERPModuleId, Branch } from '../types';
 import { isAudioMuted, toggleAudioMuted, playPosBeep } from '../utils/audioBeep';
-import { PWAInstallButton } from './ui/PWAInstallButton';
 
 export interface HeaderProps {
   /** Mode: 'authenticated' for active ERP session, 'gateway' for login portal */
@@ -56,6 +55,8 @@ export interface HeaderProps {
   totalStaffCount?: number;
   /** Handler to open Hybrid & Cross-Platform Native Wrappers modal */
   onOpenNativeWrappers?: () => void;
+  /** Unread / actionable count for Internal Inbox shown on mobile hamburger */
+  unreadInboxCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -74,6 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
   branches = [],
   totalStaffCount = 0,
   onOpenNativeWrappers,
+  unreadInboxCount = 0,
 }) => {
   // Gateway drawer state & utilities
   const [isGatewayDrawerOpen, setIsGatewayDrawerOpen] = useState(false);
@@ -166,8 +168,8 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Zone 2: Navigation & Action Controls */}
         {variant === 'authenticated' ? (
           <>
-            {/* Mobile Header: Customer Website + Hamburger Button */}
-            <div className="flex sm:hidden items-center gap-2 shrink-0 relative z-10">
+            {/* Mobile Header: Customer Website + Hamburger Button (< md) */}
+            <div className="flex md:hidden items-center gap-2 shrink-0 relative z-10">
               {/* Customer Website Icon Button (just before hamburger) */}
               <button
                 type="button"
@@ -186,7 +188,11 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onToggleMobileDrawer}
-                className="w-11 h-11 rounded-2xl flex items-center justify-center bg-white text-[#0A006E] border-2 border-white shadow-md cursor-pointer transition active:scale-95"
+                className={`relative w-11 h-11 rounded-2xl flex items-center justify-center border-2 shadow-md cursor-pointer transition active:scale-95 ${
+                  !mobileDrawerOpen && unreadInboxCount > 0
+                    ? 'bg-red-600 text-white border-white'
+                    : 'bg-white text-[#0A006E] border-white'
+                }`}
                 title={mobileDrawerOpen ? 'Close Menu' : 'Open Navigation Menu'}
                 aria-label={mobileDrawerOpen ? 'Close Menu' : 'Open Navigation Menu'}
               >
@@ -195,11 +201,16 @@ export const Header: React.FC<HeaderProps> = ({
                 ) : (
                   <Menu className="w-6 h-6 stroke-[2.5]" />
                 )}
+                {!mobileDrawerOpen && unreadInboxCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-white text-red-700 border-2 border-red-600 text-[10px] font-mono-tabular font-black flex items-center justify-center">
+                    {unreadInboxCount > 99 ? '99+' : unreadInboxCount}
+                  </span>
+                )}
               </button>
             </div>
 
             {/* Desktop Header: Header Right Action Icons (White Background) */}
-            <div className="hidden sm:flex items-center gap-2.5 sm:gap-3.5 shrink-0 relative z-10">
+            <div className="hidden md:flex items-center gap-2.5 sm:gap-3.5 shrink-0 relative z-10">
               {/* 1. Customer Website icon */}
               <button
                 type="button"
@@ -265,9 +276,6 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </button>
               )}
-
-              {/* Install PWA Button */}
-              <PWAInstallButton />
             </div>
           </>
         ) : (
@@ -301,11 +309,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <Menu className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.4]" />
               )}
             </button>
-
-            {/* Install PWA Button (Hidden on Mobile) */}
-            <div className="hidden sm:block">
-              <PWAInstallButton />
-            </div>
           </div>
         )}
 
