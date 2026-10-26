@@ -32,9 +32,56 @@
         "createdByRole": { "type": "string", "maxLength": 64 },
         "lastLoginAt": { "type": "string", "maxLength": 64 },
         "lastDevice": { "type": "string", "maxLength": 200 },
+        "baseSalaryKes": { "type": "number" },
+        "deductionsKes": { "type": "number" },
+        "penaltiesKes": { "type": "number" },
+        "deductionsBreakdown": { "type": "string", "maxLength": 1500 },
+        "deductionItems": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "penaltiesReason": { "type": "string", "maxLength": 500 },
+        "kraPin": { "type": "string", "maxLength": 40 },
+        "nssfNo": { "type": "string", "maxLength": 40 },
+        "nhifNo": { "type": "string", "maxLength": 40 },
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["name", "email", "role", "authMethod", "status", "createdAt"]
+    },
+    "HrDeductionCatalogItem": {
+      "title": "HrDeductionCatalogItem",
+      "description": "Reusable HR payroll deduction item definition selectable when onboarding or managing staff compensation",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 48 },
+        "name": { "type": "string", "maxLength": 140 },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Statutory",
+            "Loan & Advance",
+            "SACCO & Pension",
+            "Insurance & Relief",
+            "Welfare & Union",
+            "Operational Recovery",
+            "Custom"
+          ]
+        },
+        "defaultCalcMode": {
+          "type": "string",
+          "enum": ["STATUTORY_AUTO", "FIXED", "PERCENTAGE"]
+        },
+        "defaultValue": { "type": "number" },
+        "defaultFrequency": {
+          "type": "string",
+          "enum": ["Recurring Monthly", "One-Off"]
+        },
+        "kraP10Mapping": { "type": "string", "maxLength": 48 },
+        "description": { "type": "string", "maxLength": 300 },
+        "createdBy": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["code", "name", "category", "defaultCalcMode", "defaultValue", "defaultFrequency", "createdAt"]
     },
     "Branch": {
       "title": "Branch",
@@ -302,6 +349,49 @@
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["productId", "raterName", "stars", "createdAt", "updatedAt"]
+    },
+    "InternalChatMessage": {
+      "title": "InternalChatMessage",
+      "description": "Internal inter-department and person-to-person inbox chat message supporting invoice transfers and stock transfer requests",
+      "type": "object",
+      "properties": {
+        "threadId": { "type": "string", "maxLength": 200 },
+        "threadType": { "type": "string", "enum": ["department", "direct"] },
+        "channelName": { "type": "string", "maxLength": 160 },
+        "senderId": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 160 },
+        "senderRole": { "type": "string", "maxLength": 80 },
+        "senderBranchName": { "type": "string", "maxLength": 160 },
+        "recipientStaffId": { "type": "string", "maxLength": 128 },
+        "recipientStaffName": { "type": "string", "maxLength": 160 },
+        "recipientStaffRole": { "type": "string", "maxLength": 80 },
+        "recipientDepartment": { "type": "string", "maxLength": 120 },
+        "messageType": { "type": "string", "enum": ["TEXT", "INVOICE_TRANSFER", "STOCK_TRANSFER_REQUEST"] },
+        "body": { "type": "string", "maxLength": 2000 },
+        "priority": { "type": "string", "enum": ["Normal", "Urgent"] },
+        "invoiceTransfer": { "type": "object" },
+        "stockTransferRequest": { "type": "object" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["threadId", "threadType", "channelName", "senderId", "senderName", "senderRole", "messageType", "body", "createdAt"]
+    },
+    "InternalChatTypingSignal": {
+      "title": "InternalChatTypingSignal",
+      "description": "Real-time per-staff typing presence indicator for internal department and direct inbox threads",
+      "type": "object",
+      "properties": {
+        "staffId": { "type": "string", "maxLength": 128 },
+        "staffName": { "type": "string", "maxLength": 160 },
+        "staffRole": { "type": "string", "maxLength": 80 },
+        "branchName": { "type": "string", "maxLength": 160 },
+        "threadId": { "type": "string", "maxLength": 200 },
+        "threadType": { "type": "string", "enum": ["department", "direct"] },
+        "isTyping": { "type": "boolean" },
+        "updatedAtMs": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["staffId", "staffName", "staffRole", "threadId", "threadType", "isTyping", "updatedAtMs", "updatedAt"]
     }
   },
   "firestore": {
@@ -312,6 +402,10 @@
     "/staff/{staffId}": {
       "schema": { "$ref": "#/entities/Staff" },
       "description": "Staff accounts for Google and 6-digit PIN authentication"
+    },
+    "/hr_deduction_catalog/{itemId}": {
+      "schema": { "$ref": "#/entities/HrDeductionCatalogItem" },
+      "description": "Company-wide selectable HR payroll deduction items catalog"
     },
     "/branches/{branchId}": {
       "schema": { "$ref": "#/entities/Branch" },
@@ -356,6 +450,14 @@
     "/audit_logs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLog" },
       "description": "User monitoring, device tracking, and transaction security logs"
+    },
+    "/internal_chat_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/InternalChatMessage" },
+      "description": "Internal inbox department and direct messages with invoice transfers and stock transfer requests"
+    },
+    "/internal_chat_typing/{typingId}": {
+      "schema": { "$ref": "#/entities/InternalChatTypingSignal" },
+      "description": "Real-time typing signal documents keyed by staff ID for internal chat threads"
     }
   }
 }

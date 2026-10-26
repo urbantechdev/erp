@@ -18,9 +18,21 @@ service cloud.firestore {
              data.name is string && data.name.size() <= 120 &&
              data.email is string && data.email.size() <= 180 &&
              (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
+             (!('deductionItems' in data) || (data.deductionItems is list && data.deductionItems.size() <= 40)) &&
              data.role in ['Admin', 'Accountant', 'HR', 'Sales Manager', 'Branch Manager', 'Inventory Controller', 'Counter Cashier', 'Affiliate Sales Representative', 'Delivery Manager', 'Delivery Rider'] &&
              data.authMethod in ['google', 'pin', 'email'] &&
              data.status in ['Active', 'Suspended', 'Terminated'] &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidHrDeductionCatalog(data) {
+      return data.keys().hasAll(['code', 'name', 'category', 'defaultCalcMode', 'defaultValue', 'defaultFrequency', 'createdAt']) &&
+             data.code is string && data.code.size() <= 48 &&
+             data.name is string && data.name.size() <= 140 &&
+             data.category in ['Statutory', 'Loan & Advance', 'SACCO & Pension', 'Insurance & Relief', 'Welfare & Union', 'Operational Recovery', 'Custom'] &&
+             data.defaultCalcMode in ['STATUTORY_AUTO', 'FIXED', 'PERCENTAGE'] &&
+             data.defaultValue is number &&
+             data.defaultFrequency in ['Recurring Monthly', 'One-Off'] &&
              data.createdAt is string && data.createdAt.size() <= 64;
     }
 
@@ -162,6 +174,34 @@ service cloud.firestore {
              data.updatedAt is string && data.updatedAt.size() <= 64;
     }
 
+    function isValidInternalChatMessage(data) {
+      return data.keys().hasAll(['threadId', 'threadType', 'channelName', 'senderId', 'senderName', 'senderRole', 'messageType', 'body', 'createdAt']) &&
+             data.threadId is string && data.threadId.size() >= 1 && data.threadId.size() <= 200 &&
+             data.threadType in ['department', 'direct'] &&
+             data.channelName is string && data.channelName.size() <= 160 &&
+             data.senderId is string && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() <= 160 &&
+             data.senderRole is string && data.senderRole.size() <= 80 &&
+             data.messageType in ['TEXT', 'INVOICE_TRANSFER', 'STOCK_TRANSFER_REQUEST'] &&
+             data.body is string && data.body.size() <= 2000 &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             (!('invoiceTransfer' in data) || data.invoiceTransfer is map) &&
+             (!('stockTransferRequest' in data) || data.stockTransferRequest is map);
+    }
+
+    function isValidInternalChatTyping(data) {
+      return data.keys().hasAll(['staffId', 'staffName', 'staffRole', 'threadId', 'threadType', 'isTyping', 'updatedAtMs', 'updatedAt']) &&
+             data.staffId is string && data.staffId.size() <= 128 &&
+             data.staffName is string && data.staffName.size() <= 160 &&
+             data.staffRole is string && data.staffRole.size() <= 80 &&
+             (!('branchName' in data) || (data.branchName is string && data.branchName.size() <= 160)) &&
+             data.threadId is string && data.threadId.size() >= 1 && data.threadId.size() <= 200 &&
+             data.threadType in ['department', 'direct'] &&
+             data.isTyping is bool &&
+             data.updatedAtMs is number &&
+             data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
     match /test/{docId} {
       allow get: if isValidId(docId);
     }
@@ -176,6 +216,12 @@ service cloud.firestore {
       allow get, list: if true;
       allow create, update: if isValidId(staffId) && isValidStaff(incoming());
       allow delete: if isValidId(staffId);
+    }
+
+    match /hr_deduction_catalog/{itemId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(itemId) && isValidHrDeductionCatalog(incoming());
+      allow delete: if isValidId(itemId);
     }
 
     match /branches/{branchId} {
@@ -277,10 +323,16 @@ service cloud.firestore {
       allow create, update, delete: if true;
     }
 
-    match /branch_product_activations/{activationId} {
+    match /internal_chat_messages/{messageId} {
       allow get, list: if true;
-      allow create, update: if isValidId(activationId);
-      allow delete: if request.auth != null;
+      allow create, update: if isValidId(messageId) && isValidInternalChatMessage(incoming());
+      allow delete: if isValidId(messageId);
+    }
+
+    match /internal_chat_typing/{typingId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(typingId) && isValidInternalChatTyping(incoming());
+      allow delete: if isValidId(typingId);
     }
   }
 }
