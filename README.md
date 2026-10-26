@@ -1,4 +1,4 @@
-# Aegis Spirits & Beverage ERP
+# Vaairo Spirits & Beverage ERP
 
 Multi-operational liquor distribution and importer ERP with real-time inventory, geo-regional pricing, regulatory compliance, dual POS, and role-based access control.
 
