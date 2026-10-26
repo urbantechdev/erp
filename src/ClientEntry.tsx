@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { ErpProvider } from './context/ErpContext';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 if (typeof window !== 'undefined') {
@@ -55,7 +56,9 @@ if (typeof window !== 'undefined') {
     (container as any).__erpMounted = true;
     createRoot(container).render(
       <ErrorBoundary>
-        <App />
+        <ErpProvider>
+          <App />
+        </ErpProvider>
       </ErrorBoundary>
     );
   };

@@ -39,14 +39,10 @@ export const BarcodeScannerModal: React.FC<Props> = ({ products, onBarcodeDetect
     setManualCode('');
   };
 
-  // Sample quick barcodes from popular catalog items
-  const demoBarcodes = [
-    { label: 'JW Black Label 750ml', code: '5000267014203' },
-    { label: 'Tusker Lager 500ml', code: '6161100001011' },
-    { label: 'Smirnoff Red Vodka 750ml', code: '088076161823' },
-    { label: 'Hennessy VS Cognac 700ml', code: '3245990001218' },
-    { label: 'Tanqueray London Dry Gin', code: '5000281005409' },
-  ];
+  const registeredBarcodes = products
+    .filter((p) => Boolean(p.barcode))
+    .slice(0, 5)
+    .map((p) => ({ label: p.name, code: p.barcode! }));
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4">
@@ -123,25 +119,27 @@ export const BarcodeScannerModal: React.FC<Props> = ({ products, onBarcodeDetect
           </div>
         )}
 
-        {/* Quick Demo Test Barcodes */}
-        <div className="px-6 space-y-1.5">
-          <div className="text-[11px] font-montserrat font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-            <Zap className="w-3.5 h-3.5 text-[#FFDE00]" />
-            <span>Simulate Hardware Scanner Trigger:</span>
+        {/* Quick Registered Catalog Barcodes */}
+        {registeredBarcodes.length > 0 && (
+          <div className="px-6 space-y-1.5">
+            <div className="text-[11px] font-montserrat font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5 text-[#FFDE00]" />
+              <span>Registered Catalog Quick Select:</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {registeredBarcodes.map((item) => (
+                <button
+                  key={item.code}
+                  type="button"
+                  onClick={() => handleTestScan(item.code)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-[#FFDE00] hover:text-[#0A006E] text-slate-300 font-mono text-[11px] border border-slate-700 transition cursor-pointer"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {demoBarcodes.map((item) => (
-              <button
-                key={item.code}
-                type="button"
-                onClick={() => handleTestScan(item.code)}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-[#FFDE00] hover:text-[#0A006E] text-slate-300 font-mono text-[11px] border border-slate-700 transition cursor-pointer"
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        )}
 
         {/* Manual Barcode Wedge Input */}
         <div className="p-6 pt-2 bg-slate-950 border-t border-slate-800">

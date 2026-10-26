@@ -13,7 +13,6 @@ import {
   BarcodeScanRecord,
   ApprovalRequest
 } from '../types';
-import { MASTER_IMPORTED_INVENTORY } from '../erpUtils';
 import { auth, db } from '../firebase';
 import { collection, doc, setDoc, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
 import { subscribeToProductScans } from '../utils/productScanBroadcast';

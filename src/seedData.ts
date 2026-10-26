@@ -7,9 +7,11 @@ import {
   updateDoc,
   query,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { GeoRegion, BusinessUnit, RestaurantInventoryItem } from './types';
+import { isSampleSkuRecord } from './erpUtils';
 import { hashPin, isPinHashed } from './utils/security';
 
 export const NAIROBI_GEO_REGIONS: GeoRegion[] = [
@@ -623,17 +625,33 @@ export async function ensureOperationalFoundationSeeded(): Promise<void> {
         }
       }
 
-      // 10. Enforce zero stock and complete inventory wipe across all products in Firestore
+      // 10. Purge all sample/reference SKU records from localStorage and Firestore products
       if (typeof window !== 'undefined') {
-        localStorage.setItem('vaairo_inventory_wiped_flag', 'true');
-        localStorage.setItem('vaairo_inventory_zero_stock', 'true');
-        localStorage.removeItem('erp_products_local_override');
         localStorage.removeItem('vaairo_load_sample_catalog');
+        try {
+          const cachedProds = localStorage.getItem('erp_products_local_override');
+          if (cachedProds) {
+            const parsed = JSON.parse(cachedProds);
+            if (Array.isArray(parsed)) {
+              const cleaned = parsed.filter((p) => !isSampleSkuRecord(p));
+              localStorage.setItem('erp_products_local_override', JSON.stringify(cleaned));
+            }
+          }
+        } catch {}
       }
       const prodSnap = await getDocs(collection(db, 'products')).catch(() => null);
       if (prodSnap && !prodSnap.empty) {
-        for (const pDoc of prodSnap.docs) {
-          await deleteDoc(doc(db, 'products', pDoc.id)).catch(() => {});
+        const sampleDocs = prodSnap.docs.filter((d) =>
+          isSampleSkuRecord({ ...(d.data() as any), id: d.id })
+        );
+        const batchSize = 400;
+        for (let i = 0; i < sampleDocs.length; i += batchSize) {
+          const chunk = sampleDocs.slice(i, i + batchSize);
+          const batch = writeBatch(db);
+          for (const sDoc of chunk) {
+            batch.delete(doc(db, 'products', sDoc.id));
+          }
+          await batch.commit().catch(() => {});
         }
       }
 

@@ -33,6 +33,7 @@ export interface StaffMember {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: StaffRole;
   authMethod: 'google' | 'pin' | 'email';
   pin?: string;
@@ -430,8 +431,15 @@ export interface StockTransfer {
   logisticsPartnerName: string;
   vehicleReg: string;
   excisePermitNo: string;
-  status: 'Dispatched' | 'In Transit' | 'Received';
+  status: 'Pending Authorization' | 'Dispatched' | 'In Transit' | 'Received' | 'Rejected';
   initiatedBy: string;
+  initiatedByRole?: string;
+  authorizedBy?: string;
+  authorizedByRole?: string;
+  authorizedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
   createdAt: string;
 }
 
@@ -470,6 +478,8 @@ export interface LineItem {
   businessUnitId?: string;
 }
 
+export type OrderDeliveryStatus = 'Pending Dispatch' | 'Out for Delivery' | 'Delivered';
+
 export interface TransactionDoc {
   id: string;
   docNumber: string;
@@ -485,8 +495,17 @@ export interface TransactionDoc {
   customerId?: string;
   customerName: string;
   customerPhone?: string;
+  customerEmail?: string;
   customerKraPin?: string;
   customerLicenseNo: string;
+  deliveryAddress?: string;
+  deliveryNotes?: string;
+  deliveryStatus?: OrderDeliveryStatus;
+  assignedRiderId?: string;
+  assignedRiderName?: string;
+  assignedRiderPhone?: string;
+  dispatchedAt?: string;
+  deliveredAt?: string;
   itemsSummary: string; // JSON string of LineItem[]
   subtotal: number;
   exciseAndTax: number;

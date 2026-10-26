@@ -402,22 +402,20 @@ export const OnboardItemsModal: React.FC<OnboardItemsModalProps> = ({
                 >
                   All Brands
                 </button>
-                {['Chrome', 'Johnnie Walker', 'Tusker', 'Smirnoff', 'Gilbey\'s', 'Captain Morgan', 'Hennessy', 'Jameson', 'White Cap', 'Guinness', 'Black & White', 'Vat 69'].map(
-                  (b) => (
-                    <button
-                      key={b}
-                      type="button"
-                      onClick={() => setSelectedBrand(b)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap transition cursor-pointer ${
-                        selectedBrand.toLowerCase() === b.toLowerCase()
-                          ? 'bg-[#FFDE00] text-[#0A006E] border-2 border-[#0A006E]'
-                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      {b}
-                    </button>
-                  )
-                )}
+                {availableBrands.map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setSelectedBrand(b)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold whitespace-nowrap transition cursor-pointer ${
+                      selectedBrand.toLowerCase() === b.toLowerCase()
+                        ? 'bg-[#FFDE00] text-[#0A006E] border-2 border-[#0A006E]'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {b}
+                  </button>
+                ))}
               </div>
 
               {/* Search + Product Dropdown */}

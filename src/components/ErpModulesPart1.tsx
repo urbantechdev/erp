@@ -44,6 +44,10 @@ import {
   Store,
   ShoppingBag,
   Bell,
+  Truck,
+  Phone,
+  Clock,
+  XCircle,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -60,6 +64,8 @@ import {
   PayrollRun,
   DamageSpoilageIncident,
   InventoryThresholdSettings,
+  ExternalCustomer,
+  ComplianceRecord,
 } from '../types';
 import {
   generateAutoSku,
@@ -79,6 +85,7 @@ import { LogDamageSpoilageModal } from './LogDamageSpoilageModal';
 import { SalesPeriodTracker } from './SalesPeriodTracker';
 import { InventoryBarcodeAssignmentModal } from './InventoryBarcodeAssignmentModal';
 import { ExecutiveVisualAnalytics, BarGraph, PieChart } from './common/AnalyticsCharts';
+import { KraReturnScheduleType } from '../utils/kraReturnsExport';
 
 // ---------------------------------------------------------------------------
 // 1. OVERVIEW DASHBOARD
@@ -89,6 +96,8 @@ export const OverviewModule: React.FC<{
   branches: Branch[];
   regions: GeoRegion[];
   partners: Partner[];
+  externalCustomers?: ExternalCustomer[];
+  complianceRecords?: ComplianceRecord[];
   transactions: TransactionDoc[];
   transfers: StockTransfer[];
   staffList: StaffMember[];
@@ -96,7 +105,12 @@ export const OverviewModule: React.FC<{
   payrollRuns?: PayrollRun[];
   onOpenPayslip?: (record: PayrollRecord) => void;
   onPreviewDoc: (doc: TransactionDoc) => void;
+  onInspectOrder?: (doc: TransactionDoc) => void;
+  onAuthorizeStockTransfer?: (transferId: string) => Promise<void>;
+  onRejectStockTransfer?: (transferId: string) => Promise<void>;
   onOpenOnboardItems?: () => void;
+  onOpenKraReturns?: (defaultTab?: KraReturnScheduleType) => void;
+  onTriggerToast?: (type: 'success' | 'error', title: string, message: string) => void;
   onNavigateModule?: (module: any) => void;
 }> = ({
   currentUser,
@@ -104,6 +118,8 @@ export const OverviewModule: React.FC<{
   branches,
   regions,
   partners,
+  externalCustomers = [],
+  complianceRecords = [],
   transactions,
   transfers,
   staffList,
@@ -111,7 +127,12 @@ export const OverviewModule: React.FC<{
   payrollRuns = [],
   onOpenPayslip,
   onPreviewDoc,
+  onInspectOrder,
+  onAuthorizeStockTransfer,
+  onRejectStockTransfer,
   onOpenOnboardItems,
+  onOpenKraReturns,
+  onTriggerToast,
   onNavigateModule,
 }) => {
   const isAccountant = currentUser.role === 'Accountant';
@@ -320,8 +341,14 @@ export const OverviewModule: React.FC<{
           transactions={visibleTransactions}
           branches={branches}
           regions={regions}
+          partners={partners}
+          externalCustomers={externalCustomers}
+          staffList={staffList}
+          complianceRecords={complianceRecords}
           payrollRuns={payrollRuns}
           onPreviewDoc={onPreviewDoc}
+          onOpenKraReturns={onOpenKraReturns}
+          onTriggerToast={onTriggerToast}
         />
       </div>
     );
@@ -354,10 +381,19 @@ export const OverviewModule: React.FC<{
               Approved management of 8-role personnel directory, 6-digit PIN issuance, and statutory deductions.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {onOpenKraReturns && (
+              <button
+                onClick={() => onOpenKraReturns('PAYE_P10_SEC_B')}
+                className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                KRA P10 &amp; AHL (.xlsx)
+              </button>
+            )}
             <button
               onClick={() => onNavigateModule?.('hr_rbac')}
-              className="px-4 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition"
+              className="px-4 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition whitespace-nowrap shrink-0"
             >
               Manage Staff Directory
             </button>
@@ -367,7 +403,7 @@ export const OverviewModule: React.FC<{
                 const rows = staffList.map((s) => [s.name, s.role, s.branchName, s.email, s.status, s.kraPin || '-', s.nssfNo || '-']);
                 exportToCSV('Vaairo_Staff_Roster', headers, rows);
               }}
-              className="px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
+              className="px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer transition whitespace-nowrap shrink-0"
             >
               Export CSV
             </button>
@@ -563,6 +599,7 @@ export const OverviewModule: React.FC<{
             transactions={visibleTransactions}
             currentUser={currentUser}
             onPreviewDoc={onPreviewDoc}
+            onInspectOrder={onInspectOrder}
             onNavigateToPos={(mode) => onNavigateModule?.(mode === 'retail' ? 'retail_pos' : 'sales_pos')}
             branches={branches}
             staff={staffList}
@@ -641,8 +678,8 @@ export const OverviewModule: React.FC<{
             <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
               {transfers.length} Transfers
             </div>
-            <div className="text-xs text-[#1E9E60] font-bold mt-1">
-              {transfers.filter((t) => t.status === 'In Transit').length} Currently in Transit
+            <div className="text-xs text-amber-700 font-bold mt-1">
+              {transfers.filter((t) => t.status === 'Pending Authorization').length} Awaiting Manager Auth · {transfers.filter((t) => t.status === 'Dispatched' || t.status === 'In Transit').length} Dispatched
             </div>
           </div>
 
@@ -973,6 +1010,25 @@ export const OverviewModule: React.FC<{
               </div>
             </button>
           )}
+          {/* KRA Returns Spreadsheet Quick Button on Mobile */}
+          {onOpenKraReturns && (
+            <button
+              type="button"
+              onClick={() => onOpenKraReturns('VAT3_SALES_SEC_B')}
+              className="p-3 bg-white border-2 border-[#0A006E] active:bg-emerald-50 text-[#0A006E] rounded-2xl flex flex-col justify-between text-left cursor-pointer shadow-xs active:scale-95 transition-all min-h-[76px]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-8 h-8 rounded-xl bg-[#0A006E] text-[#34D186] flex items-center justify-center shadow-xs">
+                  <FileSpreadsheet className="w-4 h-4 stroke-[2.2]" />
+                </div>
+                <span className="text-[10px] font-montserrat font-black text-[#0A006E] uppercase">iTax</span>
+              </div>
+              <div>
+                <div className="text-xs font-montserrat font-black text-[#0A006E] leading-tight">KRA Returns</div>
+                <div className="text-[10px] text-slate-500">VAT3 · P10 (.xlsx)</div>
+              </div>
+            </button>
+          )}
         </div>
       </div>
 
@@ -993,21 +1049,31 @@ export const OverviewModule: React.FC<{
           </p>
         </div>
 
-        <div className="flex items-center gap-2 relative z-10 shrink-0">
+        <div className="flex items-center gap-2 relative z-10 shrink-0 flex-wrap justify-end">
           {onOpenOnboardItems && (currentUser.role === 'Branch Manager' || currentUser.role === 'Admin' || (currentUser.role as string) === 'Inventory Controller') && (
             <button
               type="button"
               onClick={onOpenOnboardItems}
-              className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-md transition active:scale-95"
+              className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-md transition active:scale-95"
             >
               <Barcode className="w-3.5 h-3.5 text-[#0A006E]" />
               Onboard Items
             </button>
           )}
+          {onOpenKraReturns && (
+            <button
+              type="button"
+              onClick={() => onOpenKraReturns('VAT3_SALES_SEC_B')}
+              className="px-3.5 py-2 bg-white hover:bg-slate-50 border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-xs transition"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-[#0A006E]" />
+              KRA Returns (.xlsx)
+            </button>
+          )}
           {currentUser.role === 'Admin' && (
             <button
               onClick={() => setAdminOverviewView('accounting')}
-              className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-md"
+              className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-md"
             >
               <BarChart3 className="w-3.5 h-3.5 text-[#FFDE00]" />
               Financial Analysis
@@ -1015,14 +1081,14 @@ export const OverviewModule: React.FC<{
           )}
           <button
             onClick={handleDownloadStatementPDF}
-            className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-md"
+            className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] hover:bg-[#060046] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-md"
           >
             <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
             PDF Statement
           </button>
           <button
             onClick={handleDownloadStatementCSV}
-            className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] hover:bg-slate-50 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] hover:bg-slate-50 rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Download className="w-3.5 h-3.5 text-[#0A006E]" />
             Export CSV
@@ -1146,12 +1212,243 @@ export const OverviewModule: React.FC<{
         </div>
       </div>
 
+      {/* Manager Action Queue: Pending Inventory-Initiated Stock Transfer Authorizations */}
+      {(currentUser.role === 'Admin' || currentUser.role === 'Branch Manager') &&
+        transfers.filter((tr) => tr.status === 'Pending Authorization').length > 0 && (
+          <div className="bg-amber-50 border-2 border-[#0A006E] rounded-2xl p-5 space-y-4 shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-200 pb-3">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-xs">
+                  <ArrowLeftRight className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-montserrat font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#0A006E] text-[#FFDE00]">
+                      Manager Authorization Required
+                    </span>
+                    <span className="text-xs font-jakarta font-black text-amber-900 font-mono-tabular">
+                      {transfers.filter((tr) => tr.status === 'Pending Authorization').length} Pending Request(s)
+                    </span>
+                  </div>
+                  <h3 className="text-sm sm:text-base font-montserrat font-black text-[#0A006E] mt-0.5">
+                    Stock Transfers Initiated by Inventory Manager Awaiting Your Authorization
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateModule?.('branches_transfers')}
+                className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shrink-0"
+              >
+                Open Transfers Hub
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {transfers
+                .filter((tr) => tr.status === 'Pending Authorization')
+                .map((tr) => (
+                  <div
+                    key={tr.id}
+                    className="bg-white border border-amber-300 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-2xs"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2.5 py-0.5 rounded-md bg-[#0A006E] text-[#FFDE00] font-jakarta font-black text-xs font-mono-tabular">
+                          {tr.transferNo}
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[11px] font-jakarta font-black font-mono-tabular">
+                          {tr.quantityBottles} Bottles · {tr.sku}
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Initiated by <strong>{tr.initiatedBy}</strong>
+                        </span>
+                      </div>
+                      <div className="text-xs sm:text-sm font-montserrat font-black text-slate-900">
+                        {tr.productName}
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        Source: <strong className="text-slate-900">{tr.fromBranchName}</strong> → Destination:{' '}
+                        <strong className="text-[#0A006E]">{tr.toBranchName}</strong>
+                        {tr.vehicleReg ? ` · Vehicle: ${tr.vehicleReg}` : ''}
+                        {tr.excisePermitNo ? ` · Permit: ${tr.excisePermitNo}` : ''}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {onRejectStockTransfer && (
+                        <button
+                          type="button"
+                          onClick={() => onRejectStockTransfer(tr.id)}
+                          className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Reject
+                        </button>
+                      )}
+                      {onAuthorizeStockTransfer && (
+                        <button
+                          type="button"
+                          onClick={() => onAuthorizeStockTransfer(tr.id)}
+                          className="px-4 py-2.5 bg-[#1E9E60] hover:bg-emerald-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition active:scale-95"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                          Authorize Transfer
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+      {/* Admin & Branch Manager Customer Orders & Delivery Processing Queue */}
+      {(currentUser.role === 'Admin' || currentUser.role === 'Branch Manager') && (
+        <div className="bg-white border-2 border-[#0A006E]/20 rounded-2xl p-5 space-y-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-xs">
+                <Truck className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-montserrat font-black uppercase tracking-wider text-[#0A006E]">
+                    Customer Orders &amp; Delivery Fulfillment
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-900 text-[10px] font-jakarta font-black font-mono-tabular">
+                    {
+                      visibleTransactions.filter(
+                        (t) =>
+                          (t.docType === 'Online Order' || t.channel === 'Customer Online Portal' || t.deliveryAddress) &&
+                          t.deliveryStatus !== 'Delivered' &&
+                          t.status !== 'Fulfilled'
+                      ).length
+                    }{' '}
+                    Active Deliveries
+                  </span>
+                </div>
+                <h3 className="text-sm sm:text-base font-montserrat font-black text-slate-900">
+                  Incoming Customer Orders · Inspect Order Details &amp; Process Delivery
+                </h3>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigateModule?.('delivery_management')}
+              className="px-3.5 py-2 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+            >
+              <Truck className="w-3.5 h-3.5" />
+              Open Full Delivery Dispatch Hub
+            </button>
+          </div>
+
+          {visibleTransactions.filter(
+            (t) => t.docType === 'Online Order' || t.channel === 'Customer Online Portal' || Boolean(t.deliveryAddress)
+          ).length === 0 ? (
+            <div className="p-6 bg-[#F0F2F0] rounded-xl text-center text-xs text-slate-600">
+              No online customer delivery orders placed yet. As soon as a customer checks out on the Online Storefront, their itemized order and delivery address appear here for dispatch processing.
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
+                    <th className="py-2.5 px-3 font-black">Order No</th>
+                    <th className="py-2.5 px-3 font-black">Customer &amp; Phone</th>
+                    <th className="py-2.5 px-3 font-black">Delivery Address / Zone</th>
+                    <th className="py-2.5 px-3 font-black">Payment</th>
+                    <th className="py-2.5 px-3 font-black">Delivery Status</th>
+                    <th className="py-2.5 px-3 font-black text-right">Total (KES)</th>
+                    <th className="py-2.5 px-3 font-black text-right">Process Delivery</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {visibleTransactions
+                    .filter(
+                      (t) =>
+                        t.docType === 'Online Order' ||
+                        t.channel === 'Customer Online Portal' ||
+                        Boolean(t.deliveryAddress)
+                    )
+                    .slice(0, 8)
+                    .map((tx) => {
+                      const delStatus =
+                        tx.deliveryStatus || (tx.status === 'Fulfilled' ? 'Delivered' : 'Pending Dispatch');
+                      return (
+                        <tr key={tx.id} className="hover:bg-slate-50">
+                          <td className="py-2.5 px-3 font-jakarta font-black text-[#0A006E] font-mono-tabular">
+                            {tx.docNumber}
+                            <div className="text-[10px] text-slate-400 font-normal">
+                              {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="font-montserrat font-bold text-slate-900">{tx.customerName}</div>
+                            <div className="text-[11px] font-jakarta font-bold text-[#0A006E] font-mono-tabular">
+                              {tx.customerPhone || '—'}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-700 max-w-[220px]">
+                            <div className="font-semibold text-slate-900 truncate">
+                              {tx.deliveryAddress || tx.regionName}
+                            </div>
+                            <div className="text-[10px] text-slate-500 truncate">{tx.branchName}</div>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 font-semibold text-slate-800">
+                              {tx.paymentMethod}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-montserrat font-black ${
+                                delStatus === 'Delivered'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : delStatus === 'Out for Delivery'
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : 'bg-sky-100 text-sky-900'
+                              }`}
+                            >
+                              {delStatus}
+                            </span>
+                            {tx.assignedRiderName && (
+                              <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                                Rider: {tx.assignedRiderName}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-jakarta font-black text-slate-900 font-mono-tabular">
+                            {formatKes(tx.totalAmount)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => onInspectOrder?.(tx)}
+                              className="px-3 py-1.5 bg-[#FFDE00] hover:bg-amber-400 border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-[11px] font-montserrat font-black inline-flex items-center gap-1.5 cursor-pointer shadow-2xs transition active:scale-95"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Details &amp; Process
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 4. SALES FOR TODAY, THIS WEEK, THIS MONTH, THIS YEAR & CSV/PDF EXPORT */}
       <div id="sales-period-section">
         <SalesPeriodTracker
           transactions={visibleTransactions}
           currentUser={currentUser}
           onPreviewDoc={onPreviewDoc}
+          onInspectOrder={onInspectOrder}
           onNavigateToPos={(mode) => onNavigateModule?.(mode === 'retail' ? 'retail_pos' : 'sales_pos')}
           branches={branches}
           staff={staffList}
@@ -1354,8 +1651,6 @@ export const InventoryModule: React.FC<{
   onWipeInventoryToZero?: () => Promise<void>;
   onLogStockIncident?: (incident: DamageSpoilageIncident) => Promise<void>;
   onOpenOnboardItems?: () => void;
-  sampleCatalogEnabled?: boolean;
-  onToggleSampleCatalog?: (enable: boolean) => void;
 }> = ({
   currentUser,
   products,
@@ -1368,8 +1663,6 @@ export const InventoryModule: React.FC<{
   onWipeInventoryToZero,
   onLogStockIncident,
   onOpenOnboardItems,
-  sampleCatalogEnabled,
-  onToggleSampleCatalog,
 }) => {
   const isInventoryPerson =
     currentUser.role === 'Inventory Controller' ||
@@ -2071,14 +2364,14 @@ export const InventoryModule: React.FC<{
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="font-montserrat font-black text-emerald-950 text-sm">
-                  Inventory Database Wiped to Zero (0 SKUs)
+                  No Products Registered (0 SKUs)
                 </h4>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-montserrat font-black bg-emerald-200 text-emerald-900">
                   Clean Database Ready
                 </span>
               </div>
               <p className="text-xs text-emerald-800 font-medium">
-                The database has been wiped back to zero. No leftover SKUs or bottles remain. Upload your real catalog or register new products below.
+                All sample SKUs have been removed. Upload your inventory CSV or register new products below.
               </p>
             </div>
           </div>
@@ -2093,40 +2386,7 @@ export const InventoryModule: React.FC<{
                 Import Inventory CSV
               </button>
             )}
-            {onToggleSampleCatalog && (
-              <button
-                type="button"
-                onClick={() => onToggleSampleCatalog(true)}
-                className="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap"
-                title="Load sample catalog for testing"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                Load Sample Catalog (2,976 SKUs)
-              </button>
-            )}
           </div>
-        </div>
-      )}
-
-      {/* Sample Reference Catalog Active Banner */}
-      {sampleCatalogEnabled && products.length > 0 && (
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <p className="text-xs text-amber-900 font-medium">
-              Currently previewing <strong>Sample Reference Catalog ({products.length} SKUs)</strong>. To return to your clean empty inventory (0 SKUs), click Wipe.
-            </p>
-          </div>
-          {onWipeAllProducts && (
-            <button
-              type="button"
-              onClick={onWipeAllProducts}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition whitespace-nowrap shrink-0"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Purge Back to 0 SKUs
-            </button>
-          )}
         </div>
       )}
 
@@ -3613,8 +3873,10 @@ export const BranchesAndTransfersModule: React.FC<{
   onSetMainBranch?: (branchId: string) => Promise<void>;
   onCreateStockTransfer: (
     tr: Omit<StockTransfer, 'id' | 'createdAt'>,
-    updatedProduct: { productId: string; newBranchStockJson: string }
+    updatedProduct?: { productId: string; newBranchStockJson: string }
   ) => Promise<void>;
+  onAuthorizeStockTransfer?: (transferId: string) => Promise<void>;
+  onRejectStockTransfer?: (transferId: string) => Promise<void>;
   onReceiveStockTransfer?: (transferId: string) => Promise<void>;
 }> = ({
   currentUser,
@@ -3628,6 +3890,8 @@ export const BranchesAndTransfersModule: React.FC<{
   onDeleteBranch,
   onSetMainBranch,
   onCreateStockTransfer,
+  onAuthorizeStockTransfer,
+  onRejectStockTransfer,
   onReceiveStockTransfer,
 }) => {
   const [facilityType, setFacilityType] = useState<FacilityType>('warehouse');
@@ -3643,6 +3907,7 @@ export const BranchesAndTransfersModule: React.FC<{
   const isBranchManager = currentUser.role === 'Branch Manager';
   const isSalesManager = currentUser.role === 'Sales Manager';
   const isInventory = currentUser.role === 'Inventory Controller';
+  const canAuthorizeTransfer = isAdmin || isBranchManager;
 
   const transferBranches = allBranches && allBranches.length > 0 ? allBranches : branches;
 
@@ -3660,6 +3925,7 @@ export const BranchesAndTransfersModule: React.FC<{
   const [transferItemQty, setTransferItemQty] = useState<number>(12);
   const [vehicleReg, setVehicleReg] = useState('');
   const [excisePermitNo, setExcisePermitNo] = useState('');
+  const [transferFormError, setTransferFormError] = useState<string | null>(null);
 
   const handleAddTransferItem = () => {
     const prod = products.find((p) => p.id === selectedTransferProductId);
@@ -3733,21 +3999,27 @@ export const BranchesAndTransfersModule: React.FC<{
   const handleExecuteTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canInitiateTransfer) return;
-    if (fromBranchId === toBranchId) return;
-    if (transferList.length === 0) {
-      alert('Please add at least one product to the transfer list before authorizing transfer.');
+    if (fromBranchId === toBranchId) {
+      setTransferFormError('Source and Destination branches must be different.');
       return;
     }
-    const fromBr = branches.find((b) => b.id === fromBranchId);
-    const toBr = branches.find((b) => b.id === toBranchId);
+    if (transferList.length === 0) {
+      setTransferFormError('Please add at least one product to the transfer manifest before submitting.');
+      return;
+    }
+    const fromBr = transferBranches.find((b) => b.id === fromBranchId);
+    const toBr = transferBranches.find((b) => b.id === toBranchId);
     if (!fromBr || !toBr) return;
 
     // For Branch Manager, ensure transfer involves their branch
     if (isBranchManager && fromBr.name !== currentUser.branchName && toBr.name !== currentUser.branchName && fromBr.id !== currentUser.branchId && toBr.id !== currentUser.branchId) {
+      setTransferFormError('Branch Managers can only initiate transfers involving their assigned branch.');
       return;
     }
 
+    setTransferFormError(null);
     const batchNo = `TRF-${Date.now().toString().slice(-6)}`;
+    const requiresManagerAuth = isInventory;
 
     for (const item of transferList) {
       const prod = products.find((p) => p.id === item.productId);
@@ -3762,12 +4034,11 @@ export const BranchesAndTransfersModule: React.FC<{
       }
 
       const sourceAvail = branchStock[fromBr.id] ?? fallbackTotal;
-      const actualMove = Math.min(sourceAvail, item.quantityBottles);
-      branchStock[fromBr.id] = Math.max(0, sourceAvail - actualMove);
-      branchStock[toBr.id] = (branchStock[toBr.id] ?? 0) + actualMove;
+      const actualMove = Math.max(1, Math.min(Math.max(1, sourceAvail), item.quantityBottles));
 
-      await onCreateStockTransfer(
-        {
+      if (requiresManagerAuth) {
+        // Inventory Controller initiates transfer -> enters 'Pending Authorization' until Manager clicks Authorize
+        await onCreateStockTransfer({
           transferNo: `${batchNo}-${item.sku.slice(0, 4)}`,
           fromBranchId: fromBr.id,
           fromBranchName: fromBr.name,
@@ -3780,14 +4051,40 @@ export const BranchesAndTransfersModule: React.FC<{
           logisticsPartnerName: logisticsName,
           vehicleReg,
           excisePermitNo,
-          status: 'Dispatched',
+          status: 'Pending Authorization',
           initiatedBy: `${currentUser.name} (${currentUser.role})`,
-        },
-        {
-          productId: prod.id,
-          newBranchStockJson: JSON.stringify(branchStock),
-        }
-      );
+          initiatedByRole: currentUser.role,
+        });
+      } else {
+        // Manager / Admin initiates directly -> deduct from source branch and mark 'Dispatched'
+        branchStock[fromBr.id] = Math.max(0, sourceAvail - actualMove);
+        await onCreateStockTransfer(
+          {
+            transferNo: `${batchNo}-${item.sku.slice(0, 4)}`,
+            fromBranchId: fromBr.id,
+            fromBranchName: fromBr.name,
+            toBranchId: toBr.id,
+            toBranchName: toBr.name,
+            productId: prod.id,
+            sku: prod.sku,
+            productName: prod.name,
+            quantityBottles: actualMove,
+            logisticsPartnerName: logisticsName,
+            vehicleReg,
+            excisePermitNo,
+            status: 'Dispatched',
+            initiatedBy: `${currentUser.name} (${currentUser.role})`,
+            initiatedByRole: currentUser.role,
+            authorizedBy: currentUser.name,
+            authorizedByRole: currentUser.role,
+            authorizedAt: new Date().toISOString(),
+          },
+          {
+            productId: prod.id,
+            newBranchStockJson: JSON.stringify(branchStock),
+          }
+        );
+      }
     }
 
     setTransferList([]);
@@ -4143,6 +4440,21 @@ export const BranchesAndTransfersModule: React.FC<{
             </div>
           </div>
 
+          {isInventory && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>
+                <strong>Two-Step Transfer Governance:</strong> Once you initiate this transfer manifest, it will be sent to the <strong>Branch Manager / Admin</strong> to authorize with one click from their dashboard before stock is dispatched.
+              </span>
+            </div>
+          )}
+
+          {transferFormError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+              {transferFormError}
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={transferList.length === 0}
@@ -4153,7 +4465,9 @@ export const BranchesAndTransfersModule: React.FC<{
             }`}
           >
             <ArrowLeftRight className="w-4 h-4" />
-            Authorize Multi-SKU Bonded Stock Transfer Manifest ({transferList.length} SKUs)
+            {isInventory
+              ? `Initiate Order Transfer for Manager Authorization (${transferList.length} SKUs)`
+              : `Authorize & Dispatch Multi-SKU Bonded Stock Transfer (${transferList.length} SKUs)`}
           </button>
         </form>
       ) : (
@@ -4419,6 +4733,121 @@ export const BranchesAndTransfersModule: React.FC<{
         </div>
       )}
 
+      {/* Manager Authorization Queue: Transfers Initiated by Inventory Manager */}
+      {transfers.filter(
+        (tr) =>
+          tr.status === 'Pending Authorization' &&
+          (!isBranchManager ||
+            tr.fromBranchId === currentUser.branchId ||
+            tr.toBranchId === currentUser.branchId ||
+            tr.fromBranchName === currentUser.branchName ||
+            tr.toBranchName === currentUser.branchName)
+      ).length > 0 && (
+        <div className="bg-indigo-50 border-2 border-[#0A006E] rounded-2xl p-5 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between border-b border-indigo-200 pb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="w-5 h-5 text-[#0A006E]" />
+              <div>
+                <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+                  {canAuthorizeTransfer
+                    ? 'Pending Manager Authorization · Inventory-Initiated Order Transfers'
+                    : 'Initiated Order Transfers Awaiting Manager Authorization'}
+                </h3>
+                <p className="text-[11px] text-slate-600">
+                  {canAuthorizeTransfer
+                    ? 'Review transfer requests initiated by Inventory Management and click Authorize Transfer to dispatch bonded stock.'
+                    : 'These transfers have been submitted to the Manager for sign-off and dispatch authorization.'}
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-[#0A006E] text-[#FFDE00] text-xs font-jakarta font-black font-mono-tabular">
+              {
+                transfers.filter(
+                  (tr) =>
+                    tr.status === 'Pending Authorization' &&
+                    (!isBranchManager ||
+                      tr.fromBranchId === currentUser.branchId ||
+                      tr.toBranchId === currentUser.branchId ||
+                      tr.fromBranchName === currentUser.branchName ||
+                      tr.toBranchName === currentUser.branchName)
+                ).length
+              }{' '}
+              Awaiting Authorization
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {transfers
+              .filter(
+                (tr) =>
+                  tr.status === 'Pending Authorization' &&
+                  (!isBranchManager ||
+                    tr.fromBranchId === currentUser.branchId ||
+                    tr.toBranchId === currentUser.branchId ||
+                    tr.fromBranchName === currentUser.branchName ||
+                    tr.toBranchName === currentUser.branchName)
+              )
+              .map((tr) => (
+                <div
+                  key={tr.id}
+                  className="bg-white border border-indigo-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-jakarta font-black text-xs text-[#0A006E] font-mono-tabular">
+                        {tr.transferNo}
+                      </span>
+                      <span className="text-[10px] font-jakarta font-black px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-mono-tabular">
+                        {tr.quantityBottles} Bottles · {tr.sku}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                        Initiated by {tr.initiatedBy}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-900 font-bold">{tr.productName}</p>
+                    <p className="text-[11px] text-slate-600">
+                      From <span className="font-semibold text-slate-800">{tr.fromBranchName}</span> → To{' '}
+                      <span className="font-semibold text-[#0A006E]">{tr.toBranchName}</span>
+                      {tr.vehicleReg ? ` · Vehicle: ${tr.vehicleReg}` : ''}
+                      {tr.excisePermitNo ? ` · Permit: ${tr.excisePermitNo}` : ''}
+                    </p>
+                  </div>
+
+                  {canAuthorizeTransfer ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      {onRejectStockTransfer && (
+                        <button
+                          type="button"
+                          onClick={() => onRejectStockTransfer(tr.id)}
+                          className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-montserrat font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          Reject
+                        </button>
+                      )}
+                      {onAuthorizeStockTransfer && (
+                        <button
+                          type="button"
+                          onClick={() => onAuthorizeStockTransfer(tr.id)}
+                          className="px-4 py-2.5 bg-[#1E9E60] hover:bg-emerald-700 text-white font-montserrat font-black text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition active:scale-95"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                          Authorize Transfer
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="px-3 py-1.5 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 text-xs font-montserrat font-black shrink-0 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      Pending Manager Authorization
+                    </span>
+                  )}
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* Incoming Dispatched Transfers Awaiting Receiving */}
       {transfers.filter((tr) => tr.status === 'Dispatched' && (!isBranchManager || tr.toBranchId === currentUser.branchId || tr.toBranchName === currentUser.branchName)).length > 0 && (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 space-y-3">
@@ -4426,11 +4855,11 @@ export const BranchesAndTransfersModule: React.FC<{
             <div className="flex items-center gap-2">
               <Bell className="w-5 h-5 text-amber-700 animate-pulse" />
               <h3 className="text-sm font-montserrat font-black text-amber-900">
-                Incoming Bonded Stock Transfers Awaiting Your Receipt &amp; Stock Auto-Update
+                Incoming Authorized Stock Transfers Awaiting Receipt &amp; Stock Auto-Update
               </h3>
             </div>
             <span className="px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-xs font-bold">
-              {transfers.filter((tr) => tr.status === 'Dispatched' && (!isBranchManager || tr.toBranchId === currentUser.branchId || tr.toBranchName === currentUser.branchName)).length} Pending
+              {transfers.filter((tr) => tr.status === 'Dispatched' && (!isBranchManager || tr.toBranchId === currentUser.branchId || tr.toBranchName === currentUser.branchName)).length} Dispatched
             </span>
           </div>
 
@@ -4440,11 +4869,16 @@ export const BranchesAndTransfersModule: React.FC<{
               .map((tr) => (
                 <div key={tr.id} className="bg-white border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono-tabular font-bold text-xs text-[#0A006E]">{tr.transferNo}</span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-800">
                         {tr.quantityBottles} Bottles · {tr.sku}
                       </span>
+                      {tr.authorizedBy && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800">
+                          Authorized by {tr.authorizedBy}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-800 font-medium">
                       {tr.productName}
@@ -4486,7 +4920,7 @@ export const BranchesAndTransfersModule: React.FC<{
               exportReportToPDF(
                 'Inter-Branch Bonded Stock Transfer Manifest',
                 `Exported by ${currentUser.name} (${isBranchManager ? currentUser.branchName : 'All Branches'})`,
-                ['Transfer No', 'From Branch', 'To Branch', 'SKU', 'Product', 'Qty Btls', 'Carrier / Vehicle', 'Status'],
+                ['Transfer No', 'From Branch', 'To Branch', 'SKU', 'Product', 'Qty Btls', 'Authorized By', 'Status'],
                 visibleTransfers.map((t) => [
                   t.transferNo,
                   t.fromBranchName,
@@ -4494,7 +4928,7 @@ export const BranchesAndTransfersModule: React.FC<{
                   t.sku,
                   t.productName,
                   t.quantityBottles,
-                  `${t.logisticsPartnerName} (${t.vehicleReg})`,
+                  t.authorizedBy || 'Pending',
                   t.status,
                 ]),
                 'Vaairo_Stock_Transfers'
@@ -4514,10 +4948,11 @@ export const BranchesAndTransfersModule: React.FC<{
                 <th className="py-2.5 px-3 font-black">Transfer No</th>
                 <th className="py-2.5 px-3 font-black">Source Branch</th>
                 <th className="py-2.5 px-3 font-black">Destination Branch</th>
-                <th className="py-2.5 px-3 font-black">Auto SKU & Product</th>
+                <th className="py-2.5 px-3 font-black">Auto SKU &amp; Product</th>
                 <th className="py-2.5 px-3 font-black text-right">Qty (Btls)</th>
-                <th className="py-2.5 px-3 font-black">Logistics & Excise Permit</th>
+                <th className="py-2.5 px-3 font-black">Initiated / Authorized</th>
                 <th className="py-2.5 px-3 font-black">Status</th>
+                <th className="py-2.5 px-3 font-black text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -4530,7 +4965,7 @@ export const BranchesAndTransfersModule: React.FC<{
                   tr.toBranchName === currentUser.branchName
               ).length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-slate-500">
+                  <td colSpan={8} className="py-6 text-center text-slate-500">
                     No inter-branch stock transfers recorded yet for your branch. Use the form above to move stock between branches.
                   </td>
                 </tr>
@@ -4545,24 +4980,79 @@ export const BranchesAndTransfersModule: React.FC<{
                       tr.toBranchName === currentUser.branchName
                   )
                   .map((tr) => (
-                  <tr key={tr.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">
-                      {tr.transferNo}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-800">{tr.fromBranchName}</td>
-                    <td className="py-2.5 px-3 text-slate-800 font-bold">{tr.toBranchName}</td>
-                    <td className="py-2.5 px-3">
-                      <span className="font-mono-tabular font-bold text-[#0A006E]">{tr.sku}</span> · {tr.productName}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono-tabular font-bold">
-                      {tr.quantityBottles}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-600 font-mono-tabular">
-                      {tr.vehicleReg} · {tr.excisePermitNo}
-                    </td>
-                    <td className="py-2.5 px-3 text-[#1E9E60] font-bold">{tr.status}</td>
-                  </tr>
-                ))
+                    <tr key={tr.id} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-jakarta font-bold text-[#0A006E] font-mono-tabular">
+                        {tr.transferNo}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-800">{tr.fromBranchName}</td>
+                      <td className="py-2.5 px-3 text-slate-800 font-bold">{tr.toBranchName}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="font-jakarta font-bold text-[#0A006E] font-mono-tabular">{tr.sku}</span> · {tr.productName}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-jakarta font-black font-mono-tabular">
+                        {tr.quantityBottles}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600">
+                        <div className="text-[11px] font-semibold text-slate-800">By: {tr.initiatedBy}</div>
+                        {tr.authorizedBy && (
+                          <div className="text-[10px] text-emerald-700 font-bold">
+                            Auth: {tr.authorizedBy}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-montserrat font-black ${
+                            tr.status === 'Received'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : tr.status === 'Dispatched' || tr.status === 'In Transit'
+                              ? 'bg-blue-100 text-blue-800'
+                              : tr.status === 'Pending Authorization'
+                              ? 'bg-amber-100 text-amber-900'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {tr.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        {tr.status === 'Pending Authorization' && canAuthorizeTransfer && onAuthorizeStockTransfer ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onAuthorizeStockTransfer(tr.id)}
+                              className="px-3 py-1 bg-[#1E9E60] hover:bg-emerald-700 text-white rounded-lg text-[11px] font-montserrat font-black cursor-pointer shadow-2xs"
+                            >
+                              Authorize
+                            </button>
+                            {onRejectStockTransfer && (
+                              <button
+                                type="button"
+                                onClick={() => onRejectStockTransfer(tr.id)}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold cursor-pointer"
+                              >
+                                Reject
+                              </button>
+                            )}
+                          </div>
+                        ) : tr.status === 'Dispatched' &&
+                          onReceiveStockTransfer &&
+                          (!isBranchManager ||
+                            tr.toBranchId === currentUser.branchId ||
+                            tr.toBranchName === currentUser.branchName) ? (
+                          <button
+                            type="button"
+                            onClick={() => onReceiveStockTransfer(tr.id)}
+                            className="px-3 py-1 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-black cursor-pointer"
+                          >
+                            Receive Stock
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-semibold">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
               )}
             </tbody>
           </table>

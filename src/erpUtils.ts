@@ -10,7 +10,69 @@ import {
   LineItem,
   ExternalCustomer,
 } from './types';
-import { NAIROBI_DRINKS_PRODUCTS } from './data/nairobiDrinksCatalog';
+
+// Detect legacy sample/demo SKU records so they are purged and never rendered
+const SAMPLE_IMPORT_REFS = new Set([
+  'KRA-IDF-2026-9921',
+  'KRA-IDF-2026-8812',
+  'KRA-IDF-2026-7734',
+  'LOCAL-LPS-NAIROBI',
+  'KRA-IDF-2026-6641',
+]);
+
+const SAMPLE_EXCISE_SERIES = new Set([
+  'EXC-JW-2026-001',
+  'EXC-HN-2026-002',
+  'EXC-TQ-2026-003',
+  'KRA-LPS-2026-004',
+  'EXC-DJ-2026-005',
+]);
+
+export function isSampleSkuRecord(p: Partial<Product> & { id?: string }): boolean {
+  if (!p) return false;
+  const id = (p.id || '').trim();
+  const sku = (p.sku || '').trim().toUpperCase();
+  const sourceUrl = (p.sourceUrl || '').toLowerCase();
+  const importRef = (p.importDeclarationNumber || p.importEntryRef || '').trim();
+  const exciseSeries = (p.exciseStampSeries || '').trim();
+
+  if (
+    id.startsWith('nd-prod-') ||
+    id.startsWith('cat-prod-') ||
+    id.startsWith('cat-upd-') ||
+    id.startsWith('sample-') ||
+    id.startsWith('mock-') ||
+    id.startsWith('seed-')
+  ) {
+    return true;
+  }
+
+  if (
+    sku.startsWith('ND-') ||
+    sku === 'IPS-WHISKY-002' ||
+    sku === 'IPS-WHISKY-002-1L'
+  ) {
+    return true;
+  }
+
+  if (
+    sourceUrl.includes('nairobidrinks.co.ke') ||
+    sourceUrl.includes('urbantechdev.com/catalog/') ||
+    Boolean((p as any).internalProvenance)
+  ) {
+    return true;
+  }
+
+  if (
+    importRef.startsWith('IDF/2026/NRB/1') ||
+    SAMPLE_IMPORT_REFS.has(importRef) ||
+    SAMPLE_EXCISE_SERIES.has(exciseSeries)
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 // Detect real client device fingerprint & browser metadata for audit & security monitoring
 export function getDeviceFingerprint(): string {
@@ -28,7 +90,6 @@ export function getDeviceFingerprint(): string {
   return `${isMobile ? 'MobileApp' : 'Desktop'} · ${browser} (${platform}) · ${screenRes}`;
 }
 
-// Convert any NAIROBI_DRINKS_PRODUCTS item into a complete ERP Product with Auto-SKU & stock
 export function normalizeCatalogProduct(raw: Product, index: number): Product {
   const packSize = raw.packSize || raw.bottlesPerCase || 12;
   const abv = raw.alcoholPercentage ?? raw.abv ?? 40;
@@ -36,12 +97,9 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
   const wholesale = raw.wholesalePriceKes ?? raw.baseWholesalePrice ?? 2500;
   const retail = raw.retailPriceKes ?? raw.baseRetailPrice ?? 3200;
   const cost = raw.warehouseCostKes ?? raw.baseLandedCost ?? Math.round(wholesale * 0.82);
-  const isZeroStock = typeof window === 'undefined' || localStorage.getItem('vaairo_inventory_zero_stock') !== 'false';
-  const totalBottles = isZeroStock ? 0 : (raw.totalBottles ?? 0);
+  const totalBottles = raw.totalBottles ?? 0;
 
   const defaultBranchStock = JSON.stringify({});
-
-  // Real Barcode Governance: Products with real barcodes are registered & scanned
   const isReal = Boolean(raw.hasRealBarcode || raw.barcode);
   const realBarcode = raw.barcode || (isReal ? raw.barcode : undefined);
   const realCaseBarcode = raw.caseBarcode || (isReal ? raw.caseBarcode : undefined);
@@ -52,7 +110,7 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
     caseBarcode: realCaseBarcode,
     hasRealBarcode: isReal,
     barcodeVerificationStatus: isReal ? 'APPROVED_MASTER' : 'UNVERIFIED_SOURCE',
-    id: raw.id || `cat-prod-${index + 1}`,
+    id: raw.id || `prod-${Date.now()}-${index + 1}`,
     sku: raw.sku || generateAutoSku(raw.subCategory || 'Whisky', raw.volumeMl || 750, origin, index),
     category: raw.category === 'LPS' ? 'LPS' : 'IPS',
     subCategory: raw.subCategory || 'Whisky',
@@ -76,16 +134,12 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
     totalBottles,
     branchStockSummary: raw.branchStockSummary || defaultBranchStock,
     geoPriceOverrides: raw.geoPriceOverrides || JSON.stringify({}),
-    createdAt: raw.createdAt || '2026-10-01T00:00:00.000Z',
-    isScanned: raw.isScanned !== undefined ? raw.isScanned : isReal, // Scanned if real barcode exists or explicitly scanned
+    createdAt: raw.createdAt || new Date().toISOString(),
+    isScanned: raw.isScanned !== undefined ? raw.isScanned : isReal,
   };
 }
 
-import { AUDITED_INVENTORY } from './data/auditedBondedProducts';
-
-export const MASTER_IMPORTED_INVENTORY: Product[] = (AUDITED_INVENTORY as any[]).map((p, idx) =>
-  normalizeCatalogProduct(p as any, idx)
-);
+export const MASTER_IMPORTED_INVENTORY: Product[] = [];
 
 // Auto SKU Generator for independent liquor products
 const SUBCATEGORY_PREFIX: Record<string, string> = {
@@ -506,6 +560,23 @@ export const TARGET_ACCESS_MATRIX: ModuleAccessItem[] = [
       'Delivery Rider': 'None',
     },
   },
+  {
+    moduleName: 'Customer orders & delivery dispatch',
+    moduleId: 'delivery_management',
+    description: 'Inspect online customer order details, assign riders, dispatch deliveries, and confirm fulfillment.',
+    permissions: {
+      Admin: 'Full',
+      Accountant: 'None',
+      HR: 'None',
+      'Sales Manager': 'Manage',
+      'Branch Manager': 'Branch scope',
+      'Inventory Controller': 'None',
+      'Counter Cashier': 'None',
+      'Affiliate Sales Representative': 'None',
+      'Delivery Manager': 'Manage',
+      'Delivery Rider': 'Assigned deliveries',
+    },
+  },
 ];
 
 export const ROLE_DISTINCTIONS: Record<StaffRole, string> = {
@@ -557,6 +628,7 @@ export const ROLE_PERMISSIONS: Record<
       'audit_security',
       'customer_portal',
       'outlets_restaurants',
+      'delivery_management',
     ],
     canCreateRoles: ['HR'], // Admin provisions HR, who then manages other operational roles
     badgeTitle: 'Executive System Administrator (Google Auth)',
@@ -607,6 +679,7 @@ export const ROLE_PERMISSIONS: Record<
       'audit_security',
       'outlets_restaurants',
       'customer_portal',
+      'delivery_management',
     ],
     canCreateRoles: [],
     badgeTitle: 'National Distribution Sales Manager (6-Digit PIN)',
@@ -627,6 +700,7 @@ export const ROLE_PERMISSIONS: Record<
       'hr_rbac',
       'audit_security',
       'outlets_restaurants',
+      'delivery_management',
     ],
     canCreateRoles: ['Counter Cashier', 'Affiliate Sales Representative', 'Delivery Rider'],
     badgeTitle: 'Regional Branch Manager (6-Digit PIN)',
@@ -800,6 +874,14 @@ export const ERP_FEATURE_CATALOG: GranularFeatureDefinition[] = [
     description: 'Commercial outlet operations, food/beverage menus, bar pantry stock, and central liquor top-ups.',
     isModule: true,
     moduleId: 'outlets_restaurants',
+  },
+  {
+    key: 'delivery_management',
+    label: 'Customer Order Details & Delivery Dispatch',
+    category: 'POS & Sales Operations',
+    description: 'Inspect full customer order details, assign riders, dispatch deliveries, and confirm order fulfillment.',
+    isModule: true,
+    moduleId: 'delivery_management',
   },
 
   // Granular Sub-Features

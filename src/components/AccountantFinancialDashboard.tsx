@@ -20,6 +20,7 @@ import {
   Receipt,
   Sparkles,
   HelpCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   Product,
@@ -29,9 +30,14 @@ import {
   StaffMember,
   PayrollRun,
   LineItem,
+  Partner,
+  ExternalCustomer,
+  ComplianceRecord,
 } from '../types';
 import { formatKes, exportReportToPDF, exportToCSV } from '../erpUtils';
 import { BarGraph, PieChart as AnalyticsPieChart } from './common/AnalyticsCharts';
+import { KraReturnsPanel } from './KraReturnsExportModal';
+import { KraReturnScheduleType } from '../utils/kraReturnsExport';
 
 interface AccountantFinancialDashboardProps {
   currentUser: StaffMember;
@@ -39,8 +45,14 @@ interface AccountantFinancialDashboardProps {
   transactions: TransactionDoc[];
   branches: Branch[];
   regions: GeoRegion[];
+  partners?: Partner[];
+  externalCustomers?: ExternalCustomer[];
+  staffList?: StaffMember[];
+  complianceRecords?: ComplianceRecord[];
   payrollRuns?: PayrollRun[];
   onPreviewDoc?: (doc: TransactionDoc) => void;
+  onOpenKraReturns?: (defaultTab?: KraReturnScheduleType) => void;
+  onTriggerToast?: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
 type DateFilter = 'ALL' | 'YEAR' | 'MONTH' | 'WEEK' | 'TODAY';
@@ -52,8 +64,14 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
   transactions,
   branches,
   regions,
+  partners = [],
+  externalCustomers = [],
+  staffList = [],
+  complianceRecords = [],
   payrollRuns = [],
   onPreviewDoc,
+  onOpenKraReturns,
+  onTriggerToast,
 }) => {
   const [dateFilter, setDateFilter] = useState<DateFilter>('ALL');
   const [activeTab, setActiveTab] = useState<ActiveFinanceTab>('summary');
@@ -495,6 +513,19 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
           ))}
         </div>
         <button
+          onClick={() => {
+            if (onOpenKraReturns) {
+              onOpenKraReturns('VAT3_SALES_SEC_B');
+            } else {
+              setActiveTab('tax_credit');
+            }
+          }}
+          className="px-3.5 py-2.5 bg-[#34D186] active:bg-emerald-500 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
+        >
+          <FileSpreadsheet className="w-4 h-4 stroke-[2.4]" />
+          <span>KRA Returns (.xlsx)</span>
+        </button>
+        <button
           onClick={handleExportComprehensiveFinancialPDF}
           className="px-3.5 py-2.5 bg-[#FFDE00] active:bg-amber-400 text-[#0A006E] border-2 border-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
         >
@@ -558,15 +589,28 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
             </div>
 
             <button
+              onClick={() => {
+                if (onOpenKraReturns) {
+                  onOpenKraReturns('VAT3_SALES_SEC_B');
+                } else {
+                  setActiveTab('tax_credit');
+                }
+              }}
+              className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition whitespace-nowrap shrink-0"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              KRA Returns (.xlsx)
+            </button>
+            <button
               onClick={handleExportComprehensiveFinancialPDF}
-              className="px-3.5 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition whitespace-nowrap"
+              className="px-3.5 py-2 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer shadow-md transition whitespace-nowrap shrink-0"
             >
               <Download className="w-3.5 h-3.5" />
               Export Financial PDF
             </button>
             <button
               onClick={handleExportFinancialLedgerCSV}
-              className="px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/30 text-white rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition whitespace-nowrap"
+              className="px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/30 text-white rounded-xl text-xs font-montserrat font-bold flex items-center gap-1.5 cursor-pointer transition whitespace-nowrap shrink-0"
             >
               <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
               Export CSV
@@ -1515,6 +1559,21 @@ export const AccountantFinancialDashboard: React.FC<AccountantFinancialDashboard
       {/* TAB 5: KRA TAX, VAT & ACCOUNTS RECEIVABLE */}
       {activeTab === 'tax_credit' && (
         <div className="space-y-6">
+          <KraReturnsPanel
+            currentUser={currentUser}
+            transactions={transactions}
+            products={products}
+            partners={partners}
+            externalCustomers={externalCustomers}
+            staffList={staffList}
+            payrollRuns={payrollRuns}
+            complianceRecords={complianceRecords}
+            branches={branches}
+            regions={regions}
+            defaultTab="VAT3_SALES_SEC_B"
+            onTriggerToast={onTriggerToast}
+          />
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* KRA Tax Liabilities */}
             <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-4">

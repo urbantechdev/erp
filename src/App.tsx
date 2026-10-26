@@ -45,6 +45,7 @@ import {
   Clock,
   Coins,
   Truck,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   db,
@@ -81,7 +82,7 @@ import {
 import {
   getDeviceFingerprint,
   ROLE_PERMISSIONS,
-  MASTER_IMPORTED_INVENTORY,
+  isSampleSkuRecord,
   formatKes,
   getEffectiveUserModules,
 } from './erpUtils';
@@ -108,6 +109,7 @@ import {
 } from './components/ErpModulesPart2';
 import { RestaurantOutletManagement } from './components/RestaurantOutletManagement';
 import { DocumentPrintModal } from './components/DocumentPrintModal';
+import { CustomerOrderDetailsModal } from './components/CustomerOrderDetailsModal';
 import { ExternalCustomersModule } from './components/ExternalCustomersModule';
 import { ThermalPayslipModal } from './components/ThermalPayslipModal';
 import { OnboardItemsModal } from './components/OnboardItemsModal';
@@ -123,6 +125,8 @@ import { DeliveryManagementModule } from './components/DeliveryManagementModule'
 import { Header } from './components/Header';
 import { PhoneScannerCompanion } from './components/PhoneScannerCompanion';
 import { GoogleIcon } from './components/icons/GoogleIcon';
+import { KraReturnsExportModal } from './components/KraReturnsExportModal';
+import { KraReturnScheduleType } from './utils/kraReturnsExport';
 import { hashPin, isPinHashed, verifyPin, hashPassword, verifyPassword } from './utils/security';
 import { broadcastProductScanned } from './utils/productScanBroadcast';
 import { initGlobalClickSound, playSuccessSound, playErrorSound } from './utils/audioBeep';
@@ -419,16 +423,18 @@ export default function App() {
       return NAIROBI_GEO_REGIONS;
     }
   });
-  const [sampleCatalogEnabled, setSampleCatalogEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('vaairo_load_sample_catalog') === 'true';
-  });
   const [firestoreProducts, setFirestoreProducts] = useState<Product[]>(() => {
     try {
-      const isWiped = typeof window !== 'undefined' ? localStorage.getItem('vaairo_inventory_wiped_flag') !== 'false' : true;
-      if (isWiped) return [];
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('vaairo_load_sample_catalog');
+        if (localStorage.getItem('vaairo_inventory_wiped_flag') === 'true') {
+          return [];
+        }
+      }
       const saved = localStorage.getItem('erp_products_local_override');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.filter((p) => !isSampleSkuRecord(p)) : [];
     } catch {
       return [];
     }
@@ -668,13 +674,21 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<TransactionDoc | null>(null);
+  const [inspectingOrderTx, setInspectingOrderTx] = useState<TransactionDoc | null>(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
   const [isAccessMatrixOpen, setIsAccessMatrixOpen] = useState(false);
+  const [isKraReturnsModalOpen, setIsKraReturnsModalOpen] = useState(false);
+  const [kraReturnsDefaultTab, setKraReturnsDefaultTab] = useState<KraReturnScheduleType>('VAT3_SALES_SEC_B');
   const [isNativeWrappersModalOpen, setIsNativeWrappersModalOpen] = useState(false);
   const [userFeatureModalStaff, setUserFeatureModalStaff] = useState<StaffMember | null>(null);
   const [isUserFeatureModalOpen, setIsUserFeatureModalOpen] = useState(false);
+
+  const handleOpenKraReturns = (defaultTab?: KraReturnScheduleType) => {
+    setKraReturnsDefaultTab(defaultTab || 'VAT3_SALES_SEC_B');
+    setIsKraReturnsModalOpen(true);
+  };
   const [customRoleMatrix, setCustomRoleMatrix] = useState<Record<StaffRole, ERPModuleId[]> | undefined>(() => {
     try {
       const saved = localStorage.getItem('erp_custom_role_matrix');
@@ -707,11 +721,14 @@ export default function App() {
     }, 4500);
   };
 
-  // Products catalog: directly returns real database products from Firestore (erp-db-1)
+  // Products catalog: strictly returns real database products from Firestore (erp-db-1) with zero sample SKUs
   const products = useMemo<Product[]>(() => {
-    // When real products exist in Firestore (from CSV upload or manual creation), return them directly
-    if (firestoreProducts.length > 0) {
-      return firestoreProducts.map((p) => {
+    if (firestoreProducts.length === 0) {
+      return [];
+    }
+    return firestoreProducts
+      .filter((p) => !isSampleSkuRecord(p))
+      .map((p) => {
         const isReal = Boolean(p.hasRealBarcode || p.barcode);
         return {
           ...p,
@@ -721,21 +738,7 @@ export default function App() {
           isScanned: Boolean(p.isScanned || isReal),
         };
       });
-    }
-
-    // If database is empty and sample catalog is not explicitly opted into, return 0 SKUs
-    if (!sampleCatalogEnabled) {
-      return [];
-    }
-
-    // Only if sample preview is explicitly toggled by user, provide sample reference items
-    const isZeroStock = typeof window === 'undefined' || localStorage.getItem('vaairo_inventory_zero_stock') !== 'false';
-    return MASTER_IMPORTED_INVENTORY.map((baseItem) => ({
-      ...baseItem,
-      totalBottles: isZeroStock ? 0 : (baseItem.totalBottles ?? 0),
-      branchStockSummary: isZeroStock ? JSON.stringify({}) : (baseItem.branchStockSummary || JSON.stringify({})),
-    }));
-  }, [firestoreProducts, sampleCatalogEnabled]);
+  }, [firestoreProducts]);
 
   // Derive latest finalized payroll record for current user session
   const currentUserLatestPayrollRecord = useMemo<PayrollRecord | null>(() => {
@@ -781,6 +784,11 @@ export default function App() {
     }
     return transactions;
   }, [transactions, isBranchManager, branchManagerBranchId, branchManagerBranchName]);
+
+  const liveInspectingOrder = useMemo<TransactionDoc | null>(() => {
+    if (!inspectingOrderTx) return null;
+    return transactions.find((t) => t.id === inspectingOrderTx.id) || inspectingOrderTx;
+  }, [inspectingOrderTx, transactions]);
 
   const scopedTransfers = useMemo(() => {
     if (isBranchManager && branchManagerBranchId) {
@@ -1041,9 +1049,19 @@ export default function App() {
     const unsubProducts = subscribeWithFallback<Product>(
       'products',
       (list) => {
-        setFirestoreProducts(list);
+        const sampleDocs = list.filter((p) => isSampleSkuRecord(p));
+        if (sampleDocs.length > 0) {
+          sampleDocs.forEach((sp) => {
+            deleteDoc(doc(db, 'products', sp.id)).catch(() => {});
+          });
+        }
+        const cleanList = list.filter((p) => !isSampleSkuRecord(p));
+        setFirestoreProducts(cleanList);
         try {
-          localStorage.setItem('erp_products_local_override', JSON.stringify(list));
+          localStorage.setItem('erp_products_local_override', JSON.stringify(cleanList));
+          if (cleanList.length > 0) {
+            localStorage.setItem('vaairo_inventory_wiped_flag', 'false');
+          }
         } catch {}
       },
       'products'
@@ -1228,7 +1246,6 @@ export default function App() {
   ) => {
     const baseProd =
       products.find((p) => p.id === productId) ||
-      MASTER_IMPORTED_INVENTORY.find((p) => p.id === productId) ||
       firestoreProducts.find((p) => p.id === productId);
 
     const now = new Date().toISOString();
@@ -2115,12 +2132,82 @@ export default function App() {
     }
   };
 
+  const handleProcessCustomerDeliveryUpdate = async (
+    txId: string,
+    updates: Partial<TransactionDoc>
+  ): Promise<boolean> => {
+    try {
+      const existingTx = transactions.find((t) => t.id === txId);
+      setTransactions((prev) => {
+        const next = prev.map((t) => (t.id === txId ? { ...t, ...updates } : t));
+        try {
+          localStorage.setItem('erp_transactions_backup', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      if (inspectingOrderTx && inspectingOrderTx.id === txId) {
+        setInspectingOrderTx((prev) => (prev ? { ...prev, ...updates } : prev));
+      }
+
+      try {
+        await setDoc(doc(db, 'transactions', txId), cleanFirestoreData(updates), { merge: true });
+      } catch (err) {
+        console.warn('[Firestore] Delivery update saved locally, cloud sync pending:', err);
+      }
+
+      const orderNumber = existingTx?.docNumber || txId;
+      const customerLabel = existingTx?.customerName || 'Customer';
+
+      if (updates.deliveryStatus === 'Out for Delivery') {
+        triggerToast(
+          'success',
+          `Order ${orderNumber} Dispatched`,
+          `Assigned to ${updates.assignedRiderName || 'Dispatch Rider'} for delivery to ${customerLabel}.`
+        );
+      } else if (updates.deliveryStatus === 'Delivered') {
+        triggerToast(
+          'success',
+          `Order ${orderNumber} Delivered & Fulfilled`,
+          `Completed customer delivery for ${customerLabel}.`
+        );
+      } else {
+        triggerToast(
+          'success',
+          `Order ${orderNumber} Updated`,
+          `Delivery status updated for ${customerLabel}.`
+        );
+      }
+
+      if (currentUser) {
+        await recordAuditLog(
+          currentUser.name,
+          currentUser.role,
+          currentUser.email,
+          `Order Delivery ${updates.deliveryStatus || 'Update'} (${orderNumber})`,
+          'Delivery & Dispatch Operations',
+          `Processed delivery for ${customerLabel} (${orderNumber}): status=${updates.deliveryStatus || existingTx?.deliveryStatus || 'Updated'}${updates.assignedRiderName ? `, rider=${updates.assignedRiderName}` : ''}`,
+          existingTx?.branchName || currentUser.branchName,
+          'Info'
+        );
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Failed to process delivery update:', error);
+      triggerToast('error', 'Delivery Update Failed', 'Could not update customer order delivery status.');
+      return false;
+    }
+  };
+
   const handleCreateProduct = async (prodDraft: Omit<Product, 'id' | 'createdAt'>) => {
     const id = `prod-${Date.now()}`;
     const fullProd: Product = cleanFirestoreData({
       ...prodDraft,
-      barcode: prodDraft.isOnboarded ? prodDraft.barcode : undefined,
-      caseBarcode: prodDraft.isOnboarded ? prodDraft.caseBarcode : undefined,
+      barcode: prodDraft.barcode || undefined,
+      caseBarcode: prodDraft.caseBarcode || undefined,
+      isOnboarded: true,
+      status: prodDraft.status || 'Active',
       id,
       createdAt: new Date().toISOString(),
     });
@@ -2130,6 +2217,8 @@ export default function App() {
       const next = [fullProd, ...prev.filter((p) => p.id !== id)];
       try {
         localStorage.setItem('erp_products_local_override', JSON.stringify(next));
+        localStorage.setItem('vaairo_inventory_wiped_flag', 'false');
+        localStorage.setItem('vaairo_inventory_zero_stock', 'false');
       } catch {}
       return next;
     });
@@ -2194,7 +2283,7 @@ export default function App() {
     try {
       const prod =
         products.find((p) => p.id === productId) ||
-        MASTER_IMPORTED_INVENTORY.find((p) => p.id === productId);
+        firestoreProducts.find((p) => p.id === productId);
       if (!prod) return { success: false, message: 'Product not found in system.' };
 
       let branchMap: Record<string, number> = {};
@@ -2562,9 +2651,9 @@ export default function App() {
 
   const handleCreateStockTransfer = async (
     trDraft: Omit<StockTransfer, 'id' | 'createdAt'>,
-    updatedProd: { productId: string; newBranchStockJson: string }
+    updatedProd?: { productId: string; newBranchStockJson: string }
   ) => {
-    const id = `trf-${Date.now()}`;
+    const id = `trf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const fullTr: StockTransfer = cleanFirestoreData({
       ...trDraft,
       id,
@@ -2579,9 +2668,11 @@ export default function App() {
       return next;
     });
 
-    await persistProductState(updatedProd.productId, {
-      branchStockSummary: updatedProd.newBranchStockJson,
-    });
+    if (updatedProd) {
+      await persistProductState(updatedProd.productId, {
+        branchStockSummary: updatedProd.newBranchStockJson,
+      });
+    }
 
     try {
       await setDoc(doc(db, 'stock_transfers', id), fullTr);
@@ -2589,23 +2680,157 @@ export default function App() {
       console.warn('[Firestore] Transfer saved locally, cloud sync pending:', error);
     }
 
-    triggerToast(
-      'success',
-      `Transfer ${fullTr.transferNo} Dispatched`,
-      `${fullTr.quantityBottles} btls of ${fullTr.sku} → ${fullTr.toBranchName}.`
-    );
+    if (fullTr.status === 'Pending Authorization') {
+      triggerToast(
+        'success',
+        `Transfer ${fullTr.transferNo} Awaiting Manager Auth`,
+        `${fullTr.quantityBottles} btls of ${fullTr.sku} queued for Manager authorization (${fullTr.fromBranchName} → ${fullTr.toBranchName}).`
+      );
+    } else {
+      triggerToast(
+        'success',
+        `Transfer ${fullTr.transferNo} Dispatched`,
+        `${fullTr.quantityBottles} btls of ${fullTr.sku} → ${fullTr.toBranchName}.`
+      );
+    }
+
     if (currentUser) {
       await recordAuditLog(
         currentUser.name,
         currentUser.role,
         currentUser.email,
-        `Stock Transfer ${fullTr.transferNo}`,
+        fullTr.status === 'Pending Authorization'
+          ? `Initiated Stock Transfer ${fullTr.transferNo} (Pending Auth)`
+          : `Stock Transfer ${fullTr.transferNo}`,
         'Branches & Transfers',
-        `Transferred ${fullTr.quantityBottles} btls of ${fullTr.sku} from ${fullTr.fromBranchName} to ${fullTr.toBranchName}`,
+        fullTr.status === 'Pending Authorization'
+          ? `Inventory initiated transfer of ${fullTr.quantityBottles} btls of ${fullTr.sku} from ${fullTr.fromBranchName} to ${fullTr.toBranchName} — awaiting Manager authorization`
+          : `Transferred ${fullTr.quantityBottles} btls of ${fullTr.sku} from ${fullTr.fromBranchName} to ${fullTr.toBranchName}`,
         fullTr.fromBranchName,
         'Financial'
       );
     }
+  };
+
+  const handleAuthorizeStockTransfer = async (transferId: string) => {
+    if (!currentUser || (currentUser.role !== 'Admin' && currentUser.role !== 'Branch Manager')) {
+      triggerToast('error', 'Authorization Restricted', 'Only Admin or Branch Manager can authorize stock transfers.');
+      return;
+    }
+    const tr = transfers.find((t) => t.id === transferId);
+    if (!tr || tr.status !== 'Pending Authorization') return;
+
+    const prod = products.find((p) => p.id === tr.productId);
+    let nextBranchStockJson: string | undefined;
+    if (prod) {
+      let branchStock: Record<string, number> = {};
+      try {
+        branchStock = prod.branchStockSummary ? JSON.parse(prod.branchStockSummary) : {};
+      } catch {
+        branchStock = {};
+      }
+      const currentFrom =
+        branchStock[tr.fromBranchId] ??
+        Math.floor(prod.totalBottles / Math.max(1, branches.length));
+      const actualDeduct = Math.min(Math.max(0, currentFrom), tr.quantityBottles);
+      branchStock[tr.fromBranchId] = Math.max(0, currentFrom - actualDeduct);
+      nextBranchStockJson = JSON.stringify(branchStock);
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatedTr: StockTransfer = cleanFirestoreData({
+      ...tr,
+      status: 'Dispatched',
+      authorizedBy: currentUser.name,
+      authorizedByRole: currentUser.role,
+      authorizedAt: nowIso,
+    });
+
+    setTransfers((prev) => {
+      const next = prev.map((t) => (t.id === transferId ? updatedTr : t));
+      try {
+        localStorage.setItem('erp_transfers_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    if (prod && nextBranchStockJson) {
+      await persistProductState(prod.id, {
+        branchStockSummary: nextBranchStockJson,
+      });
+    }
+
+    try {
+      await setDoc(doc(db, 'stock_transfers', transferId), updatedTr, { merge: true });
+    } catch (error) {
+      console.warn('[Firestore] Transfer authorization saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `Transfer ${tr.transferNo} Authorized & Dispatched`,
+      `Authorized ${tr.quantityBottles} btls of ${tr.productName} (${tr.fromBranchName} → ${tr.toBranchName}).`
+    );
+
+    await recordAuditLog(
+      currentUser.name,
+      currentUser.role,
+      currentUser.email,
+      `Authorized Stock Transfer ${tr.transferNo}`,
+      'Branches & Transfers',
+      `Manager authorized transfer initiated by ${tr.initiatedBy}: ${tr.quantityBottles} btls of ${tr.sku} from ${tr.fromBranchName} to ${tr.toBranchName}`,
+      tr.fromBranchName,
+      'Financial'
+    );
+  };
+
+  const handleRejectStockTransfer = async (transferId: string) => {
+    if (!currentUser || (currentUser.role !== 'Admin' && currentUser.role !== 'Branch Manager')) {
+      triggerToast('error', 'Authorization Restricted', 'Only Admin or Branch Manager can reject stock transfers.');
+      return;
+    }
+    const tr = transfers.find((t) => t.id === transferId);
+    if (!tr || tr.status !== 'Pending Authorization') return;
+
+    const nowIso = new Date().toISOString();
+    const updatedTr: StockTransfer = cleanFirestoreData({
+      ...tr,
+      status: 'Rejected',
+      rejectedBy: `${currentUser.name} (${currentUser.role})`,
+      rejectedAt: nowIso,
+      rejectionReason: 'Declined during Manager transfer review',
+    });
+
+    setTransfers((prev) => {
+      const next = prev.map((t) => (t.id === transferId ? updatedTr : t));
+      try {
+        localStorage.setItem('erp_transfers_backup', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await setDoc(doc(db, 'stock_transfers', transferId), updatedTr, { merge: true });
+    } catch (error) {
+      console.warn('[Firestore] Transfer rejection saved locally, cloud sync pending:', error);
+    }
+
+    triggerToast(
+      'success',
+      `Transfer ${tr.transferNo} Rejected`,
+      `Declined transfer request for ${tr.quantityBottles} btls of ${tr.productName}. Source stock unchanged.`
+    );
+
+    await recordAuditLog(
+      currentUser.name,
+      currentUser.role,
+      currentUser.email,
+      `Rejected Stock Transfer ${tr.transferNo}`,
+      'Branches & Transfers',
+      `Manager rejected transfer initiated by ${tr.initiatedBy}: ${tr.quantityBottles} btls of ${tr.sku} (${tr.fromBranchName} → ${tr.toBranchName})`,
+      tr.fromBranchName,
+      'Security'
+    );
   };
 
   const handleReceiveStockTransfer = async (transferId: string) => {
@@ -3002,7 +3227,6 @@ export default function App() {
       localStorage.setItem('vaairo_inventory_wiped_flag', 'true');
       localStorage.removeItem('vaairo_load_sample_catalog');
       localStorage.removeItem('erp_products_local_override');
-      setSampleCatalogEnabled(false);
 
       // Query and delete all documents in products collection from Firestore
       const snap = await getDocs(collection(db, 'products')).catch(() => null);
@@ -3066,7 +3290,6 @@ export default function App() {
       localStorage.setItem('vaairo_inventory_zero_stock', 'true');
       localStorage.removeItem('vaairo_load_sample_catalog');
       localStorage.removeItem('erp_products_local_override');
-      setSampleCatalogEnabled(false);
 
       const snap = await getDocs(collection(db, 'products')).catch(() => null);
       let wipedCount = 0;
@@ -3088,19 +3311,6 @@ export default function App() {
     } catch (error) {
       console.error('Wipe failed:', error);
       triggerToast('error', 'Wipe Failed', 'Could not complete inventory wipe.');
-    }
-  };
-
-  const handleToggleSampleCatalog = (enable: boolean) => {
-    setSampleCatalogEnabled(enable);
-    if (enable) {
-      localStorage.setItem('vaairo_load_sample_catalog', 'true');
-      localStorage.setItem('vaairo_inventory_wiped_flag', 'false');
-      triggerToast('success', 'Sample Catalog Loaded', 'Loaded 2,976 sample reference products.');
-    } else {
-      localStorage.setItem('vaairo_load_sample_catalog', 'false');
-      localStorage.setItem('vaairo_inventory_wiped_flag', 'true');
-      triggerToast('success', 'Sample Catalog Removed', 'Returned to clean 0 SKU inventory.');
     }
   };
 
@@ -3835,6 +4045,37 @@ export default function App() {
               </button>
             )}
 
+            {/* Quick Action: KRA Returns Spreadsheet Download for Admin, Accountant, HR, Branch/Sales Manager */}
+            {(currentUser.role === 'Admin' ||
+              currentUser.role === 'Accountant' ||
+              currentUser.role === 'HR' ||
+              currentUser.role === 'Branch Manager' ||
+              currentUser.role === 'Sales Manager') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileDrawerOpen(false);
+                  handleOpenKraReturns(currentUser.role === 'HR' ? 'PAYE_P10_SEC_B' : 'VAT3_SALES_SEC_B');
+                }}
+                className="w-full p-3 rounded-2xl bg-white hover:bg-slate-50 text-[#0A006E] border-2 border-[#0A006E] flex items-center justify-between cursor-pointer shadow-xs transition active:scale-98"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shadow-xs">
+                    <FileSpreadsheet className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs font-montserrat font-black leading-tight text-[#0A006E]">
+                      KRA Returns Spreadsheets (.xlsx / .csv)
+                    </div>
+                    <div className="text-[10px] text-slate-600 font-medium">
+                      Download VAT3, PAYE P10, Housing Levy &amp; TOT
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-[#0A006E]" />
+              </button>
+            )}
+
             {/* 3. All ERP Modules Navigation Grouped Per Department */}
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
@@ -4150,11 +4391,33 @@ export default function App() {
               })}
             </div>
 
+            {/* Quick KRA iTax Returns Spreadsheet Button in Desktop Sidebar */}
+            {(currentUser.role === 'Admin' ||
+              currentUser.role === 'Accountant' ||
+              currentUser.role === 'HR' ||
+              currentUser.role === 'Branch Manager' ||
+              currentUser.role === 'Sales Manager') && (
+              <button
+                type="button"
+                onClick={() =>
+                  handleOpenKraReturns(
+                    currentUser.role === 'HR' ? 'PAYE_P10_SEC_B' : 'VAT3_SALES_SEC_B'
+                  )
+                }
+                className="w-full min-h-[46px] px-3 py-2 rounded-2xl text-xs font-montserrat flex items-center gap-3 transition-all cursor-pointer whitespace-nowrap border-2 border-[#0A006E] bg-white hover:bg-[#34D186]/20 text-[#0A006E] font-black shadow-xs mt-3"
+              >
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-[#0A006E] text-[#34D186]">
+                  <FileSpreadsheet className="w-4 h-4 stroke-[2.3]" />
+                </div>
+                <span className="truncate text-xs">KRA Returns (.xlsx / .csv)</span>
+              </button>
+            )}
+
             {/* Target Access Model Matrix Button */}
             <button
               type="button"
               onClick={() => setIsAccessMatrixOpen(true)}
-              className="w-full min-h-[46px] px-3 py-2 rounded-2xl text-xs font-montserrat flex items-center gap-3 transition-all cursor-pointer whitespace-nowrap border-2 border-[#0A006E] bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] font-black shadow-xs mt-3"
+              className="w-full min-h-[46px] px-3 py-2 rounded-2xl text-xs font-montserrat flex items-center gap-3 transition-all cursor-pointer whitespace-nowrap border-2 border-[#0A006E] bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] font-black shadow-xs mt-2"
             >
               <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-[#0A006E] text-[#FFDE00]">
                 <ShieldCheck className="w-4 h-4 stroke-[2.4]" />
@@ -4182,6 +4445,8 @@ export default function App() {
               branches={scopedBranches}
               regions={scopedRegions}
               partners={scopedPartners}
+              externalCustomers={scopedExternalCustomers}
+              complianceRecords={scopedComplianceRecords}
               transactions={scopedTransactions}
               transfers={scopedTransfers}
               staffList={scopedStaffList}
@@ -4189,7 +4454,12 @@ export default function App() {
               payrollRuns={payrollRuns}
               onOpenPayslip={(record) => setViewingPayslipRecord(record)}
               onPreviewDoc={(d) => setPreviewDoc(d)}
+              onInspectOrder={(d) => setInspectingOrderTx(d)}
+              onAuthorizeStockTransfer={handleAuthorizeStockTransfer}
+              onRejectStockTransfer={handleRejectStockTransfer}
               onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
+              onOpenKraReturns={handleOpenKraReturns}
+              onTriggerToast={triggerToast}
               onNavigateModule={handleSelectModule}
             />
           )}
@@ -4261,8 +4531,6 @@ export default function App() {
               onWipeInventoryToZero={handleWipeInventoryToZero}
               onLogStockIncident={handleLogStockIncident}
               onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
-              sampleCatalogEnabled={sampleCatalogEnabled}
-              onToggleSampleCatalog={handleToggleSampleCatalog}
             />
           )}
 
@@ -4279,6 +4547,8 @@ export default function App() {
               onDeleteBranch={handleDeleteBranch}
               onSetMainBranch={handleSetMainBranch}
               onCreateStockTransfer={handleCreateStockTransfer}
+              onAuthorizeStockTransfer={handleAuthorizeStockTransfer}
+              onRejectStockTransfer={handleRejectStockTransfer}
               onReceiveStockTransfer={handleReceiveStockTransfer}
             />
           )}
@@ -4313,6 +4583,8 @@ export default function App() {
               products={products}
               onIssueCreditNote={(cn) => handleCommitTransaction(cn, [])}
               onPreviewDoc={(d) => setPreviewDoc(d)}
+              onInspectOrder={(d) => setInspectingOrderTx(d)}
+              onOpenKraReturns={handleOpenKraReturns}
             />
           )}
 
@@ -4322,7 +4594,14 @@ export default function App() {
               records={scopedComplianceRecords}
               branches={scopedBranches}
               products={products}
+              transactions={scopedTransactions}
+              partners={scopedPartners}
+              externalCustomers={scopedExternalCustomers}
+              staffList={scopedStaffList}
+              payrollRuns={payrollRuns}
+              regions={scopedRegions}
               onCreateCompliance={handleCreateCompliance}
+              onTriggerToast={triggerToast}
             />
           )}
 
@@ -4343,6 +4622,7 @@ export default function App() {
                 setUserFeatureModalStaff(staff);
                 setIsUserFeatureModalOpen(true);
               }}
+              onOpenKraReturns={handleOpenKraReturns}
               onTriggerToast={triggerToast}
             />
           )}
@@ -4396,7 +4676,11 @@ export default function App() {
               currentUser={currentUser}
               branches={scopedBranches}
               staffList={scopedStaffList}
+              transactions={scopedTransactions}
               onCreateStaff={handleCreateStaff}
+              onInspectCustomerOrder={(tx) => setInspectingOrderTx(tx)}
+              onProcessDeliveryUpdate={handleProcessCustomerDeliveryUpdate}
+              onPreviewDoc={(d) => setPreviewDoc(d)}
               onTriggerToast={triggerToast}
             />
           )}
@@ -4443,6 +4727,18 @@ export default function App() {
 
       {/* Commercial Print & PDF Modal */}
       <DocumentPrintModal docData={previewDoc} onClose={() => setPreviewDoc(null)} />
+
+      {/* Customer Order Details & Delivery Processing Modal */}
+      {liveInspectingOrder && currentUser && (
+        <CustomerOrderDetailsModal
+          order={liveInspectingOrder}
+          onClose={() => setInspectingOrderTx(null)}
+          staffList={scopedStaffList}
+          currentUser={currentUser}
+          onProcessDeliveryUpdate={handleProcessCustomerDeliveryUpdate}
+          onPreviewDoc={(d) => setPreviewDoc(d)}
+        />
+      )}
 
       {/* Official 80mm/58mm Thermal Payslip Modal */}
       {viewingPayslipRecord && (
@@ -4500,37 +4796,57 @@ export default function App() {
         />
       )}
 
+      {/* KRA iTax Returns Spreadsheet Export Modal */}
+      {isKraReturnsModalOpen && currentUser && (
+        <KraReturnsExportModal
+          isOpen={isKraReturnsModalOpen}
+          onClose={() => setIsKraReturnsModalOpen(false)}
+          currentUser={currentUser}
+          transactions={scopedTransactions}
+          products={products}
+          partners={scopedPartners}
+          externalCustomers={scopedExternalCustomers}
+          staffList={scopedStaffList}
+          payrollRuns={payrollRuns}
+          complianceRecords={scopedComplianceRecords}
+          branches={scopedBranches}
+          regions={scopedRegions}
+          defaultTab={kraReturnsDefaultTab}
+          onTriggerToast={triggerToast}
+        />
+      )}
+
       {/* Inactivity Auto-Logoff Warning Modal */}
       {showInactivityWarning && currentUser && (
         <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-sm w-full p-6 text-center space-y-6">
             <div className="relative flex items-center justify-center">
               {/* Circular Progress */}
-              <svg className="w-24 h-24 transform -rotate-90">
+              <svg className="w-28 h-28 transform -rotate-90">
                 <circle
-                  cx="48"
-                  cy="48"
-                  r="40"
+                  cx="56"
+                  cy="56"
+                  r="48"
                   stroke="currentColor"
                   strokeWidth="8"
                   fill="transparent"
-                  className="text-slate-200"
+                  className="text-slate-100"
                 />
                 <circle
-                  cx="48"
-                  cy="48"
-                  r="40"
+                  cx="56"
+                  cy="56"
+                  r="48"
                   stroke="currentColor"
                   strokeWidth="8"
                   fill="transparent"
-                  strokeDasharray={251.2}
-                  strokeDashoffset={251.2 - (251.2 * (30 - inactivityCountdown)) / 30}
+                  strokeDasharray={301.6}
+                  strokeDashoffset={301.6 - (301.6 * (30 - inactivityCountdown)) / 30}
                   className="text-amber-500 transition-all duration-1000 ease-linear"
                   strokeLinecap="round"
                 />
               </svg>
-              {/* Countdown Numbers */}
-              <div className="absolute text-5xl font-montserrat font-black text-[#0A006E] animate-pulse">
+              {/* Countdown Numbers: Large Plus Jakarta Sans Bold Prompt */}
+              <div className="absolute text-6xl font-jakarta font-black text-[#0A006E] font-mono-tabular tracking-tight animate-pulse drop-shadow-xs">
                 {inactivityCountdown}
               </div>
             </div>

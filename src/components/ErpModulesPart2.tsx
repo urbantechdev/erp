@@ -30,6 +30,8 @@ import {
   FileText,
   Sliders,
   ShieldAlert,
+  Phone,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -37,6 +39,7 @@ import {
   Branch,
   GeoRegion,
   Partner,
+  ExternalCustomer,
   TransactionDoc,
   ComplianceRecord,
   AuditLog,
@@ -58,6 +61,8 @@ import { hashPassword } from '../utils/security';
 import { cleanFirestoreData } from '../firebase';
 import { AnimatedSuccessTickIcon, StatusFeedbackToast } from './AnimatedFeedback';
 import { ConfirmationModal } from './common/ConfirmationModal';
+import { KraReturnsPanel } from './KraReturnsExportModal';
+import { KraReturnScheduleType } from '../utils/kraReturnsExport';
 
 // ---------------------------------------------------------------------------
 // 5. SUPPLIERS, LICENSED RETAILERS & LOGISTICS ONBOARDING MODULE
@@ -697,6 +702,8 @@ export const DocumentsAndCreditNotesModule: React.FC<{
   products: Product[];
   onIssueCreditNote: (cn: Omit<TransactionDoc, 'id' | 'createdAt'>) => Promise<TransactionDoc | null>;
   onPreviewDoc: (doc: TransactionDoc) => void;
+  onInspectOrder?: (doc: TransactionDoc) => void;
+  onOpenKraReturns?: (defaultTab?: KraReturnScheduleType) => void;
 }> = ({
   currentUser,
   transactions,
@@ -705,6 +712,8 @@ export const DocumentsAndCreditNotesModule: React.FC<{
   products,
   onIssueCreditNote,
   onPreviewDoc,
+  onInspectOrder,
+  onOpenKraReturns,
 }) => {
   const [filterDocType, setFilterDocType] = useState<string>('All');
   const [refInvoiceNo, setRefInvoiceNo] = useState('');
@@ -736,13 +745,14 @@ export const DocumentsAndCreditNotesModule: React.FC<{
           t.docType === 'Receipt'
       );
     } else if (role === 'Sales Manager') {
-      // Commercial sales documents
+      // Commercial sales & online customer order documents
       docs = docs.filter(
         (t) =>
           t.channel.includes('Wholesale') ||
           t.channel.includes('Sales') ||
           t.docType === 'Invoice' ||
-          t.docType === 'Quote'
+          t.docType === 'Quote' ||
+          t.docType === 'Online Order'
       );
     } else if (role === 'Branch Manager') {
       // Branch scoped documents
@@ -867,7 +877,17 @@ export const DocumentsAndCreditNotesModule: React.FC<{
           </p>
         </div>
 
-        <div className="flex items-center gap-2 relative z-10">
+        <div className="flex items-center gap-2 flex-wrap relative z-10">
+          {onOpenKraReturns && (
+            <button
+              type="button"
+              onClick={() => onOpenKraReturns('VAT3_SALES_SEC_B')}
+              className="px-3.5 py-2 bg-[#34D186] hover:bg-[#28B873] border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-[#0A006E]" />
+              KRA Returns (.xlsx)
+            </button>
+          )}
           <button
             onClick={() =>
               exportReportToPDF(
@@ -888,7 +908,7 @@ export const DocumentsAndCreditNotesModule: React.FC<{
                 'Vaairo_Commercial_Documents_Statement'
               )
             }
-            className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
             Statement PDF
@@ -914,7 +934,7 @@ export const DocumentsAndCreditNotesModule: React.FC<{
                 ])
               )
             }
-            className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-white border-2 border-[#0A006E] text-[#0A006E] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Download className="w-3.5 h-3.5 text-[#0A006E]" />
             Statement CSV
@@ -1086,6 +1106,21 @@ export const DocumentsAndCreditNotesModule: React.FC<{
                     </td>
                     <td className="py-2.5 px-3 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {onInspectOrder && (
+                          <button
+                            type="button"
+                            onClick={() => onInspectOrder(tx)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-montserrat font-black cursor-pointer transition ${
+                              tx.docType === 'Online Order' || tx.deliveryAddress
+                                ? 'bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border border-[#0A006E]'
+                                : 'bg-indigo-50 hover:bg-indigo-100 text-[#0A006E] border border-indigo-200'
+                            }`}
+                          >
+                            {tx.docType === 'Online Order' || tx.deliveryAddress
+                              ? 'View Order & Process Delivery'
+                              : 'Order Details'}
+                          </button>
+                        )}
                         <button
                           onClick={() => onPreviewDoc(tx)}
                           className="px-2.5 py-1 bg-[#0A006E] text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-black cursor-pointer"
@@ -1131,12 +1166,33 @@ export const ComplianceModule: React.FC<{
   records: ComplianceRecord[];
   branches: Branch[];
   products: Product[];
+  transactions?: TransactionDoc[];
+  partners?: Partner[];
+  externalCustomers?: ExternalCustomer[];
+  staffList?: StaffMember[];
+  payrollRuns?: PayrollRun[];
+  regions?: GeoRegion[];
   onCreateCompliance: (rec: Omit<ComplianceRecord, 'id' | 'createdAt'>) => Promise<void>;
-}> = ({ currentUser, records, branches, products, onCreateCompliance }) => {
+  onTriggerToast?: (type: 'success' | 'error', title: string, message: string) => void;
+}> = ({
+  currentUser,
+  records,
+  branches,
+  products,
+  transactions = [],
+  partners = [],
+  externalCustomers = [],
+  staffList = [],
+  payrollRuns = [],
+  regions = [],
+  onCreateCompliance,
+  onTriggerToast,
+}) => {
   const isBranchManager = currentUser.role === 'Branch Manager';
   const isAccountant = currentUser.role === 'Accountant';
   const isSalesManager = currentUser.role === 'Sales Manager';
   const canManageCompliance = currentUser.role === 'Admin' || currentUser.role === 'Inventory Controller';
+  const [complianceViewTab, setComplianceViewTab] = useState<'kra_returns' | 'excise_bonds'>('kra_returns');
 
   const visibleRecords = useMemo(() => {
     if (isBranchManager) {
@@ -1187,57 +1243,104 @@ export const ComplianceModule: React.FC<{
         <div className="silent-scanner-beam-dark" />
         <div className="relative z-10">
           <span className="text-xs font-montserrat font-black text-[#0A006E] uppercase tracking-wider">
-            Customs Bond, Digital Excise Stamps & Bureau Clearance
+            KRA iTax Returns, Customs Bond &amp; Digital Excise Stamps
           </span>
           <h2 className="text-xl font-montserrat font-black italic text-[#0A006E] mt-1">
-            Regulatory Compliance & Excise Stamp Roll Tracking
+            KRA Return Spreadsheets &amp; Excise Stamp Roll Tracking
           </h2>
           <p className="text-xs font-medium text-slate-900 mt-0.5">
-            Target Access Model: {currentUser.role} Scope · {visibleRecords.length} Active Records
+            Download KRA iTax upload spreadsheets (VAT3, PAYE P10, Housing Levy, TOT) and audit bonded customs certificates.
           </p>
         </div>
-        <button
-          onClick={() =>
-            exportReportToPDF(
-              'Regulatory Compliance & Excise Stamp Audit Statement',
-              `Customs Bonds & Excise Stamp Serial Ranges (${currentUser.role} Scope)`,
-              ['Certificate No', 'Type', 'SKU Ref', 'Branch', 'Stamp Range', 'Duty Paid (KES)', 'Expiry', 'Status'],
-              visibleRecords.map((r) => [
-                r.certificateNo,
-                r.recordType,
-                r.skuRef,
-                r.branchName,
-                `${r.stampRangeStart} -> ${r.stampRangeEnd}`,
-                Math.round(r.dutyPaidAmount).toLocaleString(),
-                r.expiryDate,
-                r.status,
-              ]),
-              'Vaairo_Regulatory_Compliance'
-            )
-          }
-          className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer relative z-10"
-        >
-          <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
-          Download Compliance PDF
-        </button>
+        <div className="flex items-center gap-2 flex-wrap relative z-10">
+          <div className="inline-flex bg-white/80 p-1 rounded-xl border-2 border-[#0A006E]">
+            <button
+              type="button"
+              onClick={() => setComplianceViewTab('kra_returns')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition ${
+                complianceViewTab === 'kra_returns'
+                  ? 'bg-[#0A006E] text-[#FFDE00]'
+                  : 'text-[#0A006E] hover:bg-slate-100'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>KRA Returns (.xlsx / .csv)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setComplianceViewTab('excise_bonds')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition ${
+                complianceViewTab === 'excise_bonds'
+                  ? 'bg-[#0A006E] text-[#FFDE00]'
+                  : 'text-[#0A006E] hover:bg-slate-100'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Excise Stamps ({visibleRecords.length})</span>
+            </button>
+          </div>
+          {complianceViewTab === 'excise_bonds' && (
+            <button
+              onClick={() =>
+                exportReportToPDF(
+                  'Regulatory Compliance & Excise Stamp Audit Statement',
+                  `Customs Bonds & Excise Stamp Serial Ranges (${currentUser.role} Scope)`,
+                  ['Certificate No', 'Type', 'SKU Ref', 'Branch', 'Stamp Range', 'Duty Paid (KES)', 'Expiry', 'Status'],
+                  visibleRecords.map((r) => [
+                    r.certificateNo,
+                    r.recordType,
+                    r.skuRef,
+                    r.branchName,
+                    `${r.stampRangeStart} -> ${r.stampRangeEnd}`,
+                    Math.round(r.dutyPaidAmount).toLocaleString(),
+                    r.expiryDate,
+                    r.status,
+                  ]),
+                  'Vaairo_Regulatory_Compliance'
+                )
+              }
+              className="px-3.5 py-2 bg-[#0A006E] text-[#FFDE00] rounded-xl text-xs font-montserrat font-black flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Download className="w-3.5 h-3.5 text-[#FFDE00]" />
+              Download Compliance PDF
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Role Notice Banner */}
-      {isAccountant && (
-        <div className="bg-indigo-50 border-2 border-indigo-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-indigo-950 shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <ShieldCheck className="w-5 h-5 text-indigo-700 shrink-0" />
-            <div>
-              <div className="text-xs font-montserrat font-black uppercase text-indigo-900">
-                Tax & Excise Compliance Oversight · Accounting Financial View
+      {complianceViewTab === 'kra_returns' ? (
+        <KraReturnsPanel
+          currentUser={currentUser}
+          transactions={transactions}
+          products={products}
+          partners={partners}
+          externalCustomers={externalCustomers}
+          staffList={staffList}
+          payrollRuns={payrollRuns}
+          complianceRecords={visibleRecords}
+          branches={branches}
+          regions={regions}
+          defaultTab="VAT3_SALES_SEC_B"
+          onTriggerToast={onTriggerToast}
+        />
+      ) : (
+        <>
+          {/* Role Notice Banner */}
+          {isAccountant && (
+            <div className="bg-indigo-50 border-2 border-indigo-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-indigo-950 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="w-5 h-5 text-indigo-700 shrink-0" />
+                <div>
+                  <div className="text-xs font-montserrat font-black uppercase text-indigo-900">
+                    Tax & Excise Compliance Oversight · Accounting Financial View
+                  </div>
+                  <p className="text-xs text-indigo-800">
+                    Full tax reports, duty payments, and KRA eTIMS fiscalization data are available for financial reporting and auditing. Digital excise physical roll registration is managed by Inventory Controllers and System Administrators.
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-indigo-800">
-                Full tax reports, duty payments, and KRA eTIMS fiscalization data are available for financial reporting and auditing. Digital excise physical roll registration is managed by Inventory Controllers and System Administrators.
-              </p>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
       {(isSalesManager || isBranchManager) && !canManageCompliance && (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-amber-950 shadow-xs">
@@ -1410,6 +1513,8 @@ export const ComplianceModule: React.FC<{
           </table>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
@@ -1430,6 +1535,7 @@ export const HrAndRbacModule: React.FC<{
   onOpenPayslip?: (record: PayrollRecord) => void;
   onOpenAccessMatrix?: () => void;
   onOpenUserFeatureModal?: (staff: StaffMember) => void;
+  onOpenKraReturns?: (defaultTab?: KraReturnScheduleType) => void;
   onTriggerToast: (type: 'success' | 'error', title: string, message: string) => void;
 }> = ({
   currentUser,
@@ -1444,6 +1550,7 @@ export const HrAndRbacModule: React.FC<{
   onOpenPayslip,
   onOpenAccessMatrix,
   onOpenUserFeatureModal,
+  onOpenKraReturns,
   onTriggerToast,
 }) => {
   const creatableRoles = ROLE_PERMISSIONS[currentUser.role].canCreateRoles;
@@ -1487,6 +1594,7 @@ export const HrAndRbacModule: React.FC<{
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [selectedRole, setSelectedRole] = useState<StaffRole>(
     creatableRoles[0] || 'HR'
   );
@@ -1514,6 +1622,7 @@ export const HrAndRbacModule: React.FC<{
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [editRole, setEditRole] = useState<StaffRole>('HR');
   const [editBranchId, setEditBranchId] = useState('');
   const [editStatus, setEditStatus] = useState<'Active' | 'Suspended' | 'Terminated'>('Active');
@@ -1546,6 +1655,16 @@ export const HrAndRbacModule: React.FC<{
   // Payroll Run execution state
   const [payrollPeriod, setPayrollPeriod] = useState<string>('October 2026');
   const [isRunningPayroll, setIsRunningPayroll] = useState<boolean>(false);
+
+  // Online / Offline Staff Presence Filtering
+  const [presenceFilter, setPresenceFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
+  const onlineCount = useMemo(() => staffList.filter((s) => s.isOnline).length, [staffList]);
+  const offlineCount = useMemo(() => staffList.filter((s) => !s.isOnline).length, [staffList]);
+  const displayedStaffList = useMemo(() => {
+    if (presenceFilter === 'ONLINE') return staffList.filter((s) => s.isOnline);
+    if (presenceFilter === 'OFFLINE') return staffList.filter((s) => !s.isOnline);
+    return staffList;
+  }, [staffList, presenceFilter]);
 
   // Delete Staff Modal State (Requirement 3: Prompt question if they are sure they want to delete because it is permanent)
   const [deletingStaff, setDeletingStaff] = useState<StaffMember | null>(null);
@@ -1620,6 +1739,7 @@ export const HrAndRbacModule: React.FC<{
         cleanFirestoreData({
           name: name.trim(),
           email: email.trim().toLowerCase(),
+          phone: phone.trim() || undefined,
           role: effectiveRole,
           authMethod: effectiveAuthMethod,
           pin: effectiveAuthMethod === 'pin' ? pin : undefined,
@@ -1646,12 +1766,13 @@ export const HrAndRbacModule: React.FC<{
     }
 
     onTriggerToast('success', 'Staff Provisioned', isCasualSalesRep
-        ? `Provisioned Casual Sales Rep "${name}" with 6-Digit PIN: ${pin}, Base Pay KES ${Number(baseSalary).toLocaleString()} & Agreed Commission: ${agreedCommissionPct}%.`
+        ? `Provisioned Casual Sales Rep "${name}" (${phone.trim() || email.trim()}) with 6-Digit PIN: ${pin}, Base Pay KES ${Number(baseSalary).toLocaleString()} & Agreed Commission: ${agreedCommissionPct}%.`
         : effectiveAuthMethod === 'pin'
-        ? `Provisioned ${effectiveRole} "${name}" with 6-Digit PIN: ${pin} & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`
+        ? `Provisioned ${effectiveRole} "${name}" (${phone.trim() || email.trim()}) with 6-Digit PIN: ${pin} & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`
         : `Provisioned ${effectiveRole} "${name}" (${email}) for Google Authentication & Monthly Salary KES ${Number(baseSalary).toLocaleString()}.`);
     setName('');
     setEmail('');
+    setPhone('');
     handleRandomizePin();
   };
 
@@ -1659,6 +1780,7 @@ export const HrAndRbacModule: React.FC<{
     setEditingStaff(staff);
     setEditName(staff.name);
     setEditEmail(staff.email);
+    setEditPhone(staff.phone || '');
     setEditRole(staff.role);
     setEditBranchId(staff.branchId);
     setEditStatus(staff.status);
@@ -1733,6 +1855,7 @@ export const HrAndRbacModule: React.FC<{
       cleanFirestoreData({
         name: editName.trim(),
         email: editEmail.trim().toLowerCase(),
+        phone: editPhone.trim() || undefined,
         role: editRole,
         authMethod: effectiveAuth,
         branchId: branch?.id || editingStaff.branchId,
@@ -2025,6 +2148,18 @@ export const HrAndRbacModule: React.FC<{
                 </div>
 
                 <div>
+                  <label className="font-montserrat font-bold text-slate-700">Mobile Phone Number *</label>
+                  <input
+                    required
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="e.g. +254 712 345 678"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-jakarta font-bold font-mono-tabular text-slate-900"
+                  />
+                </div>
+
+                <div>
                   <label className="font-montserrat font-bold text-slate-700">Corporate Email *</label>
                   <input
                     required
@@ -2051,7 +2186,7 @@ export const HrAndRbacModule: React.FC<{
                   </select>
                 </div>
 
-                <div>
+                <div className="sm:col-span-2 lg:col-span-4">
                   <label className="font-montserrat font-bold text-slate-700">Assigned Branch</label>
                   <select
                     disabled={currentUser.role === 'Branch Manager'}
@@ -2217,26 +2352,68 @@ export const HrAndRbacModule: React.FC<{
 
           {/* Organization Staff Directory Table */}
           <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
-                Provisioned Organization Directory ({staffList.length} Staff)
-              </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-montserrat font-black text-[#0A006E]">
+                  Provisioned Organization Directory ({staffList.length} Staff)
+                </h3>
+                {/* Online / Offline Presence Filter Tabs */}
+                <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-xl w-fit mt-2 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setPresenceFilter('ALL')}
+                    className={`px-3 py-1 rounded-lg text-xs font-montserrat font-bold cursor-pointer transition ${
+                      presenceFilter === 'ALL'
+                        ? 'bg-[#0A006E] text-[#FFDE00] shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    All Staff ({staffList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPresenceFilter('ONLINE')}
+                    className={`px-3 py-1 rounded-lg text-xs font-montserrat font-bold cursor-pointer transition flex items-center gap-1.5 ${
+                      presenceFilter === 'ONLINE'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-emerald-700 hover:text-emerald-900'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Online ({onlineCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPresenceFilter('OFFLINE')}
+                    className={`px-3 py-1 rounded-lg text-xs font-montserrat font-bold cursor-pointer transition flex items-center gap-1.5 ${
+                      presenceFilter === 'OFFLINE'
+                        ? 'bg-slate-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-slate-400" />
+                    Offline ({offlineCount})
+                  </button>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() =>
                     exportToCSV(
                       'Vaairo_Staff_Directory_Export',
-                      ['ID', 'Name', 'Email', 'Role', 'Status', 'Auth Method', 'Branch ID', 'Branch Name', 'Base Salary (KES)', 'Deductions (KES)', 'Net Salary (KES)', 'KRA PIN', 'Created By', 'Last Login'],
-                      staffList.map((s) => {
+                      ['ID', 'Name', 'Phone', 'Email', 'Role', 'Status', 'Presence', 'Auth Method', 'Branch ID', 'Branch Name', 'Base Salary (KES)', 'Deductions (KES)', 'Net Salary (KES)', 'KRA PIN', 'Created By', 'Last Login'],
+                      displayedStaffList.map((s) => {
                         const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
                         const ded = s.deductionsKes ?? Math.round(bSal * 0.18);
                         const net = Math.max(0, bSal - ded - (s.penaltiesKes ?? 0));
                         return [
                           s.id,
                           s.name,
+                          s.phone || 'N/A',
                           s.email,
                           s.role,
                           s.status,
+                          s.isOnline ? 'Online' : 'Offline',
                           s.authMethod,
                           s.branchId,
                           s.branchName,
@@ -2260,11 +2437,13 @@ export const HrAndRbacModule: React.FC<{
                     exportReportToPDF(
                       'HR Staff & Role-Based Access Directory',
                       `Exported by ${currentUser.name}`,
-                      ['Name', 'Email', 'Role', 'Status', 'Auth Method', 'Branch', 'Created By', 'Last Login'],
-                      staffList.map((s) => [
+                      ['Name', 'Phone', 'Email', 'Role', 'Presence', 'Status', 'Auth Method', 'Branch', 'Created By', 'Last Login'],
+                      displayedStaffList.map((s) => [
                         s.name,
+                        s.phone || '—',
                         s.email,
                         s.role,
+                        s.isOnline ? 'Online' : 'Offline',
                         s.status,
                         s.authMethod === 'google' ? 'Google OAuth' : `6-Digit PIN (${s.pin || '******'})`,
                         s.branchName,
@@ -2286,7 +2465,8 @@ export const HrAndRbacModule: React.FC<{
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
-                    <th className="py-2.5 px-3 font-black">Staff Name & Email</th>
+                    <th className="py-2.5 px-3 font-black">Staff Name, Phone &amp; Email</th>
+                    <th className="py-2.5 px-3 font-black">Presence</th>
                     <th className="py-2.5 px-3 font-black">Status</th>
                     <th className="py-2.5 px-3 font-black">Role</th>
                     <th className="py-2.5 px-3 font-black">Auth Mode</th>
@@ -2296,22 +2476,48 @@ export const HrAndRbacModule: React.FC<{
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {staffList.map((s) => {
-                    const canManage = canManageStaff(s);
-                    const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
-                    const ded = s.deductionsKes ?? Math.round(bSal * 0.18);
-                    const pen = s.penaltiesKes ?? 0;
-                    const net = Math.max(0, bSal - ded - pen);
+                  {displayedStaffList.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-500 font-medium">
+                        No staff members found matching {presenceFilter.toLowerCase()} status.
+                      </td>
+                    </tr>
+                  ) : (
+                    displayedStaffList.map((s) => {
+                      const canManage = canManageStaff(s);
+                      const bSal = s.baseSalaryKes ?? (s.role === 'Admin' ? 180000 : s.role === 'Accountant' ? 120000 : s.role === 'Branch Manager' ? 95000 : 65000);
+                      const ded = s.deductionsKes ?? Math.round(bSal * 0.18);
+                      const pen = s.penaltiesKes ?? 0;
+                      const net = Math.max(0, bSal - ded - pen);
 
-                    return (
-                      <tr key={s.id} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 font-semibold text-slate-900">
-                          <div className="flex items-center gap-2">
-                             <div className={`w-2.5 h-2.5 rounded-full ${s.isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-300'}`} title={s.isOnline ? 'Online' : 'Offline'} />
-                             {s.name}
-                          </div>
-                          <div className="text-slate-500 font-normal text-[11px] ml-4.5">{s.email}</div>
-                        </td>
+                      return (
+                        <tr key={s.id} className="hover:bg-slate-50">
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">
+                            <div className="flex items-center gap-2">
+                               <div className={`w-2.5 h-2.5 rounded-full ${s.isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-300'}`} title={s.isOnline ? 'Online' : 'Offline'} />
+                               {s.name}
+                            </div>
+                            {s.phone && (
+                              <div className="text-[#0A006E] font-jakarta font-bold font-mono-tabular text-[11px] ml-4.5 flex items-center gap-1 mt-0.5">
+                                <Phone className="w-3 h-3 text-[#0A006E]" />
+                                {s.phone}
+                              </div>
+                            )}
+                            <div className="text-slate-500 font-normal text-[11px] ml-4.5">{s.email}</div>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {s.isOnline ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                Online
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                Offline
+                              </span>
+                            )}
+                          </td>
                         <td className="py-2.5 px-3">
                            <span className={`inline-flex items-center px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold ${
                               s.status === 'Active'
@@ -2444,7 +2650,7 @@ export const HrAndRbacModule: React.FC<{
                         </td>
                       </tr>
                     );
-                  })}
+                  }))}
                 </tbody>
               </table>
             </div>
@@ -2550,24 +2756,36 @@ export const HrAndRbacModule: React.FC<{
                 </p>
               </div>
 
-              <button
-                type="button"
-                disabled={isRunningPayroll || staffList.filter((s) => s.status === 'Active').length === 0}
-                onClick={handleExecutePayroll}
-                className="px-6 py-3 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl font-montserrat font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg transition disabled:opacity-50 shrink-0"
-              >
-                {isRunningPayroll ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-[#FFDE00]" />
-                    Processing Ledger...
-                  </>
-                ) : (
-                  <>
-                    <Printer className="w-4 h-4 text-[#FFDE00]" />
-                    Run Payroll for {payrollPeriod}
-                  </>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {onOpenKraReturns && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenKraReturns('PAYE_P10_SEC_B')}
+                    className="px-4 py-3 bg-white hover:bg-slate-50 border-2 border-[#0A006E] text-[#0A006E] rounded-xl font-montserrat font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-[#0A006E]" />
+                    <span>KRA P10 &amp; AHL (.xlsx)</span>
+                  </button>
                 )}
-              </button>
+                <button
+                  type="button"
+                  disabled={isRunningPayroll || staffList.filter((s) => s.status === 'Active').length === 0}
+                  onClick={handleExecutePayroll}
+                  className="px-6 py-3 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-xl font-montserrat font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg transition disabled:opacity-50 whitespace-nowrap shrink-0"
+                >
+                  {isRunningPayroll ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-[#FFDE00]" />
+                      Processing Ledger...
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="w-4 h-4 text-[#FFDE00]" />
+                      Run Payroll for {payrollPeriod}
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2947,6 +3165,17 @@ export const HrAndRbacModule: React.FC<{
                 </div>
 
                 <div>
+                  <label className="font-montserrat font-bold text-slate-700">Mobile Phone Number</label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="e.g. +254 712 345 678"
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl font-jakarta font-bold font-mono-tabular"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
                   <label className="font-montserrat font-bold text-slate-700">Corporate Email *</label>
                   <input
                     required

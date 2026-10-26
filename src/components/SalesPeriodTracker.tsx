@@ -27,6 +27,7 @@ interface SalesPeriodTrackerProps {
   transactions: TransactionDoc[];
   currentUser: StaffMember;
   onPreviewDoc: (doc: TransactionDoc) => void;
+  onInspectOrder?: (doc: TransactionDoc) => void;
   onNavigateToPos?: (mode: 'retail' | 'wholesale') => void;
   branches?: Branch[];
   staff?: StaffMember[];
@@ -55,6 +56,7 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
   transactions,
   currentUser,
   onPreviewDoc,
+  onInspectOrder,
   onNavigateToPos,
   branches = [],
   staff = [],
@@ -677,14 +679,33 @@ export const SalesPeriodTracker: React.FC<SalesPeriodTrackerProps> = ({
                         {formatKes(tx.totalAmount)}
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => onPreviewDoc(tx)}
-                          className="px-2.5 py-1.5 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-black cursor-pointer shadow-2xs transition active:scale-95 inline-flex items-center gap-1"
-                        >
-                          <Printer className="w-3 h-3" />
-                          <span>PDF</span>
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          {onInspectOrder && (
+                            <button
+                              type="button"
+                              onClick={() => onInspectOrder(tx)}
+                              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-montserrat font-black cursor-pointer shadow-2xs transition active:scale-95 inline-flex items-center gap-1 ${
+                                tx.docType === 'Online Order' || tx.deliveryAddress
+                                  ? 'bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] border border-[#0A006E]'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-[#0A006E] border border-slate-300'
+                              }`}
+                            >
+                              <span>
+                                {tx.docType === 'Online Order' || tx.deliveryAddress
+                                  ? 'Order Details & Delivery'
+                                  : 'Details'}
+                              </span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => onPreviewDoc(tx)}
+                            className="px-2.5 py-1.5 bg-[#0A006E] hover:bg-[#060046] text-[#FFDE00] rounded-lg text-[11px] font-montserrat font-black cursor-pointer shadow-2xs transition active:scale-95 inline-flex items-center gap-1"
+                          >
+                            <Printer className="w-3 h-3" />
+                            <span>PDF</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

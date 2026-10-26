@@ -187,6 +187,9 @@ export const PosViews: React.FC<PosViewsProps> = ({
   const [customerLicense, setCustomerLicense] = useState<string>(
     mode === 'retail' ? 'AGE-21-VERIFIED' : retailers[0]?.liquorLicenseNo || ''
   );
+  const [customerKraPin, setCustomerKraPin] = useState<string>(
+    mode === 'wholesale' ? retailers[0]?.taxPin || '' : ''
+  );
   const [paymentMethod, setPaymentMethod] = useState<string>(
     mode === 'retail' ? 'M-Pesa Till / Instant Card' : 'Corporate Bank EFT / M-Pesa Paybill'
   );
@@ -890,6 +893,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
           customerName: isRestaurantPos
             ? `${activeTableNumber ? `${activeTableNumber} · ` : ''}${customerName.trim() || 'Dine-In Guest'}`
             : customerName.trim() || 'Walk-in Customer',
+          customerKraPin: customerKraPin.trim().toUpperCase() || undefined,
           customerLicenseNo: customerLicense.trim() || 'VERIFIED-21',
           itemsSummary: JSON.stringify(computedLineItems),
           subtotal,
@@ -1430,6 +1434,7 @@ export const PosViews: React.FC<PosViewsProps> = ({
                       if (found) {
                         setCustomerName(found.companyName);
                         setCustomerLicense(found.liquorLicenseNo);
+                        setCustomerKraPin(found.taxPin || '');
                         if (found.regionId) setSelectedRegionId(found.regionId);
                       }
                     }}
@@ -1445,7 +1450,33 @@ export const PosViews: React.FC<PosViewsProps> = ({
                 </div>
               )}
 
-
+              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-montserrat font-bold text-slate-600">
+                    Customer / Trade Account
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Walk-In or Company Name"
+                    className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs text-slate-900 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-montserrat font-bold text-slate-600">
+                    Buyer KRA PIN (Optional for VAT3)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={11}
+                    value={customerKraPin}
+                    onChange={(e) => setCustomerKraPin(e.target.value.toUpperCase())}
+                    placeholder="e.g. P051882910Z"
+                    className="w-full mt-1 px-2.5 py-1.5 bg-[#F0F2F0] border border-slate-200 rounded-lg text-xs font-mono-tabular uppercase font-bold text-slate-900"
+                  />
+                </div>
+              </div>
 
               {/* Payment Method Selector */}
               <div className="sm:col-span-2 space-y-1.5 pt-1">

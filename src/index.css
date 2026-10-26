@@ -5,6 +5,7 @@
 @theme {
   --font-montserrat: 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-raleway: 'Raleway', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-jakarta: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   
   --color-navy: #0A006E;
   --color-navy-dark: #060046;
@@ -71,35 +72,52 @@ body {
   font-family: 'Raleway', sans-serif;
 }
 
+.font-jakarta {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.font-jakarta-bold {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 700 !important;
+}
+
 /* ==========================================================================
-   ENTERPRISE TYPOGRAPHY: BOLD DIGITS & FIGURES CONFIGURATION
+   ENTERPRISE TYPOGRAPHY: PLUS JAKARTA SANS BOLD PRICING & DIGITS
    ========================================================================== */
 
-/* Ensure all numbers, currency figures, and tabular digits render in bold corporate font */
+/* Ensure all numbers, currency figures, and tabular digits render in Plus Jakarta Sans Bold */
 input[type="number"],
 input[inputmode="numeric"],
 input[inputmode="decimal"],
 td,
 th,
 .tabular-nums,
-span,
-div,
-p,
-strong {
+span.tabular-nums,
+div.tabular-nums {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-/* Specific styling for any element containing numbers or monetary figures */
+/* Specific styling for all digits, pricing figures, KES currency amounts & counters */
 .font-mono,
+.font-mono *,
 .font-mono-tabular,
+.font-mono-tabular *,
 .tabular-nums,
+.tabular-nums *,
+.font-jakarta,
+.font-jakarta-bold,
 [class*="font-mono"],
 [class*="price"],
+[class*="price"] *,
 [class*="kes"],
+[class*="kes"] *,
 [class*="amount"],
-[class*="stat"],
-[class*="currency"] {
-  font-family: 'Montserrat', sans-serif !important;
+[class*="amount"] *,
+[class*="currency"],
+[class*="currency"] *,
+.price-tag,
+.currency-kes {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   font-weight: 700 !important;
   font-variant-numeric: tabular-nums lining-nums diagonal-fractions !important;
   letter-spacing: -0.01em;
@@ -111,17 +129,28 @@ strong {
 .font-black .font-mono,
 .font-black .font-mono-tabular,
 .font-black.font-mono,
-.font-black.font-mono-tabular {
-  font-weight: 900 !important;
+.font-black.font-mono-tabular,
+[class*="price"].font-black,
+[class*="amount"].font-black,
+.font-mono.font-black *,
+.font-mono-tabular.font-black * {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 800 !important;
 }
 
 .font-mono.font-extrabold,
-.font-mono-tabular.font-extrabold {
+.font-mono-tabular.font-extrabold,
+[class*="price"].font-extrabold,
+[class*="amount"].font-extrabold {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   font-weight: 800 !important;
 }
 
 .font-mono.font-bold,
-.font-mono-tabular.font-bold {
+.font-mono-tabular.font-bold,
+[class*="price"].font-bold,
+[class*="amount"].font-bold {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   font-weight: 700 !important;
 }
 
@@ -135,10 +164,12 @@ span.font-mono-tabular,
 div.font-mono,
 div.font-mono-tabular,
 p.font-mono,
-p.font-mono-tabular {
-  font-family: 'Montserrat', sans-serif !important;
+p.font-mono-tabular,
+span[class*="font-mono"],
+div[class*="font-mono"] {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   font-weight: 700 !important;
-  font-variant-numeric: tabular-nums lining-nums;
+  font-variant-numeric: tabular-nums lining-nums !important;
 }
 
 /* Custom scrollbars for high density ERP data */

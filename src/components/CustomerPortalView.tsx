@@ -30,8 +30,9 @@ import { Product, Branch, GeoRegion, TransactionDoc, StaffMember } from '../type
 import { ProductImage } from './ProductImage';
 import { formatKes, generateSimpleQrSvg } from '../erpUtils';
 import { playPosBeep } from '../utils/audioBeep';
-import { db } from '../firebase';
+import { db, auth, signInWithGooglePopup } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 interface CustomerPortalViewProps {
   products: Product[];
@@ -42,6 +43,8 @@ interface CustomerPortalViewProps {
   onBackToErpLogin: () => void;
   currentUser?: StaffMember | null;
 }
+
+
 
 interface CartItem {
   product: Product;
@@ -492,6 +495,24 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   onBackToErpLogin,
   currentUser,
 }) => {
+  const [customerUser, setCustomerUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (user) => {
+      setCustomerUser(user);
+      if (user?.displayName) {
+        setCustomerName((prev) => (prev.trim() ? prev : user.displayName || ''));
+      }
+    });
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGooglePopup();
+    } catch (error) {
+      console.error('Auth failed', error);
+    }
+  };
   // Catalog Search & Category Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -552,6 +573,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'M-Pesa STK' | 'Cash'>('M-Pesa STK');
   const [orderNotes, setOrderNotes] = useState('');
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   // Quick Product Details & Variant Modal
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
@@ -603,7 +625,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   // Intelligent GPS location detector mapping coordinates to Nairobi regions
   const handleDetectLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser.');
+      setCheckoutError('Geolocation is not supported by your browser.');
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -785,10 +807,17 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     e.preventDefault();
     if (cart.length === 0) return;
     if (!customerName.trim() || !customerPhone.trim()) {
-      alert('Please provide your name and phone number for delivery dispatch.');
+      setCheckoutError('Please provide your full name and phone number for delivery dispatch.');
+      playPosBeep('error');
+      return;
+    }
+    if (!deliveryAddress.trim()) {
+      setCheckoutError('Please enter your delivery street address, apartment, or landmark.');
+      playPosBeep('error');
       return;
     }
 
+    setCheckoutError(null);
     setIsSubmitting(true);
     const docNumber = `WEB-2026-${Date.now().toString().slice(-6)}`;
 
@@ -802,7 +831,11 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       regionName: activeRegion.name,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
+      customerEmail: customerUser?.email || undefined,
       customerLicenseNo: 'RETAIL-CONSUMER',
+      deliveryAddress: deliveryAddress.trim(),
+      deliveryNotes: orderNotes.trim() || undefined,
+      deliveryStatus: 'Pending Dispatch',
       subtotal: cartSubtotal,
       exciseAndTax: Math.round(cartSubtotal * 0.16),
       totalAmount: cartTotal,
@@ -821,7 +854,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
           unitMode: 'Bottle',
         }))
       ),
-      createdBy: 'Customer Storefront',
+      createdBy: customerUser?.email || 'Customer Storefront',
       createdByRole: 'Online Customer',
     };
 
@@ -834,10 +867,13 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       };
       setLastPlacedOrder(fullDoc);
       setCart([]);
+      setOrderNotes('');
       setIsCartOpen(false);
+      setIsMobileCartOpen(false);
       playPosBeep('success');
     } catch (err) {
       console.error('Failed to submit online order:', err);
+      setCheckoutError('Could not complete your order. Please verify your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1412,15 +1448,33 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             </div>
 
             <div>
-              <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Delivery Address / Landmark</label>
+              <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Delivery Address / Landmark *</label>
               <input
                 type="text"
+                required
                 value={deliveryAddress}
                 onChange={(e) => setDeliveryAddress(e.target.value)}
                 placeholder="e.g. Westlands, Rhapta Road, Apt 4B"
                 className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-[#0A006E]"
               />
             </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Delivery Notes (Gate / Rider Instructions)</label>
+              <input
+                type="text"
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                placeholder="e.g. Call on arrival at gate..."
+                className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-[#0A006E]"
+              />
+            </div>
+
+            {checkoutError && (
+              <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold">
+                {checkoutError}
+              </div>
+            )}
 
             <div>
               <label className="text-[10px] font-bold text-slate-600 block mb-1">Payment Method</label>
@@ -1478,20 +1532,39 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               </div>
             </div>
 
-            <button
-              type="submit"
-              form="checkout-form"
-              disabled={isSubmitting || cart.length === 0}
-              className="w-full py-3.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-black text-xs font-montserrat shadow-md transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 active:scale-98"
-            >
-              {isSubmitting ? (
-                'Processing Order...'
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4 stroke-[2.5]" /> Place Delivery Order ({formatKes(cartTotal)})
-                </>
-              )}
-            </button>
+            {!customerUser ? (
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                className="w-full py-3.5 bg-white border-2 border-[#0A006E] text-[#0A006E] rounded-2xl font-black text-xs font-montserrat shadow-md transition cursor-pointer hover:bg-slate-50 flex items-center justify-center gap-2"
+              >
+                Sign in with Google to Checkout
+              </button>
+            ) : (
+              <button
+                type="submit"
+                form="checkout-form"
+                disabled={isSubmitting || cart.length === 0}
+                className="w-full py-3.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-black text-xs font-montserrat shadow-md transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 active:scale-98"
+              >
+                {isSubmitting ? (
+                  'Processing Order...'
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 stroke-[2.5]" /> Place Delivery Order ({formatKes(cartTotal)})
+                  </>
+                )}
+              </button>
+            )}
+            {customerUser && (
+              <button
+                type="button"
+                onClick={() => auth.signOut()}
+                className="w-full py-2 text-[10px] text-slate-500 hover:text-rose-600 underline"
+              >
+                Sign out ({customerUser.email})
+              </button>
+            )}
           </div>
         </aside>
       </main>
@@ -2247,12 +2320,30 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                       <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Delivery Address / Landmark *</label>
                       <input
                         type="text"
+                        required
                         value={deliveryAddress}
                         onChange={(e) => setDeliveryAddress(e.target.value)}
                         placeholder="e.g. Westlands, Rhapta Road, Apt 4B"
                         className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0A006E] focus:bg-white"
                       />
                     </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Delivery Notes (Optional)</label>
+                      <input
+                        type="text"
+                        value={orderNotes}
+                        onChange={(e) => setOrderNotes(e.target.value)}
+                        placeholder="e.g. Call on arrival at gate..."
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0A006E] focus:bg-white"
+                      />
+                    </div>
+
+                    {checkoutError && (
+                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                        {checkoutError}
+                      </div>
+                    )}
 
                     <div>
                       <label className="text-[10px] font-bold text-slate-600 block mb-1">Payment Method</label>
@@ -2642,41 +2733,34 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               </div>
             )}
 
-            {/* Quick 1-Tap Sample Barcode Simulator */}
-            <div className="w-full max-w-sm pt-2 space-y-2">
-              <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block text-center">
-                Instant 1-Tap Barcode Samples:
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { name: 'Johnnie Walker Black', barcode: '5000267014203' },
-                  { name: 'Hennessy VS', barcode: '3245990250004' },
-                  { name: 'Tanqueray Gin', barcode: '5000281005409' },
-                  { name: 'Tusker 500ml', barcode: '6161100000018' },
-                ].map((sample) => (
-                  <button
-                    key={sample.barcode}
-                    type="button"
-                    onClick={() => {
-                      setScannerQuery(sample.barcode);
-                      const match = products.find(
-                        (p) =>
-                          (p.barcode && p.barcode.includes(sample.barcode)) ||
-                          p.name.toLowerCase().includes(sample.name.toLowerCase().split(' ')[0])
-                      );
-                      if (match) {
-                        setScannedProductMatch(match);
-                        playPosBeep('success');
-                      }
-                    }}
-                    className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#FFDE00] rounded-xl text-left transition cursor-pointer flex flex-col justify-between active:scale-95"
-                  >
-                    <span className="text-[11px] font-bold text-white truncate">{sample.name}</span>
-                    <span className="text-[9px] font-mono font-bold text-[#FFDE00] truncate">{sample.barcode}</span>
-                  </button>
-                ))}
+            {/* Registered Catalog Quick Lookup */}
+            {products.some((p) => Boolean(p.barcode)) && (
+              <div className="w-full max-w-sm pt-2 space-y-2">
+                <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block text-center">
+                  Registered Barcoded Items:
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {products
+                    .filter((p) => Boolean(p.barcode))
+                    .slice(0, 4)
+                    .map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setScannerQuery(item.barcode!);
+                          setScannedProductMatch(item);
+                          playPosBeep('success');
+                        }}
+                        className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#FFDE00] rounded-xl text-left transition cursor-pointer flex flex-col justify-between active:scale-95"
+                      >
+                        <span className="text-[11px] font-bold text-white truncate">{item.name}</span>
+                        <span className="text-[9px] font-mono font-bold text-[#FFDE00] truncate">{item.barcode}</span>
+                      </button>
+                    ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
