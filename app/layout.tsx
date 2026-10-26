@@ -15,6 +15,11 @@ export const metadata: Metadata = {
     icon: '/icon.svg',
     apple: '/apple-touch-icon.png',
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Vaairo',
+  },
   openGraph: {
     title: 'Vaairo Spirits & Beverage ERP',
     description:
