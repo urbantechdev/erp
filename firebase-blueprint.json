@@ -7,6 +7,7 @@
       "properties": {
         "name": { "type": "string", "maxLength": 120 },
         "email": { "type": "string", "maxLength": 180 },
+        "phone": { "type": "string", "maxLength": 40 },
         "role": {
           "type": "string",
           "enum": [
@@ -17,10 +18,12 @@
             "Branch Manager",
             "Inventory Controller",
             "Counter Cashier",
-            "Affiliate Sales Representative"
+            "Affiliate Sales Representative",
+            "Delivery Manager",
+            "Delivery Rider"
           ]
         },
-        "authMethod": { "type": "string", "enum": ["google", "pin"] },
+        "authMethod": { "type": "string", "enum": ["google", "pin", "email"] },
         "pin": { "type": "string", "maxLength": 6 },
         "branchId": { "type": "string", "maxLength": 128 },
         "branchName": { "type": "string", "maxLength": 120 },
@@ -97,7 +100,7 @@
       "description": "Onboarded Supplier, Licensed Retailer, or Logistics Provider",
       "type": "object",
       "properties": {
-        "partnerType": { "type": "string", "enum": ["Supplier", "Retailer", "Logistics"] },
+        "partnerType": { "type": "string", "enum": ["Supplier", "Retailer", "Logistics", "Direct Clients", "Individual", "Business"] },
         "code": { "type": "string", "maxLength": 40 },
         "companyName": { "type": "string", "maxLength": 160 },
         "contactPerson": { "type": "string", "maxLength": 120 },
@@ -132,8 +135,15 @@
         "logisticsPartnerName": { "type": "string", "maxLength": 140 },
         "vehicleReg": { "type": "string", "maxLength": 40 },
         "excisePermitNo": { "type": "string", "maxLength": 80 },
-        "status": { "type": "string", "enum": ["Dispatched", "In Transit", "Received"] },
+        "status": { "type": "string", "enum": ["Pending Authorization", "Dispatched", "In Transit", "Received", "Rejected"] },
         "initiatedBy": { "type": "string", "maxLength": 120 },
+        "initiatedByRole": { "type": "string", "maxLength": 80 },
+        "authorizedBy": { "type": "string", "maxLength": 120 },
+        "authorizedByRole": { "type": "string", "maxLength": 80 },
+        "authorizedAt": { "type": "string", "maxLength": 64 },
+        "rejectedBy": { "type": "string", "maxLength": 120 },
+        "rejectedAt": { "type": "string", "maxLength": 64 },
+        "rejectionReason": { "type": "string", "maxLength": 250 },
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["transferNo", "fromBranchName", "toBranchName", "sku", "productName", "quantityBottles", "status", "createdAt"]
@@ -151,8 +161,18 @@
         "regionId": { "type": "string", "maxLength": 128 },
         "regionName": { "type": "string", "maxLength": 120 },
         "customerName": { "type": "string", "maxLength": 160 },
+        "customerPhone": { "type": "string", "maxLength": 48 },
+        "customerEmail": { "type": "string", "maxLength": 160 },
         "customerLicenseNo": { "type": "string", "maxLength": 80 },
-        "itemsSummary": { "type": "string", "maxLength": 2000 },
+        "deliveryAddress": { "type": "string", "maxLength": 300 },
+        "deliveryNotes": { "type": "string", "maxLength": 400 },
+        "deliveryStatus": { "type": "string", "enum": ["Pending Dispatch", "Out for Delivery", "Delivered"] },
+        "assignedRiderId": { "type": "string", "maxLength": 128 },
+        "assignedRiderName": { "type": "string", "maxLength": 120 },
+        "assignedRiderPhone": { "type": "string", "maxLength": 48 },
+        "dispatchedAt": { "type": "string", "maxLength": 64 },
+        "deliveredAt": { "type": "string", "maxLength": 64 },
+        "itemsSummary": { "type": "string", "maxLength": 4000 },
         "subtotal": { "type": "number" },
         "exciseAndTax": { "type": "number" },
         "totalAmount": { "type": "number" },

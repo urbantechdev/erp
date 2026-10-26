@@ -17,7 +17,8 @@ service cloud.firestore {
       return data.keys().hasAll(['name', 'email', 'role', 'authMethod', 'status', 'createdAt']) &&
              data.name is string && data.name.size() <= 120 &&
              data.email is string && data.email.size() <= 180 &&
-             data.role in ['Admin', 'Accountant', 'HR', 'Sales Manager', 'Branch Manager', 'Inventory Controller', 'Counter Cashier', 'Affiliate Sales Representative'] &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
+             data.role in ['Admin', 'Accountant', 'HR', 'Sales Manager', 'Branch Manager', 'Inventory Controller', 'Counter Cashier', 'Affiliate Sales Representative', 'Delivery Manager', 'Delivery Rider'] &&
              data.authMethod in ['google', 'pin', 'email'] &&
              data.status in ['Active', 'Suspended', 'Terminated'] &&
              data.createdAt is string && data.createdAt.size() <= 64;
@@ -58,7 +59,7 @@ service cloud.firestore {
 
     function isValidPartner(data) {
       return data.keys().hasAll(['partnerType', 'code', 'companyName', 'contactPerson', 'liquorLicenseNo', 'complianceStatus', 'createdAt']) &&
-             data.partnerType in ['Supplier', 'Retailer', 'Logistics'] &&
+             data.partnerType in ['Supplier', 'Retailer', 'Logistics', 'Direct Clients', 'Individual', 'Business'] &&
              data.code is string && data.code.size() <= 40 &&
              data.companyName is string && data.companyName.size() <= 160 &&
              data.contactPerson is string && data.contactPerson.size() <= 120 &&
@@ -75,7 +76,7 @@ service cloud.firestore {
              data.sku is string && data.sku.size() <= 80 &&
              data.productName is string && data.productName.size() <= 200 &&
              data.quantityBottles is number &&
-             data.status in ['Dispatched', 'In Transit', 'Received'] &&
+             data.status in ['Pending Authorization', 'Dispatched', 'In Transit', 'Received', 'Rejected'] &&
              data.createdAt is string && data.createdAt.size() <= 64;
     }
 

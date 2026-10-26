@@ -26,14 +26,14 @@ for (let i = 0; i < rawArgs.length; i++) {
   }
 }
 
-// Ensure prebuilt ERP bundle exists before starting Next.js
-const bundleJs = path.join(ROOT, 'public', 'erp-app.js');
-const bundleCss = path.join(ROOT, 'public', 'erp-app.css');
-if (!fs.existsSync(bundleJs) || !fs.existsSync(bundleCss)) {
+// Ensure prebuilt ERP bundle is always fresh before starting Next.js
+try {
   execFileSync(process.execPath, [path.join(__dirname, 'build-erp.mjs')], {
     cwd: ROOT,
     stdio: 'inherit',
   });
+} catch (err) {
+  console.error('Failed to prebuild ERP assets in dev mode:', err);
 }
 
 const nextBin = path.join(ROOT, 'node_modules', '.bin', 'next');
