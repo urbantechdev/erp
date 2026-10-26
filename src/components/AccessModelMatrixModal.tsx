@@ -173,7 +173,7 @@ export const AccessModelMatrixModal: React.FC<AccessModelMatrixModalProps> = ({
   const handleExportMatrixPDF = () => {
     exportReportToPDF(
       'Target Access Model & RBAC Boundaries Matrix',
-      'AEGIS / VAAIRO 8-Role Security Architecture',
+      'VAAIRO 8-Role Security Architecture',
       ['Module / Function', 'Admin', 'Accountant', 'HR', 'Sales Mgr', 'Branch Mgr', 'Inventory', 'Cashier', 'Affiliate'],
       TARGET_ACCESS_MATRIX.map((m) => [
         m.moduleName,
@@ -202,7 +202,7 @@ export const AccessModelMatrixModal: React.FC<AccessModelMatrixModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-montserrat font-black text-[#FFDE00] uppercase tracking-wider">
-                  AEGIS / VAAIRO Enterprise RBAC
+                  VAAIRO Enterprise RBAC
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white">
                   {isAdmin ? 'Admin Controlled Model' : '8-Role Architecture'}

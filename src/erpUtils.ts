@@ -81,7 +81,7 @@ export function normalizeCatalogProduct(raw: Product, index: number): Product {
   };
 }
 
-import AUDITED_INVENTORY from './data/auditedBondedProducts.json';
+import { AUDITED_INVENTORY } from './data/auditedBondedProducts';
 
 export const MASTER_IMPORTED_INVENTORY: Product[] = (AUDITED_INVENTORY as any[]).map((p, idx) =>
   normalizeCatalogProduct(p as any, idx)
@@ -992,7 +992,7 @@ export function exportReportToPDF(
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text('VAAIRO / AEGIS SPIRITS & BEVERAGE IMPORTERS ERP', 36, 32);
+  doc.text('VAAIRO SPIRITS & BEVERAGE IMPORTERS ERP', 36, 32);
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');

@@ -27,7 +27,7 @@ export const ThermalPayslipModal: React.FC<ThermalPayslipModalProps> = ({ record
     // Header
     doc.setFont('courier', 'bold');
     doc.setFontSize(11);
-    doc.text('AEGIS SPIRITS & BEVERAGES', 40, y, { align: 'center' });
+    doc.text('VAAIRO SPIRITS & BEVERAGES', 40, y, { align: 'center' });
     y += 4;
     doc.setFontSize(8);
     doc.setFont('courier', 'normal');
@@ -157,7 +157,7 @@ export const ThermalPayslipModal: React.FC<ThermalPayslipModalProps> = ({ record
     y += 4;
     doc.text('* ELECTRONIC RECORD · NO SIGNATURE *', 40, y, { align: 'center' });
     y += 3.5;
-    doc.text('POWERED BY AEGIS ERP & KRA eTIMS', 40, y, { align: 'center' });
+    doc.text('POWERED BY VAAIRO ERP & KRA eTIMS', 40, y, { align: 'center' });
 
     doc.save(`Payslip_${record.staffName.replace(/\s+/g, '_')}_${record.period.replace(/\s+/g, '_')}.pdf`);
   };
@@ -215,7 +215,7 @@ export const ThermalPayslipModal: React.FC<ThermalPayslipModalProps> = ({ record
             {/* Thermal Header */}
             <div className="text-center space-y-0.5 pb-2">
               <div className="font-bold text-xs uppercase tracking-tight">
-                AEGIS SPIRITS & BEVERAGE ERP
+                VAAIRO SPIRITS & BEVERAGE ERP
               </div>
               <div className="text-[10px] text-slate-600">
                 VAAIRO BONDED DISTRIBUTORS LTD
@@ -398,7 +398,7 @@ export const ThermalPayslipModal: React.FC<ThermalPayslipModalProps> = ({ record
                 ELECTRONIC RECEIPT · CONFIDENTIAL RECORD
               </div>
               <div className="text-[8px] text-slate-400">
-                Aegis Spirits & Beverage ERP System · Nairobi
+                Vaairo Spirits & Beverage ERP System · Nairobi
               </div>
             </div>
           </div>

@@ -4,7 +4,7 @@
  * irreversible salted SHA-256 hashes inside Firestore.
  */
 
-const PIN_CRYPTO_SALT = 'aegis-spirits-erp-secure-salt-v1';
+const PIN_CRYPTO_SALT = 'vaairo-spirits-erp-secure-salt-v1';
 
 /**
  * Computes a salted SHA-256 hash for a 6-digit staff PIN.

@@ -1,10 +1,10 @@
 import { Product, StockCategory } from '../types';
 
-const whiskyImg = new URL('../assets/images/product_whisky_scotch_1790446242615.jpg', import.meta.url).href;
-const cognacBrandyImg = new URL('../assets/images/product_cognac_brandy_1790446252743.jpg', import.meta.url).href;
-const ginVodkaImg = new URL('../assets/images/product_gin_vodka_1790446262612.jpg', import.meta.url).href;
-const champagneWineImg = new URL('../assets/images/product_champagne_wine_1790446272934.jpg', import.meta.url).href;
-const beerCiderImg = new URL('../assets/images/product_beer_cider_1790446283876.jpg', import.meta.url).href;
+const whiskyImg = '/assets/images/product_whisky_scotch_1790446242615.jpg';
+const cognacBrandyImg = '/assets/images/product_cognac_brandy_1790446252743.jpg';
+const ginVodkaImg = '/assets/images/product_gin_vodka_1790446262612.jpg';
+const champagneWineImg = '/assets/images/product_champagne_wine_1790446272934.jpg';
+const beerCiderImg = '/assets/images/product_beer_cider_1790446283876.jpg';
 
 export const STUDIO_PRODUCT_IMAGES = {
   WHISKY: whiskyImg,

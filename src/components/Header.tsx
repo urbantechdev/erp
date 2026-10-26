@@ -544,7 +544,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Drawer Footer */}
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between font-montserrat text-xs text-slate-500">
-              <span className="font-semibold text-slate-600">Aegis Spirits ERP v2.4</span>
+              <span className="font-semibold text-slate-600">Vaairo Spirits ERP v2.4</span>
               <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
                 Systems Nominal
               </span>

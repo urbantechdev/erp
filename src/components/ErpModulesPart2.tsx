@@ -1551,7 +1551,7 @@ export const HrAndRbacModule: React.FC<{
   const [deletingStaff, setDeletingStaff] = useState<StaffMember | null>(null);
   const [isDeletingStaff, setIsDeletingStaff] = useState(false);
 
-  const isGoogleRole = selectedRole === 'Admin' || selectedRole === 'Accountant';
+  const isGoogleRole = selectedRole === 'Admin';
 
   const autoCalculateKenyanStatutory = (salary: number) => {
     const nssf = Math.min(Math.round(salary * 0.06), 2160);
@@ -1606,7 +1606,7 @@ export const HrAndRbacModule: React.FC<{
     }
 
     const effectiveAuthMethod =
-      effectiveRole === 'Admin' || effectiveRole === 'Accountant' ? 'google' : 'pin';
+      effectiveRole === 'Admin' ? 'google' : (pin ? 'pin' : 'google');
 
     const assignedBranch =
       currentUser.role === 'Branch Manager'
@@ -1726,7 +1726,7 @@ export const HrAndRbacModule: React.FC<{
     }
 
     const branch = branches.find((b) => b.id === editBranchId) || branches[0];
-    const effectiveAuth = editRole === 'Admin' || editRole === 'Accountant' ? 'google' : 'pin';
+    const effectiveAuth = editRole === 'Admin' ? 'google' : (editPin && editPin.length === 6 ? 'pin' : (editingStaff.authMethod || 'google'));
 
     await onUpdateStaff(
       editingStaff.id,
@@ -1738,7 +1738,7 @@ export const HrAndRbacModule: React.FC<{
         branchId: branch?.id || editingStaff.branchId,
         branchName: branch?.name || editingStaff.branchName,
         status: editStatus,
-        pin: effectiveAuth === 'pin' ? (editPin.length === 6 ? editPin : editingStaff.pin) : undefined,
+        pin: editPin && editPin.length === 6 ? editPin : editingStaff.pin,
         baseSalaryKes: Number(editBaseSalary),
         deductionsKes: Number(editDeductions),
         penaltiesKes: Number(editPenalties),
@@ -3057,7 +3057,7 @@ export const HrAndRbacModule: React.FC<{
                   </div>
                 </div>
 
-                {editRole !== 'Admin' && editRole !== 'Accountant' && (
+                {editRole !== 'Admin' && (
                   <div className="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-1.5">
                     <label className="font-montserrat font-bold text-slate-700">
                       Assigned 6-Digit PIN (Enlarged Digits)
