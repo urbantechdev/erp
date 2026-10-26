@@ -4502,21 +4502,46 @@ export default function App() {
 
       {/* Inactivity Auto-Logoff Warning Modal */}
       {showInactivityWarning && currentUser && (
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-md w-full p-6 text-center space-y-5">
-            <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
-              <Clock className="w-8 h-8 animate-spin-slow" />
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-sm w-full p-6 text-center space-y-6">
+            <div className="relative flex items-center justify-center">
+              {/* Circular Progress */}
+              <svg className="w-24 h-24 transform -rotate-90">
+                <circle
+                  cx="48"
+                  cy="48"
+                  r="40"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  fill="transparent"
+                  className="text-slate-200"
+                />
+                <circle
+                  cx="48"
+                  cy="48"
+                  r="40"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  fill="transparent"
+                  strokeDasharray={251.2}
+                  strokeDashoffset={251.2 - (251.2 * (30 - inactivityCountdown)) / 30}
+                  className="text-amber-500 transition-all duration-1000 ease-linear"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {/* Countdown Numbers */}
+              <div className="absolute text-5xl font-montserrat font-black text-[#0A006E] animate-pulse">
+                {inactivityCountdown}
+              </div>
             </div>
+
             <div className="space-y-1.5">
               <h3 className="text-xl font-montserrat font-black text-[#0A006E]">
-                Inactivity Warning
+                Session Expiring
               </h3>
               <p className="text-xs text-slate-600">
-                No activity detected. You will be automatically logged out in:
+                Are you still working? You will be logged out automatically.
               </p>
-              <div className="text-3xl font-montserrat font-black text-amber-600 font-mono-tabular py-2">
-                00:{inactivityCountdown < 10 ? `0${inactivityCountdown}` : inactivityCountdown}
-              </div>
             </div>
 
             <div className="flex items-center gap-3 pt-2">

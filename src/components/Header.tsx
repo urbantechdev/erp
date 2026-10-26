@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { StaffMember, ERPModuleId, Branch } from '../types';
 import { isAudioMuted, toggleAudioMuted, playPosBeep } from '../utils/audioBeep';
-import { PWAInstallButton } from './common/PWAInstallButton';
+import { PWAInstallButton } from './ui/PWAInstallButton';
 
 export interface HeaderProps {
   /** Mode: 'authenticated' for active ERP session, 'gateway' for login portal */
