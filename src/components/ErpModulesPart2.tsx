@@ -2287,10 +2287,11 @@ export const HrAndRbacModule: React.FC<{
                 <thead>
                   <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
                     <th className="py-2.5 px-3 font-black">Staff Name & Email</th>
-                    <th className="py-2.5 px-3 font-black">Role & Status</th>
-                    <th className="py-2.5 px-3 font-black">Auth Mode & PIN</th>
+                    <th className="py-2.5 px-3 font-black">Status</th>
+                    <th className="py-2.5 px-3 font-black">Role</th>
+                    <th className="py-2.5 px-3 font-black">Auth Mode</th>
                     <th className="py-2.5 px-3 font-black">Assigned Branch</th>
-                    <th className="py-2.5 px-3 font-black text-right">Net Monthly Salary</th>
+                    <th className="py-2.5 px-3 font-black text-right">Net Salary</th>
                     <th className="py-2.5 px-3 font-black text-right">Actions</th>
                   </tr>
                 </thead>
@@ -2305,18 +2306,14 @@ export const HrAndRbacModule: React.FC<{
                     return (
                       <tr key={s.id} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-semibold text-slate-900">
-                          <div>{s.name}</div>
-                          <div className="text-slate-500 font-normal text-[11px]">{s.email}</div>
+                          <div className="flex items-center gap-2">
+                             <div className={`w-2.5 h-2.5 rounded-full ${s.isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-300'}`} title={s.isOnline ? 'Online' : 'Offline'} />
+                             {s.name}
+                          </div>
+                          <div className="text-slate-500 font-normal text-[11px] ml-4.5">{s.email}</div>
                         </td>
                         <td className="py-2.5 px-3">
-                          <div className="font-montserrat font-black text-[#0A006E]">{s.role}</div>
-                          {(s.role === 'Affiliate Sales Representative' || s.isCasual) && (
-                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-[#FFDE00] text-[#0A006E] border border-amber-400">
-                              Casual · {s.agreedCommissionPct ?? 8}% Commission
-                            </span>
-                          )}
-                          <div>
-                            <span className={`inline-flex items-center px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold ${
+                           <span className={`inline-flex items-center px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold ${
                               s.status === 'Active'
                                 ? 'bg-[#34D186]/20 text-[#1E9E60] border border-[#34D186]/40'
                                 : s.status === 'Suspended'
@@ -2325,15 +2322,12 @@ export const HrAndRbacModule: React.FC<{
                             }`}>
                               {s.status}
                             </span>
-                          </div>
-                          {s.strippedFeatures && s.strippedFeatures.length > 0 && (
-                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-montserrat font-black bg-rose-100 text-rose-800 border border-rose-300">
-                              {s.strippedFeatures.length} Feature{s.strippedFeatures.length > 1 ? 's' : ''} Stripped
-                            </span>
-                          )}
-                          {s.grantedFeatures && s.grantedFeatures.length > 0 && (
-                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-montserrat font-black bg-blue-100 text-blue-800 border border-blue-300">
-                              +{s.grantedFeatures.length} Custom
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-montserrat font-black text-[#0A006E]">{s.role}</div>
+                          {(s.role === 'Affiliate Sales Representative' || s.isCasual) && (
+                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-montserrat font-bold bg-[#FFDE00] text-[#0A006E] border border-amber-400">
+                              Casual · {s.agreedCommissionPct ?? 8}% Commission
                             </span>
                           )}
                         </td>
