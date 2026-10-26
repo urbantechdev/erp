@@ -3852,7 +3852,7 @@ export default function App() {
           products={products}
           branches={branches}
           regions={regions}
-          onPlaceOnlineOrder={(draft) => handleCommitTransaction(draft, [])}
+          onPlaceOnlineOrder={(draft, products) => handleCommitTransaction(draft, products)}
           onPreviewDoc={(d) => setPreviewDoc(d)}
           onBackToErpLogin={() => setStandaloneCustomerPortal(false)}
         />
@@ -4789,6 +4789,7 @@ export default function App() {
               onWipeInventoryToZero={handleWipeInventoryToZero}
               onLogStockIncident={handleLogStockIncident}
               onOpenOnboardItems={() => setIsOnboardModalOpen(true)}
+              transfers={transfers}
             />
           )}
 
@@ -5119,8 +5120,8 @@ export default function App() {
 
       {/* Inactivity Auto-Logoff Warning Modal */}
       {showInactivityWarning && currentUser && (
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl border-2 border-[#0A006E] shadow-2xl max-w-sm w-full p-6 text-center space-y-6">
+        <div className="fixed inset-0 z-[99999] bg-white sm:bg-black/80 sm:backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+          <div className="w-full h-full sm:h-auto sm:max-w-sm sm:w-full bg-white sm:rounded-3xl sm:border-2 sm:border-[#0A006E] sm:shadow-2xl flex flex-col justify-center items-center p-8 sm:p-6 text-center space-y-8 sm:space-y-6">
             <div className="relative flex items-center justify-center">
               {/* Circular Progress */}
               <svg className="w-28 h-28 transform -rotate-90">

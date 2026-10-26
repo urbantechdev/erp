@@ -3,6 +3,8 @@ import {
   Package,
   Building2,
   ArrowLeftRight,
+  ArrowRightLeft,
+  Inbox,
   MapPin,
   Download,
   Plus,
@@ -619,106 +621,194 @@ export const OverviewModule: React.FC<{
 
     const damagedCount = products.reduce((acc, p) => acc + (p.damagedBottlesCount || 0), 0);
     const spoiledCount = products.reduce((acc, p) => acc + (p.spoiledBottlesCount || 0), 0);
+    const pendingTransfersCount = transfers.filter((t) => t.status === 'Pending Authorization').length;
+    const activeTransfersCount = transfers.filter((t) => t.status === 'Dispatched' || t.status === 'In Transit').length;
 
     return (
-      <div className="space-y-6">
-        {/* Inventory Controller Banner */}
-        <div className="bg-[#0A006E] text-white border-2 border-[#34D186] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
-          <div>
-            <span className="text-[11px] font-montserrat font-black text-[#34D186] uppercase tracking-wider block">
+      <div className="space-y-6 pb-12">
+        {/* Inventory Controller App Banner */}
+        <div className="bg-[#0A006E] text-white border-2 border-[#34D186] rounded-3xl p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative overflow-hidden shadow-xl">
+          <div className="absolute right-0 top-0 w-80 h-80 bg-[#34D186]/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative z-10 space-y-1.5">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#34D186]/20 border border-[#34D186]/40 text-[#34D186] text-[10px] font-montserrat font-black uppercase tracking-wider">
+              <ShieldCheck className="w-3.5 h-3.5" />
               Bonded Warehouse &amp; Inventory Controller Command
-            </span>
-            <h2 className="text-xl font-montserrat font-black italic text-white mt-1">
-              Bonded Inventory Valuation, Barcode Health &amp; Transit Logistics
+            </div>
+            <h2 className="text-xl sm:text-2xl font-montserrat font-black tracking-tight text-white">
+              Inventory Valuation, Barcode Health &amp; Transit Logistics
             </h2>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Real-time oversight of master liquor batches, customs stamps, and inter-branch movements.
+            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+              Real-time oversight of master liquor batches, customs excise stamps, bonded warehousing, and inter-branch dispatch.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onNavigateModule?.('inventory')}
-              className="px-4 py-2 bg-[#34D186] text-[#0A006E] rounded-xl text-xs font-montserrat font-black cursor-pointer shadow-xs transition"
-            >
-              Master Inventory
-            </button>
-            <button
-              onClick={() => onNavigateModule?.('branches_transfers')}
-              className="px-3.5 py-2 bg-white/15 text-white rounded-xl text-xs font-montserrat font-bold cursor-pointer transition"
-            >
-              Stock Transfers
-            </button>
-          </div>
+
+        </div>
+
+        {/* Inventory Manager App Menu of Box Buttons */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <button
+            type="button"
+            onClick={() => onNavigateModule?.('inventory')}
+            className="p-4 bg-white border-2 border-slate-200 hover:border-[#34D186] rounded-3xl text-left flex flex-col justify-between gap-3 shadow-xs hover:shadow-md transition cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 group-hover:bg-[#34D186] group-hover:text-[#0A006E] flex items-center justify-center transition">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-montserrat font-black text-slate-900 group-hover:text-[#0A006E]">
+                Master Inventory
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">SKUs &amp; Bonded Stock</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateModule?.('branches_transfers')}
+            className="p-4 bg-white border-2 border-slate-200 hover:border-amber-400 rounded-3xl text-left flex flex-col justify-between gap-3 shadow-xs hover:shadow-md transition cursor-pointer group relative"
+          >
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 group-hover:bg-amber-500 group-hover:text-white flex items-center justify-center transition">
+              <ArrowRightLeft className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-xs sm:text-sm font-montserrat font-black text-slate-900 group-hover:text-amber-800">
+                  Stock Transfers
+                </span>
+                {pendingTransfersCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-mono-tabular font-black">
+                    {pendingTransfersCount}
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">Inter-Depot Dispatch</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateModule?.('internal_inbox')}
+            className="p-4 bg-white border-2 border-slate-200 hover:border-red-400 rounded-3xl text-left flex flex-col justify-between gap-3 shadow-xs hover:shadow-md transition cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 group-hover:bg-red-600 group-hover:text-white flex items-center justify-center transition">
+              <Inbox className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-montserrat font-black text-slate-900 group-hover:text-red-700">
+                Internal Inbox
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">Dept &amp; Colleague Chat</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateModule?.('inventory')}
+            className="p-4 bg-white border-2 border-slate-200 hover:border-cyan-400 rounded-3xl text-left flex flex-col justify-between gap-3 shadow-xs hover:shadow-md transition cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-2xl bg-cyan-50 text-cyan-700 group-hover:bg-cyan-600 group-hover:text-white flex items-center justify-center transition">
+              <Barcode className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-montserrat font-black text-slate-900 group-hover:text-cyan-800">
+                Barcode Audit
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">Scan &amp; Verify Stamps</div>
+            </div>
+          </button>
         </div>
 
         {/* Inventory KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
-            <div className="text-xs font-montserrat font-bold text-slate-600">Bonded Stock Asset Valuation</div>
-            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+          <div className="bg-white border-2 border-slate-200 hover:border-[#0A006E] rounded-3xl p-5 shadow-sm transition space-y-1">
+            <div className="text-[11px] font-montserrat font-black uppercase tracking-wider text-slate-500">
+              Bonded Stock Valuation
+            </div>
+            <div className="text-2xl sm:text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular tracking-tight">
               {formatKes(totalInventoryValue)}
             </div>
-            <div className="text-xs text-slate-600 mt-1">
-              {totalBottlesInBond.toLocaleString()} Total Bottles in Warehouses
+            <div className="text-xs text-emerald-700 font-bold pt-1 flex items-center gap-1">
+              <span>{totalBottlesInBond.toLocaleString()} btls in bonded warehouses</span>
             </div>
           </div>
 
-          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
-            <div className="text-xs font-montserrat font-bold text-slate-600">IPS vs LPS Catalog</div>
-            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+          <div className="bg-white border-2 border-slate-200 hover:border-[#0A006E] rounded-3xl p-5 shadow-sm transition space-y-1">
+            <div className="text-[11px] font-montserrat font-black uppercase tracking-wider text-slate-500">
+              IPS vs LPS Catalog
+            </div>
+            <div className="text-2xl sm:text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular tracking-tight">
               {products.length} SKUs
             </div>
-            <div className="text-xs text-slate-600 mt-1">
-              IPS Imported: <strong>{ipsCount}</strong> · LPS Local: <strong>{lpsCount}</strong>
+            <div className="text-xs text-slate-600 pt-1 font-semibold">
+              IPS Imported: <strong className="text-slate-900">{ipsCount}</strong> · LPS Local: <strong className="text-slate-900">{lpsCount}</strong>
             </div>
           </div>
 
-          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
-            <div className="text-xs font-montserrat font-bold text-slate-600">Inter-Branch Transfers</div>
-            <div className="text-2xl font-montserrat font-black text-[#0A006E] font-mono-tabular mt-1">
+          <div className="bg-white border-2 border-slate-200 hover:border-[#0A006E] rounded-3xl p-5 shadow-sm transition space-y-1">
+            <div className="text-[11px] font-montserrat font-black uppercase tracking-wider text-slate-500">
+              Inter-Branch Logistics
+            </div>
+            <div className="text-2xl sm:text-3xl font-montserrat font-black text-[#0A006E] font-mono-tabular tracking-tight">
               {transfers.length} Transfers
             </div>
-            <div className="text-xs text-amber-700 font-bold mt-1">
-              {transfers.filter((t) => t.status === 'Pending Authorization').length} Awaiting Manager Auth · {transfers.filter((t) => t.status === 'Dispatched' || t.status === 'In Transit').length} Dispatched
+            <div className="text-xs text-amber-800 font-bold pt-1 flex items-center gap-1">
+              <span>{pendingTransfersCount} pending auth · {activeTransfersCount} active</span>
             </div>
           </div>
 
-          <div className="bg-[#F0F2F0] border border-slate-200 rounded-2xl p-4">
-            <div className="text-xs font-montserrat font-bold text-slate-600">Damages &amp; Spoilage Loss</div>
-            <div className="text-2xl font-montserrat font-black text-rose-700 font-mono-tabular mt-1">
-              {(damagedCount + spoiledCount)} btls
+          <div className="bg-white border-2 border-slate-200 hover:border-rose-300 rounded-3xl p-5 shadow-sm transition space-y-1">
+            <div className="text-[11px] font-montserrat font-black uppercase tracking-wider text-slate-500">
+              Damages &amp; Spoilage
             </div>
-            <div className="text-xs text-rose-600 mt-1">
+            <div className="text-2xl sm:text-3xl font-montserrat font-black text-rose-600 font-mono-tabular tracking-tight">
+              {damagedCount + spoiledCount} btls
+            </div>
+            <div className="text-xs text-rose-700 font-bold pt-1">
               {damagedCount} Damaged · {spoiledCount} Spoiled quarantined
             </div>
           </div>
         </div>
 
         {/* Bonded Stock Distribution by Branch Table */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-          <h3 className="text-sm font-montserrat font-black text-[#0A006E] uppercase tracking-wider flex items-center gap-2">
-            <Package className="w-4 h-4 text-[#0A006E]" />
-            Bonded Stock Distribution by Branch Depot
-          </h3>
+        <div className="bg-white border-2 border-slate-200 rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-montserrat font-black text-[#0A006E] flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-[#0A006E]" />
+                Bonded Stock Distribution by Branch Depot
+              </h3>
+              <p className="text-xs text-slate-500">
+                Official customs bonded warehouses and regional retail branches
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigateModule?.('branches_transfers')}
+              className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-[#0A006E] hover:text-[#FFDE00] text-[#0A006E] text-xs font-montserrat font-bold transition cursor-pointer"
+            >
+              View Branch Manifests →
+            </button>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-[#0A006E] text-[#FFDE00] font-montserrat">
-                  <th className="py-2.5 px-3 font-black">Depot Code</th>
-                  <th className="py-2.5 px-3 font-black">Branch Depot Name</th>
-                  <th className="py-2.5 px-3 font-black">Excise Bond License</th>
-                  <th className="py-2.5 px-3 font-black">Region</th>
-                  <th className="py-2.5 px-3 font-black text-right">Status</th>
+                  <th className="py-3 px-3.5 font-black rounded-l-xl">Depot Code</th>
+                  <th className="py-3 px-3.5 font-black">Branch Depot Name</th>
+                  <th className="py-3 px-3.5 font-black">Excise Bond License</th>
+                  <th className="py-3 px-3.5 font-black">Region</th>
+                  <th className="py-3 px-3.5 font-black text-right rounded-r-xl">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {branches.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 font-mono-tabular font-bold text-[#0A006E]">{b.code}</td>
-                    <td className="py-2.5 px-3 font-montserrat font-bold text-slate-900">{b.name}</td>
-                    <td className="py-2.5 px-3 font-mono-tabular text-slate-700">{b.exciseBondLicense}</td>
-                    <td className="py-2.5 px-3 text-slate-600">{b.regionName}</td>
-                    <td className="py-2.5 px-3 text-right text-[#1E9E60] font-bold">{b.status}</td>
+                  <tr key={b.id} className="hover:bg-slate-50 transition">
+                    <td className="py-3 px-3.5 font-mono-tabular font-black text-[#0A006E]">{b.code}</td>
+                    <td className="py-3 px-3.5 font-montserrat font-black text-slate-900">{b.name}</td>
+                    <td className="py-3 px-3.5 font-mono-tabular text-slate-700">{b.exciseBondLicense}</td>
+                    <td className="py-3 px-3.5 text-slate-600 font-medium">{b.regionName}</td>
+                    <td className="py-3 px-3.5 text-right font-bold text-emerald-700">{b.status}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1651,6 +1741,7 @@ export const InventoryModule: React.FC<{
   onWipeInventoryToZero?: () => Promise<void>;
   onLogStockIncident?: (incident: DamageSpoilageIncident) => Promise<void>;
   onOpenOnboardItems?: () => void;
+  transfers: StockTransfer[];
 }> = ({
   currentUser,
   products,
@@ -1663,7 +1754,9 @@ export const InventoryModule: React.FC<{
   onWipeInventoryToZero,
   onLogStockIncident,
   onOpenOnboardItems,
+  transfers,
 }) => {
+  const pendingTransfersCount = transfers.filter((t) => t.status === 'Pending Authorization').length;
   const isInventoryPerson =
     currentUser.role === 'Inventory Controller' ||
     (currentUser.role as string) === 'Inventory' ||
@@ -2213,7 +2306,81 @@ export const InventoryModule: React.FC<{
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
+      {/* Inventory Manager App Menu of Box Buttons */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <button
+          type="button"
+          onClick={() => onNavigateModule?.('inventory')}
+          className="p-6 sm:p-8 bg-white border-3 border-slate-200 hover:border-[#34D186] rounded-3xl text-left flex flex-col justify-between gap-4 shadow-md hover:shadow-xl transition cursor-pointer group"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 group-hover:bg-[#34D186] group-hover:text-[#0A006E] flex items-center justify-center transition shadow-inner">
+            <Package className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="text-sm sm:text-base font-montserrat font-black text-slate-900 group-hover:text-[#0A006E]">
+              Master Inventory
+            </div>
+            <div className="text-xs text-slate-500 font-medium mt-1">SKUs &amp; Bonded Stock</div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigateModule?.('branches_transfers')}
+          className="p-6 sm:p-8 bg-white border-3 border-slate-200 hover:border-amber-400 rounded-3xl text-left flex flex-col justify-between gap-4 shadow-md hover:shadow-xl transition cursor-pointer group relative"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-700 group-hover:bg-amber-500 group-hover:text-white flex items-center justify-center transition shadow-inner">
+            <ArrowRightLeft className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-sm sm:text-base font-montserrat font-black text-slate-900 group-hover:text-amber-800">
+                Stock Transfers
+              </span>
+              {pendingTransfersCount > 0 && (
+                <span className="px-2 py-1 rounded-full bg-amber-500 text-white text-[11px] font-mono-tabular font-black">
+                  {pendingTransfersCount}
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-slate-500 font-medium mt-1">Inter-Depot Dispatch</div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigateModule?.('internal_inbox')}
+          className="p-6 sm:p-8 bg-white border-3 border-slate-200 hover:border-red-400 rounded-3xl text-left flex flex-col justify-between gap-4 shadow-md hover:shadow-xl transition cursor-pointer group"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 group-hover:bg-red-600 group-hover:text-white flex items-center justify-center transition shadow-inner">
+            <Inbox className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="text-sm sm:text-base font-montserrat font-black text-slate-900 group-hover:text-red-700">
+              Internal Inbox
+            </div>
+            <div className="text-xs text-slate-500 font-medium mt-1">Dept &amp; Colleague Chat</div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigateModule?.('inventory')}
+          className="p-6 sm:p-8 bg-white border-3 border-slate-200 hover:border-cyan-400 rounded-3xl text-left flex flex-col justify-between gap-4 shadow-md hover:shadow-xl transition cursor-pointer group"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-cyan-50 text-cyan-700 group-hover:bg-cyan-600 group-hover:text-white flex items-center justify-center transition shadow-inner">
+            <Barcode className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="text-sm sm:text-base font-montserrat font-black text-slate-900 group-hover:text-cyan-800">
+              Barcode Audit
+            </div>
+            <div className="text-xs text-slate-500 font-medium mt-1">Scan &amp; Verify Stamps</div>
+          </div>
+        </button>
+      </div>
+
       {/* Mobile Only: Action Buttons Row (Hero banner removed on mobile) */}
       <div className="flex sm:hidden items-center gap-2 overflow-x-auto pb-1 pt-1">
         {onOpenOnboardItems && (

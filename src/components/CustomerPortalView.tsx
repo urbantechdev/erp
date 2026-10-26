@@ -38,7 +38,7 @@ interface CustomerPortalViewProps {
   products: Product[];
   branches: Branch[];
   regions?: GeoRegion[];
-  onPlaceOnlineOrder: (draft: any) => Promise<TransactionDoc | null | void> | void;
+  onPlaceOnlineOrder: (draft: any, updatedProducts: any[]) => Promise<TransactionDoc | null | void> | void;
   onPreviewDoc: (d: any) => void;
   onBackToErpLogin: () => void;
   currentUser?: StaffMember | null;
@@ -375,9 +375,9 @@ const PortalProductCard: React.FC<PortalProductCardProps> = React.memo(
     return (
       <div
         onClick={() => onPreview(prod)}
-        className={`bg-white rounded-2xl border-2 transition-all duration-150 overflow-hidden flex flex-col group cursor-pointer hover:shadow-lg active:scale-98 select-none relative touch-manipulation ${
+        className={`bg-white rounded-2xl border-2 transition-all duration-200 overflow-hidden flex flex-col group cursor-pointer hover:shadow-[0_18px_48px_rgba(10,0,110,0.22)] hover:bg-blue-50/40 active:scale-98 select-none relative touch-manipulation ${
           inCartQty > 0
-            ? 'border-[#0A006E] shadow-sm ring-2 ring-[#FFDE00]/50'
+            ? 'border-[#0A006E] shadow-md ring-2 ring-[#FFDE00]/60 bg-blue-50/20'
             : 'border-slate-200 hover:border-[#0A006E]'
         }`}
       >
@@ -520,6 +520,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   const [isMobileCategorySheetOpen, setIsMobileCategorySheetOpen] = useState(false);
   const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [scannerQuery, setScannerQuery] = useState('');
   const [scannedProductMatch, setScannedProductMatch] = useState<Product | null>(null);
   const [categorySearchTerm, setCategorySearchTerm] = useState('');
@@ -821,6 +822,25 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     setIsSubmitting(true);
     const docNumber = `WEB-2026-${Date.now().toString().slice(-6)}`;
 
+    // Prepare product stock updates
+    const updatedProducts = cart.map((item) => {
+      const p = item.product;
+      let branchStock: Record<string, number> = {};
+      try {
+        branchStock = JSON.parse(p.branchStockSummary || '{}');
+      } catch {}
+
+      const currentBranchStock = branchStock[activeBranch.id] || p.totalBottles || 0;
+      const newTotal = (p.totalBottles || 0) - item.quantity;
+      branchStock[activeBranch.id] = Math.max(0, currentBranchStock - item.quantity);
+
+      return {
+        productId: p.id,
+        newTotal,
+        newBranchStockJson: JSON.stringify(branchStock),
+      };
+    });
+
     const txDraft: Omit<TransactionDoc, 'id' | 'createdAt'> = {
       docNumber,
       docType: 'Online Order',
@@ -859,7 +879,13 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     };
 
     try {
-      const created = await onPlaceOnlineOrder(txDraft);
+      if (paymentMethod === 'M-Pesa STK') {
+        setIsProcessingPayment(true);
+        // simulate M-Pesa prompt delay
+        await new Promise((resolve) => setTimeout(resolve, 3500));
+        setIsProcessingPayment(false);
+      }
+      const created = await onPlaceOnlineOrder(txDraft, updatedProducts);
       const fullDoc: TransactionDoc = (created as TransactionDoc) || {
         ...txDraft,
         id: `tx-${Date.now()}`,
@@ -872,6 +898,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       setIsMobileCartOpen(false);
       playPosBeep('success');
     } catch (err) {
+      setIsProcessingPayment(false);
       console.error('Failed to submit online order:', err);
       setCheckoutError('Could not complete your order. Please verify your connection and try again.');
     } finally {
@@ -1184,7 +1211,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         {/* Left Column: Product Catalog Grid */}
         <section className="flex-1 w-full min-w-0 flex flex-col space-y-3">
           {/* Active Fulfillment Hub & Geo-Location Nearest Branch Banner */}
-          <div className="w-full bg-white rounded-3xl border-2 border-[#0A006E] p-3.5 sm:p-4 shadow-sm">
+          <div className="w-full bg-white rounded-3xl border-2 border-[#0A006E] p-3.5 sm:p-4 shadow-sm hidden md:block">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 shadow-xs">
@@ -1631,6 +1658,58 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       {previewProduct && (
         <div className="fixed inset-0 z-50 bg-white sm:bg-black/60 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center sm:p-4 overflow-y-auto">
           <div className="w-full h-full sm:h-auto sm:max-w-2xl bg-white sm:rounded-3xl sm:border-2 sm:border-[#0A006E] p-5 sm:p-6 space-y-5 shadow-2xl relative my-auto animate-in zoom-in-95 duration-200 flex flex-col justify-between sm:justify-start min-h-screen sm:min-h-0">
+             {/* Mobile Sticky Top Add to Cart Header Bar (Non-Scrollable, Always Visible at Top) */}
+            <div className="sm:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md pt-2 pb-3 px-1 border-b border-slate-200 flex flex-col gap-2 shadow-xs -mx-5 -mt-5 p-4 mb-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 pr-8">
+                  <div className="text-[10px] font-black uppercase text-slate-500 truncate">
+                    {(activeVariant || previewProduct).name}
+                  </div>
+                  <div className="text-sm font-black text-[#0A006E] font-mono-tabular">
+                    {formatKes(
+                      ((activeVariant || previewProduct).retailPriceKes ||
+                        (activeVariant || previewProduct).baseRetailPrice ||
+                        3200) * previewQuantity
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center bg-slate-100 border border-slate-300 rounded-xl p-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewQuantity((q) => Math.max(1, q - 1))}
+                    className="w-8 h-8 rounded-lg bg-white text-slate-700 flex items-center justify-center font-bold shadow-xs disabled:opacity-40 cursor-pointer"
+                    disabled={previewQuantity <= 1}
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-3 text-xs font-black font-mono-tabular text-slate-900">
+                    {previewQuantity}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewQuantity((q) => q + 1)}
+                    className="w-8 h-8 rounded-lg bg-white text-slate-700 flex items-center justify-center font-bold shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const toAdd = activeVariant || previewProduct;
+                  handleAddToCart(toAdd, previewQuantity);
+                  setPreviewQuantity(1);
+                  setPreviewProduct(null);
+                  setActiveVariant(null);
+                }}
+                className="w-full py-3.5 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-black text-xs font-montserrat shadow-md transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 active:scale-98 animate-pulse shadow-[0_0_25px_rgba(255,222,0,0.7)] hover:shadow-[0_0_35px_rgba(255,222,0,0.9)]"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                Add to Ticket ({previewQuantity} btl{previewQuantity > 1 ? 's' : ''})
+              </button>
+            </div>
+
             {/* Modal Close Button */}
             <button
               type="button"
@@ -1638,26 +1717,26 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                 setPreviewProduct(null);
                 setActiveVariant(null);
               }}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 flex items-center justify-center transition cursor-pointer z-10"
+              className="absolute top-16 right-4 sm:top-4 sm:right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 flex items-center justify-center transition cursor-pointer z-40"
               aria-label="Close Preview"
             >
               <X className="w-4 h-4" />
             </button>
 
             {/* Active Bottle Showcase Header */}
-            <div className="flex flex-col gap-0 items-center sm:items-start pt-0">
-              <div className="w-full h-64 sm:w-36 sm:h-36 sm:rounded-2xl bg-slate-50 p-6 sm:p-2 shrink-0 flex items-center justify-center relative sm:border sm:border-slate-200">
+            <div className="flex flex-col gap-3 items-start pt-0 text-left">
+              <div className="w-full h-56 sm:w-36 sm:h-36 sm:rounded-2xl bg-slate-50 p-4 sm:p-2 shrink-0 flex items-center justify-center relative sm:border sm:border-slate-200">
                 <ProductImage
                   product={toImageProduct(activeVariant || previewProduct)}
                   size="full"
                   className="w-full h-full object-contain"
                 />
-                <span className="absolute bottom-4 left-4 sm:bottom-2 sm:left-2 px-3 py-1 sm:px-2 sm:py-0.5 rounded-md bg-[#0A006E] text-[#FFDE00] text-xs sm:text-[9px] font-black">
+                <span className="absolute bottom-3 left-3 sm:bottom-2 sm:left-2 px-3 py-1 sm:px-2 sm:py-0.5 rounded-md bg-[#0A006E] text-[#FFDE00] text-xs sm:text-[9px] font-black">
                   {(activeVariant || previewProduct).volumeMl || 750}ml
                 </span>
               </div>
-              <div className="w-full px-5 pt-5 pb-2 sm:px-0 sm:pt-0 sm:pb-0">
-                <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
+              <div className="w-full px-2 sm:px-0 space-y-1.5">
+                <div className="flex items-center gap-2 justify-start flex-wrap">
                   <span className="text-[10px] font-black uppercase text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                     {(activeVariant || previewProduct).brand} · {(activeVariant || previewProduct).subCategory}
                   </span>
@@ -1670,7 +1749,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                   {(activeVariant || previewProduct).name}
                 </h3>
 
-                <div className="flex items-baseline gap-2 justify-center sm:justify-start">
+                <div className="flex items-baseline gap-2 justify-start">
                   <span className="text-xl font-black text-[#0A006E] font-mono-tabular">
                     {formatKes(
                       (activeVariant || previewProduct).retailPriceKes ||
@@ -1681,16 +1760,14 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                   <span className="text-xs text-slate-400 font-medium">per bottle</span>
                 </div>
 
-                <div className="flex items-center gap-3 pt-1 text-xs text-slate-600 justify-center sm:justify-start flex-wrap">
-                  <span className="font-semibold">
+                <div className="flex items-center gap-2 pt-1 text-xs text-slate-600 justify-start flex-wrap">
+                  <span className="font-semibold bg-slate-100 px-2 py-1 rounded-lg">
                     Volume: <strong className="text-slate-900">{(activeVariant || previewProduct).volumeMl || 750}ml</strong>
                   </span>
-                  <span>•</span>
-                  <span className="font-semibold">
+                  <span className="font-semibold bg-slate-100 px-2 py-1 rounded-lg">
                     ABV: <strong className="text-slate-900">{(activeVariant || previewProduct).alcoholPercentage || (activeVariant || previewProduct).abv || 40}%</strong>
                   </span>
-                  <span>•</span>
-                  <span className="font-semibold">
+                  <span className="font-semibold bg-slate-100 px-2 py-1 rounded-lg">
                     Origin: <strong className="text-slate-900">{(activeVariant || previewProduct).originCountry || (activeVariant || previewProduct).countryOfOrigin || 'Imported'}</strong>
                   </span>
                 </div>
@@ -1828,45 +1905,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               </span>
             </div>
 
-            {/* Mobile Footer: Stepper + Primary Add Button */}
-            <div className="sm:hidden sticky bottom-0 z-20 bg-white pt-4 pb-4 border-t border-slate-100 flex flex-col items-center gap-3">
-              <div className="flex items-center bg-slate-100 border border-slate-300 rounded-2xl p-1 w-full justify-between">
-                <button
-                  type="button"
-                  onClick={() => setPreviewQuantity((q) => Math.max(1, q - 1))}
-                  className="w-10 h-10 rounded-xl bg-white text-slate-700 flex items-center justify-center font-bold hover:bg-slate-50 cursor-pointer shadow-xs disabled:opacity-40"
-                  disabled={previewQuantity <= 1}
-                >
-                  <Minus className="w-5 h-5" />
-                </button>
-                <span className="px-4 text-base font-black font-mono-tabular text-slate-900">
-                  {previewQuantity}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPreviewQuantity((q) => q + 1)}
-                  className="w-10 h-10 rounded-xl bg-white text-slate-700 flex items-center justify-center font-bold hover:bg-slate-50 cursor-pointer shadow-xs"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const toAdd = activeVariant || previewProduct;
-                  handleAddToCart(toAdd, previewQuantity);
-                  setPreviewQuantity(1);
-                }}
-                className="w-full py-4 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-black text-xs font-montserrat shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-98"
-              >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-                Add to Ticket ({formatKes(
-                  ((activeVariant || previewProduct).retailPriceKes ||
-                    (activeVariant || previewProduct).baseRetailPrice ||
-                    3200) * previewQuantity
-                )})
-              </button>
-            </div>
+
 
             {/* Desktop / Standard Content Layout */}
             <div className="hidden sm:flex flex-col gap-3">
@@ -2399,26 +2438,51 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               )}
             </div>
 
+            {/* Payment Processing Overlay */}
+            {isProcessingPayment && (
+              <div className="absolute inset-0 z-[100] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-in fade-in">
+                <div className="relative w-20 h-20 mb-6">
+                  <div className="absolute inset-0 rounded-full border-4 border-[#0A006E]/20"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-t-[#0A006E] animate-spin"></div>
+                  <div className="absolute inset-0 flex items-center justify-center text-[#0A006E] font-black text-xl animate-pulse">
+                    STK
+                  </div>
+                </div>
+                <h3 className="font-montserrat font-black text-[#0A006E] text-lg mb-2">M-Pesa STK Push</h3>
+                <p className="text-slate-600 text-sm font-medium">Please check your phone for the payment prompt...</p>
+              </div>
+            )}
+
             {/* Bottom Complete Button with Safe Area Inset */}
             {cart.length > 0 && (
               <div className="p-4 bg-white border-t border-slate-200 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg">
-                <button
-                  type="button"
-                  onClick={async (e) => {
-                    await handlePlaceOrder(e as any);
-                    setIsMobileCartOpen(false);
-                  }}
-                  disabled={isSubmitting || cart.length === 0}
-                  className="w-full py-4 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-black text-xs font-montserrat shadow-md transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 active:scale-98"
-                >
-                  {isSubmitting ? (
-                    'Processing Order...'
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" /> Complete Delivery Order ({formatKes(cartTotal)})
-                    </>
-                  )}
-                </button>
+                {!customerUser ? (
+                  <button
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    className="w-full py-4 bg-[#0A006E] hover:bg-[#070050] text-[#FFDE00] rounded-2xl font-black text-xs font-montserrat shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+                  >
+                    <span className="text-white font-bold">Sign in with Google to Checkout</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      await handlePlaceOrder(e as any);
+                      setIsMobileCartOpen(false);
+                    }}
+                    disabled={isSubmitting || cart.length === 0}
+                    className="w-full py-4 bg-[#FFDE00] hover:bg-amber-400 text-[#0A006E] rounded-2xl font-black text-xs font-montserrat shadow-md transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 active:scale-98"
+                  >
+                    {isSubmitting ? (
+                      'Processing Order...'
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 stroke-[2.5]" /> Complete Delivery Order ({formatKes(cartTotal)})
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             )}
           </div>

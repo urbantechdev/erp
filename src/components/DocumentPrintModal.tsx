@@ -21,8 +21,8 @@ export const DocumentPrintModal: React.FC<DocumentPrintModalProps> = ({ docData,
   const isLogisticsOnly = docData.docType === 'Packing List' || docData.docType === 'Delivery Note';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto">
-      <div className="bg-white border-0 sm:border-2 border-[#0A006E] rounded-none sm:rounded-2xl max-w-none sm:max-w-3xl w-full h-full sm:h-auto overflow-y-auto shadow-2xl my-0 sm:my-8 flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white border sm:border-2 border-[#0A006E] rounded-2xl max-w-3xl w-full h-auto max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
         {/* Top Action Bar (Hidden during print) */}
         <div className="bg-[#0A006E] text-white px-6 py-4 flex items-center justify-between border-b-4 border-[#FFDE00] relative overflow-hidden print:hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-[#0A006E] via-indigo-950 to-[#0A006E] opacity-90" />

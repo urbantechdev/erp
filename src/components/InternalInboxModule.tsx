@@ -1321,7 +1321,7 @@ export const InternalInboxModule: React.FC<InternalInboxModuleProps> = ({
       </div>
 
       {/* Main Split Inbox Shell */}
-      <div className="border border-slate-200 rounded-2xl bg-white overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[640px] h-[calc(100vh-250px)] max-h-[820px]">
+      <div className="border border-slate-200 rounded-2xl bg-white overflow-hidden grid grid-cols-1 lg:grid-cols-12 h-[calc(100vh-130px)] sm:h-[calc(100vh-200px)] min-h-[520px] max-h-[860px]">
         {/* LEFT PANE: Department Channels & Direct People Directory */}
         <aside
           className={`lg:col-span-4 xl:col-span-4 border-r border-slate-200 bg-slate-50/70 flex flex-col min-h-0 ${
@@ -1618,10 +1618,10 @@ export const InternalInboxModule: React.FC<InternalInboxModuleProps> = ({
               <button
                 type="button"
                 onClick={() => setMobileShowConversation(false)}
-                className="lg:hidden w-8 h-8 rounded-xl border border-slate-200 bg-slate-50 text-[#0A006E] flex items-center justify-center shrink-0 cursor-pointer"
+                className="lg:hidden w-10 h-10 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 text-[#0A006E] flex items-center justify-center shrink-0 cursor-pointer transition shadow-xs"
                 aria-label="Back to inbox list"
               >
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
               </button>
 
               <div className="w-9 h-9 rounded-xl bg-[#0A006E] text-[#FFDE00] flex items-center justify-center shrink-0 font-montserrat font-black text-xs">

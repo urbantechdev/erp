@@ -608,7 +608,7 @@ export const AuthGateway: React.FC<AuthGatewayProps> = ({
                   <div
                     key={dept.role}
                     onClick={() => handleSelectDepartment(dept.role)}
-                    className={`group aspect-square rounded-2xl sm:rounded-3xl p-3 sm:p-6 ${dept.cardBg} ${dept.cardBorder} border-3 flex flex-col items-center justify-center gap-2.5 sm:gap-4 text-center cursor-pointer relative overflow-hidden transition-all duration-300 hover:-translate-y-2.5 hover:scale-[1.03] shadow-md hover:shadow-2xl`}
+                    className={`group aspect-square rounded-2xl sm:rounded-3xl p-3 sm:p-6 ${dept.cardBg} ${dept.cardBorder} border-3 flex flex-col items-center justify-center gap-2.5 sm:gap-4 text-center cursor-pointer relative overflow-hidden transition-all duration-500 ease-out hover:-translate-y-4 hover:scale-105 hover:rotate-2 shadow-lg hover:shadow-[0_20px_50px_rgba(0,0,0,0.25)]`}
                   >
                     <div
                       className={`w-13 h-13 sm:w-22 sm:h-22 rounded-2xl sm:rounded-3xl ${dept.badgeBg} ${dept.badgeText} flex items-center justify-center border-2 border-white shadow-lg sm:shadow-xl transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 relative z-10 shrink-0`}
